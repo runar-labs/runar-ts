@@ -1,0 +1,6 @@
+logLevel = "notice"
+
+[install]
+auto = true
+
+
