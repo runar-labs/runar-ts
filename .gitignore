@@ -19,4 +19,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Local Rust workspace symlink (do not commit)
+runar-rust
+
 

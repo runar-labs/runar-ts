@@ -17,4 +17,48 @@ export class RunarError extends Error {
   }
 }
 
+export * from './routing/TopicPath';
+export * from './routing/PathTrie';
+
+// Messaging primitives for local runtime
+export type ServiceName = string;
+export type ActionName = string;
+export type EventName = string;
+
+export interface ActionRequest {
+  service: ServiceName;
+  action: ActionName;
+  payload: CborBytes;
+  requestId: string;
+}
+
+export interface ActionResponseOk {
+  ok: true;
+  requestId: string;
+  payload: CborBytes;
+}
+
+export interface ActionResponseErr {
+  ok: false;
+  requestId: string;
+  error: string;
+}
+
+export type ActionResponse = ActionResponseOk | ActionResponseErr;
+
+export interface EventMessage {
+  service: ServiceName;
+  event: EventName;
+  payload: CborBytes;
+  timestampMs: number;
+}
+
+export type ActionHandler = (request: ActionRequest) => Promise<ActionResponse> | ActionResponse;
+export type EventSubscriber = (evt: EventMessage) => void | Promise<void>;
+
+export interface ServiceRegistration {
+  service: ServiceName;
+  handler: ActionHandler;
+}
+
 

@@ -68,4 +68,13 @@ export function deserializeEntity<T>(buf: Uint8Array): T {
   return obj as T;
 }
 
+// Helper CBOR encode/decode wrappers
+export function toCbor(value: unknown): Uint8Array {
+  return encode(value as any);
+}
+
+export function fromCbor<T>(data: Uint8Array): T {
+  return decode(data) as T;
+}
+
 

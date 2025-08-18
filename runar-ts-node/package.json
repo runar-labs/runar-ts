@@ -11,11 +11,13 @@
   "dependencies": {
     "runar-ts-ffi": "workspace:*",
     "runar-ts-serializer": "workspace:*",
-    "runar-ts-common": "workspace:*"
+    "runar-ts-common": "workspace:*",
+    "uuid": "^9.0.1"
   },
   "devDependencies": {
     "typescript": "^5.5.4",
-    "rimraf": "^6.0.1"
+    "rimraf": "^6.0.1",
+    "@types/uuid": "^9.0.7"
   }
 }
 
