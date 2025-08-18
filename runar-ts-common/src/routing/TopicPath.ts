@@ -82,21 +82,21 @@ export class TopicPath {
       switch (seg.kind) {
         case PathSegmentType.SingleWildcard:
           isPattern = true;
-          TopicPath.setSegmentType(&bitmap, i, PathSegmentType.SingleWildcard);
+          bitmap = TopicPath.setSegmentType(bitmap, i, PathSegmentType.SingleWildcard);
           break;
         case PathSegmentType.MultiWildcard:
           if (i < rawSegments.length - 1) {
             throw new Error("Multi-segment wildcard (>) must be the last segment in a path");
           }
           isPattern = true;
-          TopicPath.setSegmentType(&bitmap, i, PathSegmentType.MultiWildcard);
+          bitmap = TopicPath.setSegmentType(bitmap, i, PathSegmentType.MultiWildcard);
           break;
         case PathSegmentType.Template:
           hasTemplates = true;
-          TopicPath.setSegmentType(&bitmap, i, PathSegmentType.Template);
+          bitmap = TopicPath.setSegmentType(bitmap, i, PathSegmentType.Template);
           break;
         case PathSegmentType.Literal:
-          TopicPath.setSegmentType(&bitmap, i, PathSegmentType.Literal);
+          bitmap = TopicPath.setSegmentType(bitmap, i, PathSegmentType.Literal);
           break;
       }
       segments.push(seg);
@@ -195,7 +195,7 @@ export class TopicPath {
     const isPattern = this.pattern || newSegment.kind === PathSegmentType.SingleWildcard || newSegment.kind === PathSegmentType.MultiWildcard;
     const hasTemplates = this.hasTemplatesValue || newSegment.kind === PathSegmentType.Template;
     let bitmap = this.segmentTypeBitmap;
-    TopicPath.setSegmentType(&bitmap, this.segmentCount, newSegment.kind);
+    bitmap = TopicPath.setSegmentType(bitmap, this.segmentCount, newSegment.kind);
     const segments = [...this.segments, newSegment];
 
     return new TopicPath(
@@ -286,31 +286,13 @@ export class TopicPath {
     }
   }
 
-  private static setSegmentType(bitmapRef: { valueOf(): number } | any, index: number, t: PathSegmentType): void {
-    // In TS we can't mutate by reference, so pass actual number variable
-    // We emulate via returning the new value; but since we need in-place above, we use & hack:
-    // We'll treat bitmapRef as pointer-like passed by Bun/ts transpiler. Instead, we just return.
+  static setSegmentType(bitmap: number, index: number, t: PathSegmentType): number {
+    const cleared = bitmap & ~(0b11 << (index * 2));
+    return cleared | ((t & 0b11) << (index * 2));
   }
 
-  // Overload replacement: maintain helpers using pure functions
+  static getSegmentType(bitmap: number, index: number): PathSegmentType {
+    return (((bitmap >> (index * 2)) & 0b11) as number) as PathSegmentType;
+  }
 }
-
-// Helpers to manage segment type bitmap without reference passing
-// Shadow methods on TopicPath prototype to set/get using numbers
-(TopicPath as any).setSegmentType = function (bitmapPtr: any, index: number, t: number) {
-  const current: number = bitmapPtr as unknown as number;
-  const cleared = current & ~(0b11 << (index * 2));
-  const updated = cleared | ((t & 0b11) << (index * 2));
-  // Return updated; callers should assign back
-  return updated;
-};
-
-;(TopicPath as any).getSegmentType = function (bitmap: number, index: number) {
-  return ((bitmap >> (index * 2)) & 0b11) as number;
-};
-
-// Patch instance methods to use the static helpers returning values
-// Monkey-patch where we used &bitmap above: redefine methods to reassign
-// Note: For simplicity in TypeScript, we'll redefine local helper calls inline where needed.
-
 
