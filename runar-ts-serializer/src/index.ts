@@ -1,4 +1,4 @@
-import { encodeCanonical, decode } from 'cbor-x';
+import { encode, decode } from 'cbor-x';
 import { EncryptedClass, EncryptedField, PlainField, getEncryptedClassOptions, getFieldMetadata } from 'runar-ts-decorators';
 import { loadRunarFfi } from 'runar-ts-ffi';
 
@@ -21,7 +21,7 @@ export class ArcValue<T = unknown> {
   }
 
   static from<T>(value: T): ArcValue<T> {
-    const bytes = encodeCanonical(value as any);
+    const bytes = encode(value as any);
     return new ArcValue<T>(bytes);
   }
 
@@ -58,7 +58,7 @@ export function serializeEntity(entity: any): Uint8Array {
     }
   }
 
-  const canonical = encodeCanonical({ v: 1, m: classOpts, p: plain, e: encryptedPayload });
+  const canonical = encode({ v: 1, m: classOpts, p: plain, e: encryptedPayload });
   // Envelope encryption will be wired via FFI later; return canonical for now
   return canonical;
 }
