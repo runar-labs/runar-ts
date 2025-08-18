@@ -12,6 +12,14 @@ export type AnyValue =
   | { type: 'array'; value: AnyValue[] }
   | { type: 'map'; value: Record<string, AnyValue> };
 
+export function anyToCbor(v: AnyValue): Uint8Array {
+  return encode(v as any);
+}
+
+export function cborToAny(buf: Uint8Array): AnyValue {
+  return decode(buf) as AnyValue;
+}
+
 export class ArcValue<T = unknown> {
   private readonly bytes: Uint8Array;
   private decoded: T | undefined;

@@ -6,7 +6,7 @@ Scope: Achieve feature parity with the local (non-networked, non-crypto) behavio
 
 - runar-ts-common
   - Routing: `TopicPath`, `PathTrie` with wildcards/templates, matching, and utilities
-  - Core types and errors; light logging façade later if needed
+  - Core types and errors; logging façade matching Rust behavior (implemented)
 
 - runar-ts-serializer
   - `ArcValue<T>` minimal wrapper; CBOR helpers: `toCbor`, `fromCbor`
@@ -87,10 +87,10 @@ Scope: Achieve feature parity with the local (non-networked, non-crypto) behavio
 ### Gaps and Next Steps (Local Parity)
 
 1) Node/Registry parity refinements
-   - [ ] Track local services in `ServiceRegistry` (mirror Rust) instead of only in `Node`
-   - [ ] Service state tracking in registry maps; timestamps for registration/start
+   - [x] Track local services in `ServiceRegistry` (mirror Rust) instead of only in `Node`
+   - [x] Service state tracking in registry maps; timestamps for registration/start
    - [ ] Expand event subscription storage to support multiple lists per topic leaf (merged list semantics already in place)
-   - [ ] Add one-shot wait API parity (Rust `on()` returns a future/JoinHandle). TS: `onOnce(topic, opts?)` that resolves on first event or timeout
+   - [x] Add one-shot wait API parity (Rust `on()` returns a future/JoinHandle). TS: `onOnce(topic, opts?)` that resolves on first event or timeout
 
 2) Routing utilities and performance
    - [ ] Validate `findWildcardMatches` coverage equivalence vs Rust for deep wildcard scans
@@ -99,7 +99,7 @@ Scope: Achieve feature parity with the local (non-networked, non-crypto) behavio
 
 3) Serializer alignment (local scope)
    - [ ] Canonical CBOR parity tests against known vectors (later, once FFI lands). For now: mark as non-canonical
-   - [ ] ArcValue: add `toJSON()` shape for diagnostics and logging
+   - [x] ArcValue: add `toJSON()` shape for diagnostics and logging
    - [ ] Implement `AnyValue` union aligned to Rust; add tests
 
 4) Decorators (metadata only for now)
@@ -115,7 +115,7 @@ Scope: Achieve feature parity with the local (non-networked, non-crypto) behavio
 
 6) API ergonomics
    - [ ] Type-safe request/response helpers atop CBOR (typed codecs later)
-   - [ ] Optional logger façade (no-op impl for now) to mirror Rust logging calls
+   - [x] Logger façade matching Rust logging calls
 
 7) Schemas
    - [ ] Mirror types and add schema-level tests for required fields/defaults
