@@ -20,6 +20,36 @@ export class RunarError extends Error {
 export * from './routing/TopicPath';
 export * from './routing/PathTrie';
 
+// Service lifecycle and interface mirroring Rust AbstractService
+export enum ServiceState {
+  Created = 'Created',
+  Initialized = 'Initialized',
+  Running = 'Running',
+  Stopped = 'Stopped',
+  Paused = 'Paused',
+  Error = 'Error',
+  Unknown = 'Unknown',
+}
+
+export interface LifecycleContext {
+  networkId: string;
+  addActionHandler: (actionName: string, handler: ActionHandler) => void;
+  publish: (eventName: string, payload: CborBytes) => Promise<void>;
+}
+
+export interface AbstractService {
+  name(): string;
+  version(): string;
+  path(): string; // service path (first segment)
+  description(): string;
+  networkId(): string | undefined;
+  setNetworkId(networkId: string): void;
+  init(context: LifecycleContext): Promise<void>;
+  start(context: LifecycleContext): Promise<void>;
+  stop(context: LifecycleContext): Promise<void>;
+}
+
+
 // Messaging primitives for local runtime
 export type ServiceName = string;
 export type ActionName = string;

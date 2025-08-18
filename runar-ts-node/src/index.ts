@@ -7,16 +7,19 @@ import {
   EventMessage,
   EventSubscriber,
   ServiceName,
-  ServiceRegistration,
   PathTrie,
   TopicPath,
+  AbstractService,
+  LifecycleContext,
+  ServiceState,
 } from 'runar-ts-common';
 
-type Subscription = { service: ServiceName; event: string | "*"; subscriber: EventSubscriber };
+type SubscriptionEntry = { id: string; subscriber: EventSubscriber };
 
 export class ServiceRegistry {
   private actionHandlers = new PathTrie<ActionHandler>();
-  private eventSubscriptions = new PathTrie<Array<{ id: string; subscriber: EventSubscriber }>>();
+  private eventSubscriptions = new PathTrie<SubscriptionEntry[]>();
+  private subscriptionIdToTopic = new Map<string, TopicPath>();
 
   addLocalActionHandler(topic: TopicPath, handler: ActionHandler): void {
     this.actionHandlers.setValue(topic, handler);
@@ -28,38 +31,117 @@ export class ServiceRegistry {
 
   subscribe(topic: TopicPath, subscriber: EventSubscriber): string {
     const id = uuidv4();
-    const existing = this.eventSubscriptions.findMatches(topic);
-    // Use setValue to replace at leaf with list including our subscriber
-    this.eventSubscriptions.setValue(topic, [{ id, subscriber }]);
+    const existingMatches = this.eventSubscriptions.findMatches(topic);
+    const existing = existingMatches.length > 0 ? existingMatches[0]!.content : [];
+    this.eventSubscriptions.setValue(topic, [...existing, { id, subscriber }]);
+    this.subscriptionIdToTopic.set(id, topic);
     return id;
   }
 
-  getSubscribers(topic: TopicPath): Array<{ id: string; subscriber: EventSubscriber }> {
+  unsubscribe(subscriptionId: string): boolean {
+    const topic = this.subscriptionIdToTopic.get(subscriptionId);
+    if (!topic) return false;
+    const existingMatches = this.eventSubscriptions.findMatches(topic);
+    const existing = existingMatches.length > 0 ? existingMatches[0]!.content : [];
+    const filtered = existing.filter((e) => e.id !== subscriptionId);
+    this.eventSubscriptions.setValue(topic, filtered);
+    this.subscriptionIdToTopic.delete(subscriptionId);
+    return true;
+  }
+
+  getSubscribers(topic: TopicPath): SubscriptionEntry[] {
     return this.eventSubscriptions.findMatches(topic).flatMap((m) => m.content);
   }
+}
+
+export interface PublishOptions {
+  retain?: boolean;
+}
+
+export interface EventRegistrationOptions {
+  includePast?: number;
+}
+
+export interface ServiceEntry {
+  service: AbstractService;
+  serviceTopic: TopicPath;
+  serviceState: ServiceState;
+  registrationTime: number;
+  lastStartTime?: number;
 }
 
 export class Node {
   private readonly networkId: string;
   private readonly registry = new ServiceRegistry();
   private running = false;
+  private retainedEvents = new Map<string, Array<{ ts: number; data: Uint8Array | null }>>();
+  private retainedIndex = new PathTrie<string>();
+  private localServices: ServiceEntry[] = [];
 
   constructor(networkId = 'default') {
     this.networkId = networkId;
   }
 
-  addService(servicePath: string, handler: ActionHandler): void {
-    const topic = TopicPath.newService(this.networkId, servicePath).newActionTopic("*");
-    this.registry.addLocalActionHandler(topic, handler);
+  addService(service: AbstractService): void {
+    const serviceTopic = TopicPath.newService(this.networkId, service.path());
+    const entry: ServiceEntry = {
+      service,
+      serviceTopic,
+      serviceState: ServiceState.Created,
+      registrationTime: Date.now(),
+      lastStartTime: undefined,
+    };
+    this.localServices.push(entry);
   }
 
   async start(): Promise<void> {
     if (this.running) return;
+    for (const entry of this.localServices) {
+      const svc = entry.service;
+      svc.setNetworkId(this.networkId);
+      const ctx: LifecycleContext = {
+        networkId: this.networkId,
+        addActionHandler: (actionName: string, handler: ActionHandler) => {
+          const topic = TopicPath.newService(this.networkId, svc.path()).newActionTopic(actionName);
+          this.registry.addLocalActionHandler(topic, handler);
+        },
+        publish: async (eventName: string, payload: Uint8Array) => {
+          await this.publish(svc.path(), eventName, payload);
+        },
+      };
+      await svc.init(ctx);
+    }
+    for (const entry of this.localServices) {
+      const svc = entry.service;
+      const ctx: LifecycleContext = {
+        networkId: this.networkId,
+        addActionHandler: (actionName: string, handler: ActionHandler) => {
+          const topic = TopicPath.newService(this.networkId, svc.path()).newActionTopic(actionName);
+          this.registry.addLocalActionHandler(topic, handler);
+        },
+        publish: async (eventName: string, payload: Uint8Array) => {
+          await this.publish(svc.path(), eventName, payload);
+        },
+      };
+      await svc.start(ctx);
+      entry.serviceState = ServiceState.Running;
+      entry.lastStartTime = Date.now();
+    }
     this.running = true;
   }
 
   async stop(): Promise<void> {
     if (!this.running) return;
+    for (const entry of this.localServices) {
+      const svc = entry.service;
+      const ctx: LifecycleContext = {
+        networkId: this.networkId,
+        addActionHandler: () => {},
+        publish: async () => {},
+      } as LifecycleContext;
+      await svc.stop(ctx);
+      entry.serviceState = ServiceState.Stopped;
+    }
     this.running = false;
   }
 
@@ -74,17 +156,43 @@ export class Node {
     throw new Error(res.error);
   }
 
-  async publish<T = unknown>(service: ServiceName, event: string, payload: T): Promise<void> {
+  async publish<T = unknown>(service: ServiceName, event: string, payload: T, options?: PublishOptions): Promise<void> {
     if (!this.running) throw new Error('Node not started');
     const evtTopic = TopicPath.newService(this.networkId, service).newEventTopic(event);
     const subs = this.registry.getSubscribers(evtTopic);
-    const message: EventMessage = { service, event, payload: toCbor(payload), timestampMs: Date.now() };
+    const bytes = payload instanceof Uint8Array ? payload : toCbor(payload);
+    const message: EventMessage = { service, event, payload: bytes, timestampMs: Date.now() };
+    if (options?.retain) {
+      const key = `${this.networkId}:${service}/${event}`;
+      const list = this.retainedEvents.get(key) ?? [];
+      list.push({ ts: message.timestampMs, data: message.payload });
+      this.retainedEvents.set(key, list);
+      this.retainedIndex.setValue(evtTopic, key);
+    }
     await Promise.all(subs.map((s) => s.subscriber(message)));
   }
 
-  on(service: ServiceName, eventOrPattern: string, subscriber: EventSubscriber): string {
+  on(service: ServiceName, eventOrPattern: string, subscriber: EventSubscriber, options?: EventRegistrationOptions): string {
     const topic = TopicPath.newService(this.networkId, service).newEventTopic(eventOrPattern);
-    return this.registry.subscribe(topic, subscriber);
+    const id = this.registry.subscribe(topic, subscriber);
+    if (options?.includePast && options.includePast > 0) {
+      const matched = this.retainedIndex.findWildcardMatches(topic).map((m) => m.content);
+      const history: Array<{ ts: number; data: Uint8Array | null }> = [];
+      for (const key of matched) {
+        const list = this.retainedEvents.get(key) ?? [];
+        history.push(...list);
+      }
+      history.sort((a, b) => a.ts - b.ts);
+      const deliver = history.slice(-options.includePast);
+      void Promise.all(
+        deliver.map((e) => subscriber({ service, event: eventOrPattern, payload: e.data ?? new Uint8Array(), timestampMs: e.ts })),
+      );
+    }
+    return id;
+  }
+
+  unsubscribe(subscriptionId: string): boolean {
+    return this.registry.unsubscribe(subscriptionId);
   }
 }
 
