@@ -35,6 +35,10 @@ export class ArcValue<T = unknown> {
     }
     return this.decoded;
   }
+
+  toJSON(): unknown {
+    return this.as() as unknown;
+  }
 }
 
 export function serializeEntity(entity: any): Uint8Array {

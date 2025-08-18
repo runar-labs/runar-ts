@@ -19,6 +19,8 @@ export class RunarError extends Error {
 
 export * from './routing/TopicPath';
 export * from './routing/PathTrie';
+export * from './logging/logger';
+export * from './logging/config';
 
 // Service lifecycle and interface mirroring Rust AbstractService
 export enum ServiceState {

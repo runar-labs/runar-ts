@@ -20,6 +20,7 @@ export class ServiceRegistry {
   private actionHandlers = new PathTrie<ActionHandler>();
   private eventSubscriptions = new PathTrie<SubscriptionEntry[]>();
   private subscriptionIdToTopic = new Map<string, TopicPath>();
+  private localServices = new Map<string, ServiceEntry>();
 
   addLocalActionHandler(topic: TopicPath, handler: ActionHandler): void {
     this.actionHandlers.setValue(topic, handler);
@@ -52,6 +53,25 @@ export class ServiceRegistry {
   getSubscribers(topic: TopicPath): SubscriptionEntry[] {
     return this.eventSubscriptions.findMatches(topic).flatMap((m) => m.content);
   }
+
+  addLocalService(entry: ServiceEntry): void {
+    this.localServices.set(entry.serviceTopic.asString?.() ?? `${entry.serviceTopic.networkId()}:${entry.service.path()}`, entry);
+  }
+
+  getLocalServices(): ServiceEntry[] {
+    return Array.from(this.localServices.values());
+  }
+
+  updateServiceState(servicePath: string, state: ServiceState): void {
+    for (const [k, v] of this.localServices.entries()) {
+      if (v.service.path() === servicePath) {
+        v.serviceState = state;
+        if (state === ServiceState.Running) v.lastStartTime = Date.now();
+        this.localServices.set(k, v);
+        break;
+      }
+    }
+  }
 }
 
 export interface PublishOptions {
@@ -76,7 +96,6 @@ export class Node {
   private running = false;
   private retainedEvents = new Map<string, Array<{ ts: number; data: Uint8Array | null }>>();
   private retainedIndex = new PathTrie<string>();
-  private localServices: ServiceEntry[] = [];
 
   constructor(networkId = 'default') {
     this.networkId = networkId;
@@ -91,12 +110,12 @@ export class Node {
       registrationTime: Date.now(),
       lastStartTime: undefined,
     };
-    this.localServices.push(entry);
+    this.registry.addLocalService(entry);
   }
 
   async start(): Promise<void> {
     if (this.running) return;
-    for (const entry of this.localServices) {
+    for (const entry of this.registry.getLocalServices()) {
       const svc = entry.service;
       svc.setNetworkId(this.networkId);
       const ctx: LifecycleContext = {
@@ -111,7 +130,7 @@ export class Node {
       };
       await svc.init(ctx);
     }
-    for (const entry of this.localServices) {
+    for (const entry of this.registry.getLocalServices()) {
       const svc = entry.service;
       const ctx: LifecycleContext = {
         networkId: this.networkId,
@@ -124,15 +143,14 @@ export class Node {
         },
       };
       await svc.start(ctx);
-      entry.serviceState = ServiceState.Running;
-      entry.lastStartTime = Date.now();
+      this.registry.updateServiceState(svc.path(), ServiceState.Running);
     }
     this.running = true;
   }
 
   async stop(): Promise<void> {
     if (!this.running) return;
-    for (const entry of this.localServices) {
+    for (const entry of this.registry.getLocalServices()) {
       const svc = entry.service;
       const ctx: LifecycleContext = {
         networkId: this.networkId,
@@ -140,7 +158,7 @@ export class Node {
         publish: async () => {},
       } as LifecycleContext;
       await svc.stop(ctx);
-      entry.serviceState = ServiceState.Stopped;
+      this.registry.updateServiceState(svc.path(), ServiceState.Stopped);
     }
     this.running = false;
   }
@@ -193,6 +211,25 @@ export class Node {
 
   unsubscribe(subscriptionId: string): boolean {
     return this.registry.unsubscribe(subscriptionId);
+  }
+
+  onOnce(service: ServiceName, eventOrPattern: string, timeoutMs = 5000): Promise<EventMessage | undefined> {
+    const topic = TopicPath.newService(this.networkId, service).newEventTopic(eventOrPattern);
+    return new Promise((resolve) => {
+      let resolved = false;
+      const id = this.registry.subscribe(topic, async (evt) => {
+        if (resolved) return;
+        resolved = true;
+        this.registry.unsubscribe(id);
+        resolve(evt);
+      });
+      setTimeout(() => {
+        if (resolved) return;
+        resolved = true;
+        this.registry.unsubscribe(id);
+        resolve(undefined);
+      }, timeoutMs);
+    });
   }
 }
 

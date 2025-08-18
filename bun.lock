@@ -45,11 +45,20 @@
       "dependencies": {
         "runar-ts-common": "workspace:*",
         "runar-ts-ffi": "workspace:*",
+        "runar-ts-schemas": "workspace:*",
         "runar-ts-serializer": "workspace:*",
         "uuid": "^9.0.1",
       },
       "devDependencies": {
         "@types/uuid": "^9.0.7",
+        "rimraf": "^6.0.1",
+        "typescript": "^5.5.4",
+      },
+    },
+    "runar-ts-schemas": {
+      "name": "runar-ts-schemas",
+      "version": "0.0.1",
+      "devDependencies": {
         "rimraf": "^6.0.1",
         "typescript": "^5.5.4",
       },
@@ -152,6 +161,8 @@
     "runar-ts-ffi": ["runar-ts-ffi@workspace:runar-ts-ffi"],
 
     "runar-ts-node": ["runar-ts-node@workspace:runar-ts-node"],
+
+    "runar-ts-schemas": ["runar-ts-schemas@workspace:runar-ts-schemas"],
 
     "runar-ts-serializer": ["runar-ts-serializer@workspace:runar-ts-serializer"],
 
