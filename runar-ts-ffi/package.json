@@ -12,6 +12,7 @@
     "@types/node": "^20.12.12"
   },
   "devDependencies": {
+    "bun-types": "latest",
     "typescript": "^5.5.4",
     "rimraf": "^6.0.1"
   }

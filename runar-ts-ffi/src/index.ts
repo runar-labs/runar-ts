@@ -2,6 +2,12 @@ import { existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { platform, arch } from "node:process";
 
+// Using direct import for Bun runtime
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+import { dlopen as bunDlopen } from "bun:ffi";
+type BunFfiForeignLibrary = ReturnType<typeof bunDlopen>;
+
 export class RunarFfiError extends Error {
   readonly code: number;
   constructor(message: string, code = -1) {
@@ -79,8 +85,17 @@ function resolveLibraryPath(): string {
 
 export function loadRunarFfi(): DynamicLibrary {
   const libPath = resolveLibraryPath();
-  // Bun-first loader using bun:ffi, fallback to Node via node-ffi-napi in future
   return { path: libPath };
+}
+
+export function dlopenRunarFfi<T extends Record<string, any>>(symbols: T): BunFfiForeignLibrary {
+  const libPath = resolveLibraryPath();
+  // Bun-first: use bun:ffi
+  try {
+    return bunDlopen(libPath, symbols);
+  } catch (err) {
+    throw new RunarFfiError(`Failed to dlopen librunar_ffi at ${libPath}: ${(err as Error).message}`);
+  }
 }
 
 

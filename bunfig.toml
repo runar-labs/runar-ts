@@ -1,4 +1,4 @@
-logLevel = "notice"
+logLevel = "warn"
 
 [install]
 auto = true

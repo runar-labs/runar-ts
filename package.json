@@ -7,8 +7,8 @@
     "runar-ts-*"
   ],
   "scripts": {
-    "build": "bun workspaces run build",
-    "clean": "bun workspaces run clean"
+    "build": "bash -lc 'set -euo pipefail; for d in runar-ts-*; do echo Building $d; (cd "$d" && bun run build); done'",
+    "clean": "bash -lc 'set -euo pipefail; for d in runar-ts-*; do echo Cleaning $d; (cd "$d" && bun run clean || true); done'"
   },
   "devDependencies": {
     "@types/node": "^20.12.12",
