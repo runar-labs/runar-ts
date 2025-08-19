@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import { Node } from '../src';
-import { toCbor, fromCbor } from 'runar-ts-serializer';
+import { AnyValue } from 'runar-ts-serializer';
 import { AbstractService, LifecycleContext } from 'runar-ts-common';
 
 class MathService implements AbstractService {
@@ -13,8 +13,10 @@ class MathService implements AbstractService {
   setNetworkId(networkId: string): void { this._networkId = networkId; }
   async init(context: LifecycleContext): Promise<void> {
     context.addActionHandler('add', async (req) => {
-      const { a, b } = fromCbor<{ a: number; b: number }>(req.payload);
-      return { ok: true, requestId: req.requestId, payload: toCbor({ sum: a + b }) };
+      const input = AnyValue.fromBytes<{ a: number; b: number }>(req.payload);
+      const { a, b } = input.as<{ a: number; b: number }>();
+      const out = AnyValue.from({ sum: a + b }).serialize();
+      return { ok: true, requestId: req.requestId, payload: out };
     });
   }
   async start(_context: LifecycleContext): Promise<void> {}
@@ -35,7 +37,8 @@ describe('Node local E2E', () => {
 
     let seen: number[] = [];
     const subId = node.on('math', 'added', (evt) => {
-      const { sum } = fromCbor<{ sum: number }>(evt.payload);
+      const av = AnyValue.fromBytes<{ sum: number }>(evt.payload);
+      const { sum } = av.as<{ sum: number }>();
       seen.push(sum);
     }, { includePast: 1 });
 

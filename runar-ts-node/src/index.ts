@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { fromCbor, toCbor } from 'runar-ts-serializer';
+import { AnyValue, fromCbor, toCbor } from 'runar-ts-serializer';
 import {
   ActionHandler,
   ActionRequest,
@@ -189,9 +189,14 @@ export class Node {
     const actionTopic = TopicPath.newService(this.networkId, service).newActionTopic(action);
     const handlers = this.registry.findLocalActionHandlers(actionTopic);
     if (handlers.length === 0) throw new Error(`No handler for ${actionTopic.asString?.() ?? `${this.networkId}:${service}/${action}`}`);
-    const req: ActionRequest = { service, action, payload: toCbor(payload), requestId: uuidv4() };
+    // Use ArcValue in-memory for local call; serialize only to satisfy ActionRequest shape
+    const inArc = AnyValue.from(payload);
+    const req: ActionRequest = { service, action, payload: inArc.serialize(), requestId: uuidv4() };
     const res = await handlers[0]!(req);
-    if (res.ok) return fromCbor<TRes>(res.payload);
+    if (res.ok) {
+      const outArc = AnyValue.fromBytes<TRes>(res.payload);
+      return outArc.as<TRes>();
+    }
     throw new Error(res.error);
   }
 
@@ -199,7 +204,8 @@ export class Node {
     if (!this.running) throw new Error('Node not started');
     const evtTopic = TopicPath.newService(this.networkId, service).newEventTopic(event);
     const subs = this.registry.getSubscribers(evtTopic);
-    const bytes = payload instanceof Uint8Array ? payload : toCbor(payload);
+    const inArc = AnyValue.from(payload);
+    const bytes = inArc.serialize();
     const message: EventMessage = { service, event, payload: bytes, timestampMs: Date.now() };
     if (options?.retain) {
       const key = `${this.networkId}:${service}/${event}`;

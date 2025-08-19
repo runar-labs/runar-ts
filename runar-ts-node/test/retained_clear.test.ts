@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import { Node } from '../src';
-import { fromCbor } from 'runar-ts-serializer';
+import { AnyValue } from 'runar-ts-serializer';
 
 describe('Retained events clearing', () => {
   it('clears retained by wildcard pattern and respects includePast ordering', async () => {
@@ -12,7 +12,8 @@ describe('Retained events clearing', () => {
 
     let seen: number[] = [];
     node.on('svc', '>', (evt) => {
-      const { n } = fromCbor<{ n: number }>(evt.payload);
+      const av = AnyValue.fromBytes<{ n: number }>(evt.payload);
+      const { n } = av.as<{ n: number }>();
       seen.push(n);
     }, { includePast: 10 });
     await new Promise((r) => setTimeout(r, 10));
@@ -23,7 +24,8 @@ describe('Retained events clearing', () => {
 
     let seen2: number[] = [];
     node.on('svc', '>', (evt) => {
-      const { n } = fromCbor<{ n: number }>(evt.payload);
+      const av = AnyValue.fromBytes<{ n: number }>(evt.payload);
+      const { n } = av.as<{ n: number }>();
       seen2.push(n);
     }, { includePast: 10 });
     await new Promise((r) => setTimeout(r, 10));

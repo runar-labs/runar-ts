@@ -2,46 +2,48 @@ import { encode, decode } from 'cbor-x';
 import { EncryptedClass, EncryptedField, PlainField, getEncryptedClassOptions, getFieldMetadata } from 'runar-ts-decorators';
 import { loadRunarFfi } from 'runar-ts-ffi';
 
-export type AnyValue =
+// Optional union type for schema-like loose values. Renamed to avoid confusion with the class below.
+export type ValueUnion =
   | { type: 'null' }
   | { type: 'bool'; value: boolean }
   | { type: 'int'; value: number }
   | { type: 'float'; value: number }
   | { type: 'string'; value: string }
   | { type: 'bytes'; value: Uint8Array }
-  | { type: 'array'; value: AnyValue[] }
-  | { type: 'map'; value: Record<string, AnyValue> };
+  | { type: 'array'; value: ValueUnion[] }
+  | { type: 'map'; value: Record<string, ValueUnion> };
 
-export function anyToCbor(v: AnyValue): Uint8Array {
-  return encode(v as any);
-}
+// If needed, helpers for ValueUnion <-> CBOR can be added back later.
 
-export function cborToAny(buf: Uint8Array): AnyValue {
-  return decode(buf) as AnyValue;
-}
+export class AnyValue<T = unknown> {
+  private bytesInternal?: Uint8Array;
+  private valueInternal?: T;
 
-export class ArcValue<T = unknown> {
-  private readonly bytes: Uint8Array;
-  private decoded: T | undefined;
-
-  constructor(bytes: Uint8Array) {
-    this.bytes = bytes;
+  private constructor(args: { bytes?: Uint8Array; value?: T }) {
+    this.bytesInternal = args.bytes;
+    this.valueInternal = args.value;
   }
 
-  static from<T>(value: T): ArcValue<T> {
-    const bytes = encode(value as any);
-    return new ArcValue<T>(bytes);
+  static from<T>(value: T): AnyValue<T> {
+    return new AnyValue<T>({ value });
+  }
+
+  static fromBytes<T = unknown>(bytes: Uint8Array): AnyValue<T> {
+    return new AnyValue<T>({ bytes });
   }
 
   serialize(): Uint8Array {
-    return this.bytes;
+    if (!this.bytesInternal) {
+      this.bytesInternal = encode(this.valueInternal as any);
+    }
+    return this.bytesInternal;
   }
 
-  as(): T {
-    if (this.decoded === undefined) {
-      this.decoded = decode(this.bytes) as T;
+  as<U = T>(): U {
+    if (this.valueInternal === undefined) {
+      this.valueInternal = decode(this.bytesInternal!) as T;
     }
-    return this.decoded;
+    return this.valueInternal as unknown as U;
   }
 
   toJSON(): unknown {

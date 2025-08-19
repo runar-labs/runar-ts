@@ -1,12 +1,14 @@
 import { describe, it, expect } from 'bun:test';
-import { anyToCbor, cborToAny } from '../src';
+import { AnyValue } from '../src';
 
 describe('AnyValue', () => {
-  it('encodes/decodes AnyValue union', () => {
-    const value = { type: 'map', value: { a: { type: 'int', value: 1 }, b: { type: 'string', value: 'x' } } } as const;
-    const buf = anyToCbor(value as any);
-    const round = cborToAny(buf);
-    expect((round as any).type).toBe('map');
+  it('wraps values and provides lazy serialization/deserialization', () => {
+    const val = AnyValue.from({ a: 1, b: 'x' });
+    const bytes = val.serialize();
+    const back = AnyValue.fromBytes<typeof val.as> (bytes);
+    const obj = back.as<{ a: number; b: string }>();
+    expect(obj.a).toBe(1);
+    expect(obj.b).toBe('x');
   });
 });
 
