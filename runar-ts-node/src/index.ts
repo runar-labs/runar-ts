@@ -13,13 +13,22 @@ import {
   LifecycleContext,
   ServiceState,
 } from 'runar-ts-common';
+import { SubscriptionMetadata } from 'runar-ts-schemas';
 
-type SubscriptionEntry = { id: string; subscriber: EventSubscriber };
+type SubscriberKind = 'Local' | 'Remote';
+type FullSubscriptionEntry = {
+  id: string;
+  kind: SubscriberKind;
+  metadata: SubscriptionMetadata;
+  serviceTopic: TopicPath;
+  subscriber: EventSubscriber;
+};
 
 export class ServiceRegistry {
   private actionHandlers = new PathTrie<ActionHandler>();
-  private eventSubscriptions = new PathTrie<SubscriptionEntry[]>();
+  private eventSubscriptions = new PathTrie<FullSubscriptionEntry[]>();
   private subscriptionIdToTopic = new Map<string, TopicPath>();
+  private subscriptionIdToServiceTopic = new Map<string, TopicPath>();
   private localServices = new Map<string, ServiceEntry>();
 
   addLocalActionHandler(topic: TopicPath, handler: ActionHandler): void {
@@ -30,12 +39,20 @@ export class ServiceRegistry {
     return this.actionHandlers.findMatches(topic).map((m) => m.content);
   }
 
-  subscribe(topic: TopicPath, subscriber: EventSubscriber): string {
+  subscribe(
+    topic: TopicPath,
+    serviceTopic: TopicPath,
+    subscriber: EventSubscriber,
+    metadata: SubscriptionMetadata,
+    kind: SubscriberKind = 'Local',
+  ): string {
     const id = uuidv4();
     const existingMatches = this.eventSubscriptions.findMatches(topic);
     const existing = existingMatches.length > 0 ? existingMatches[0]!.content : [];
-    this.eventSubscriptions.setValue(topic, [...existing, { id, subscriber }]);
+    const entry: FullSubscriptionEntry = { id, kind, metadata, serviceTopic, subscriber };
+    this.eventSubscriptions.setValue(topic, [...existing, entry]);
     this.subscriptionIdToTopic.set(id, topic);
+    this.subscriptionIdToServiceTopic.set(id, serviceTopic);
     return id;
   }
 
@@ -47,10 +64,11 @@ export class ServiceRegistry {
     const filtered = existing.filter((e) => e.id !== subscriptionId);
     this.eventSubscriptions.setValue(topic, filtered);
     this.subscriptionIdToTopic.delete(subscriptionId);
+    this.subscriptionIdToServiceTopic.delete(subscriptionId);
     return true;
   }
 
-  getSubscribers(topic: TopicPath): SubscriptionEntry[] {
+  getSubscribers(topic: TopicPath): FullSubscriptionEntry[] {
     return this.eventSubscriptions.findMatches(topic).flatMap((m) => m.content);
   }
 
@@ -96,6 +114,7 @@ export class Node {
   private running = false;
   private retainedEvents = new Map<string, Array<{ ts: number; data: Uint8Array | null }>>();
   private retainedIndex = new PathTrie<string>();
+  private readonly maxRetainedPerTopic = 100;
 
   constructor(networkId = 'default') {
     this.networkId = networkId;
@@ -184,15 +203,20 @@ export class Node {
       const key = `${this.networkId}:${service}/${event}`;
       const list = this.retainedEvents.get(key) ?? [];
       list.push({ ts: message.timestampMs, data: message.payload });
+      if (list.length > this.maxRetainedPerTopic) {
+        list.splice(0, list.length - this.maxRetainedPerTopic);
+      }
       this.retainedEvents.set(key, list);
       this.retainedIndex.setValue(evtTopic, key);
     }
-    await Promise.all(subs.map((s) => s.subscriber(message)));
+    await Promise.allSettled(subs.map((s) => s.subscriber(message)));
   }
 
   on(service: ServiceName, eventOrPattern: string, subscriber: EventSubscriber, options?: EventRegistrationOptions): string {
     const topic = TopicPath.newService(this.networkId, service).newEventTopic(eventOrPattern);
-    const id = this.registry.subscribe(topic, subscriber);
+    const serviceTopic = TopicPath.newService(this.networkId, service);
+    const metadata: SubscriptionMetadata = { path: topic.asString?.() ?? `${this.networkId}:${service}/${eventOrPattern}` };
+    const id = this.registry.subscribe(topic, serviceTopic, subscriber, metadata, 'Local');
     if (options?.includePast && options.includePast > 0) {
       const matched = this.retainedIndex.findWildcardMatches(topic).map((m) => m.content);
       const history: Array<{ ts: number; data: Uint8Array | null }> = [];
@@ -202,7 +226,7 @@ export class Node {
       }
       history.sort((a, b) => a.ts - b.ts);
       const deliver = history.slice(-options.includePast);
-      void Promise.all(
+      void Promise.allSettled(
         deliver.map((e) => subscriber({ service, event: eventOrPattern, payload: e.data ?? new Uint8Array(), timestampMs: e.ts })),
       );
     }
@@ -217,12 +241,14 @@ export class Node {
     const topic = TopicPath.newService(this.networkId, service).newEventTopic(eventOrPattern);
     return new Promise((resolve) => {
       let resolved = false;
-      const id = this.registry.subscribe(topic, async (evt) => {
+      const serviceTopic = TopicPath.newService(this.networkId, service);
+      const metadata: SubscriptionMetadata = { path: topic.asString?.() ?? `${this.networkId}:${service}/${eventOrPattern}` };
+      const id = this.registry.subscribe(topic, serviceTopic, async (evt) => {
         if (resolved) return;
         resolved = true;
         this.registry.unsubscribe(id);
         resolve(evt);
-      });
+      }, metadata, 'Local');
       setTimeout(() => {
         if (resolved) return;
         resolved = true;
