@@ -26,6 +26,39 @@ export class PathTrie<T extends unknown> {
     this.totalCount += added;
   }
 
+  // Return the exact content stored at this topic path without wildcard expansion
+  getExactValues(topic: TopicPath): T[] {
+    const root = this.networks.get(topic.networkId());
+    if (!root) return [];
+    const segments = topic.getSegments();
+    const node = this.getExactNode(root, segments, 0);
+    if (!node) return [];
+    const last = segments[segments.length - 1];
+    if (last === '>') {
+      return [...node.multiWildcard];
+    }
+    return [...node.content];
+  }
+
+  private getExactNode(node: TrieNode<T>, segments: string[], index: number): TrieNode<T> | null {
+    if (index >= segments.length) {
+      return node;
+    }
+    const seg = segments[index]!;
+    if (seg === '*') {
+      return node.wildcardChild ? this.getExactNode(node.wildcardChild, segments, index + 1) : null;
+    }
+    if (seg === '>') {
+      // multi wildcard content is stored at this node's multiWildcard, not deeper
+      return node; // exact leaf for '>' uses current node
+    }
+    if (seg.startsWith('{') && seg.endsWith('}')) {
+      return node.templateChild ? this.getExactNode(node.templateChild, segments, index + 1) : null;
+    }
+    const child = node.children.get(seg);
+    return child ? this.getExactNode(child, segments, index + 1) : null;
+  }
+
   setValue(topic: TopicPath, content: T): void {
     this.setValues(topic, [content]);
   }
@@ -64,14 +97,14 @@ export class PathTrie<T extends unknown> {
   private setValuesInternal(node: TrieNode<T>, segments: string[], index: number, handlers: T[]): number {
     if (index >= segments.length) {
       const prev = node.content.length;
-      node.content.push(...handlers);
+      node.content = [...handlers];
       node.count += node.content.length - prev;
       return node.content.length - prev;
     }
     const seg = segments[index]!;
     if (seg === '>') {
       const prev = node.multiWildcard.length;
-      node.multiWildcard.push(...handlers);
+      node.multiWildcard = [...handlers];
       node.count += node.multiWildcard.length - prev;
       return node.multiWildcard.length - prev;
     }

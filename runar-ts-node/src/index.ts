@@ -69,7 +69,8 @@ export class ServiceRegistry {
   }
 
   getSubscribers(topic: TopicPath): FullSubscriptionEntry[] {
-    return this.eventSubscriptions.findMatches(topic).flatMap((m) => m.content);
+    const exact = this.eventSubscriptions.getExactValues(topic);
+    return exact.flatMap((list) => list);
   }
 
   addLocalService(entry: ServiceEntry): void {
