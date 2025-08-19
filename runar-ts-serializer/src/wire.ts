@@ -21,7 +21,7 @@ export interface DeserializationContext {
 export interface WireHeader {
   category: ValueCategory;
   isEncrypted: boolean;
-  typeName?: string; // present for Struct/Encrypted
+  typeName?: string; // present for Struct/Encrypted and primitives with wire names per spec
   // Byte offsets/lengths if needed later
 }
 
@@ -46,6 +46,12 @@ export function readHeader(bytes: Uint8Array): Result<WireHeader> {
     return ok({ category, isEncrypted: encFlag !== 0, typeName });
   }
   return ok({ category, isEncrypted: encFlag !== 0 });
+}
+
+export function bodyOffset(bytes: Uint8Array): number {
+  if (bytes.length < 3) return 0;
+  const typeLen = bytes[2];
+  return 3 + typeLen;
 }
 
 export function writeHeader(h: WireHeader): Uint8Array {

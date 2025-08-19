@@ -1,12 +1,14 @@
 import { encode, decode } from 'cbor-x';
-import { EncryptedClass, EncryptedField, PlainField, getEncryptedClassOptions, getFieldMetadata } from 'runar-ts-decorators';
+import { EncryptedClass, EncryptedField, PlainField, getEncryptedClassOptions, getFieldMetadata, getTypeName as getDecoratedTypeName } from 'runar-ts-decorators';
 import { loadRunarFfi } from 'runar-ts-ffi';
 import { Result, ok, err } from './result';
-import { ValueCategory, DeserializationContext, readHeader, writeHeader } from './wire';
-import { resolveType } from './registry';
+import { ValueCategory, DeserializationContext, readHeader, writeHeader, bodyOffset } from './wire';
+import { resolveType, initWirePrimitives, resolvePrimitive } from './registry';
 export * from './result';
 export * from './wire';
 export * from './registry';
+
+initWirePrimitives();
 
 // Optional union type for schema-like loose values. Renamed to avoid confusion with the class below.
 export type ValueUnion =
@@ -39,7 +41,6 @@ export class AnyValue<T = unknown> {
 
   static fromBytes<T = unknown>(bytes: Uint8Array, ctx?: DeserializationContext): AnyValue<T> {
     const inst = new AnyValue<T>({ bytes, ctx });
-    // Header parsing is deferred until needed; we can parse here to set category/type if present.
     const hdr = readHeader(bytes);
     if (hdr.ok) {
       inst.categoryInternal = hdr.value.category;
@@ -61,10 +62,10 @@ export class AnyValue<T = unknown> {
   serialize(): Result<Uint8Array> {
     if (this.bytesInternal) return ok(this.bytesInternal);
     try {
-      // For now, encode as CBOR payload w/o Rust header. Will replace with exact wire format writer next.
-      const body = encode(this.valueInternal as any);
-      // Placeholder header: Primitive
-      const header = writeHeader({ category: ValueCategory.Primitive, isEncrypted: false });
+      const val: any = this.valueInternal;
+      const { category, wireName } = determineCategoryAndWireName(val);
+      const body = encode(val);
+      const header = writeHeader({ category, isEncrypted: false, typeName: wireName });
       const merged = new Uint8Array(header.length + body.length);
       merged.set(header, 0);
       merged.set(body, header.length);
@@ -76,7 +77,6 @@ export class AnyValue<T = unknown> {
   }
 
   as<U = T>(): Result<U> {
-    // Cache by requested type name key
     const key = 'type';
     if (this.cacheByType.has(key)) return ok(this.cacheByType.get(key) as U);
 
@@ -87,20 +87,16 @@ export class AnyValue<T = unknown> {
         return ok(v);
       }
       if (!this.bytesInternal) return err(new Error('No bytes to decode'));
-      // For now, skip header and decode CBOR body
       const hdr = readHeader(this.bytesInternal);
-      let bodyOffset = 0;
-      if (hdr.ok) {
-        const typeLen = hdr.value.typeName ? new TextEncoder().encode(hdr.value.typeName).length : 0;
-        bodyOffset = 3 + typeLen;
-      } else {
-        // Fallback: assume no header
-        bodyOffset = 0;
-      }
-      const body = this.bytesInternal.subarray(bodyOffset);
+      const offset = hdr.ok ? bodyOffset(this.bytesInternal) : 0;
+      const body = this.bytesInternal.subarray(offset);
       let decoded: any = decode(body);
-      // Attempt hydration via registry if typeName present and category suggests struct
+      // Primitive mapping by wire name if provided
       if (hdr.ok && hdr.value.typeName) {
+        const prim = resolvePrimitive(hdr.value.typeName);
+        if (prim) decoded = prim(decoded);
+      }
+      if (hdr.ok && hdr.value.typeName && !resolvePrimitive(hdr.value.typeName)) {
         const entry = resolveType(hdr.value.typeName);
         if (entry && entry.ctor) {
           try {
@@ -126,6 +122,25 @@ export class AnyValue<T = unknown> {
   }
 }
 
+function determineCategoryAndWireName(val: any): { category: ValueCategory; wireName?: string } {
+  if (val === null || val === undefined) return { category: ValueCategory.Null, wireName: 'null' };
+  if (val instanceof Uint8Array) return { category: ValueCategory.Bytes, wireName: 'bytes' };
+  const t = typeof val;
+  if (t === 'string') return { category: ValueCategory.Primitive, wireName: 'string' };
+  if (t === 'boolean') return { category: ValueCategory.Primitive, wireName: 'bool' };
+  if (t === 'number') {
+    // Future: detect integer ranges for i32/u32 vs f64
+    return { category: ValueCategory.Primitive, wireName: 'f64' };
+  }
+  if (Array.isArray(val)) return { category: ValueCategory.List, wireName: 'list' };
+  if (t === 'object') {
+    const tn = getDecoratedTypeName(val.constructor);
+    if (tn) return { category: ValueCategory.Struct, wireName: tn };
+    return { category: ValueCategory.Json, wireName: 'json' };
+  }
+  return { category: ValueCategory.Json, wireName: 'json' };
+}
+
 export function serializeEntity(entity: any): Uint8Array {
   const ctor = entity.constructor;
   const classOpts = getEncryptedClassOptions(ctor) ?? {};
@@ -136,7 +151,6 @@ export function serializeEntity(entity: any): Uint8Array {
   for (const key of Object.keys(entity)) {
     const fieldMeta = fields.find((f) => String(f.key) === key);
     if (!fieldMeta) {
-      // default to encrypted unless PlainField
       encryptedPayload[key] = entity[key];
       continue;
     }
