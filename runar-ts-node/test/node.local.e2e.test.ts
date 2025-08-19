@@ -14,8 +14,10 @@ class MathService implements AbstractService {
   async init(context: LifecycleContext): Promise<void> {
     context.addActionHandler('add', async (req) => {
       const input = AnyValue.fromBytes<{ a: number; b: number }>(req.payload);
-      const { a, b } = input.as<{ a: number; b: number }>();
-      const out = AnyValue.from({ sum: a + b }).serialize();
+      const inRes = input.as<{ a: number; b: number }>();
+      const { a, b } = inRes.ok ? inRes.value : { a: 0, b: 0 };
+      const outRes = AnyValue.from({ sum: a + b }).serialize();
+      const out = outRes.ok ? outRes.value : new Uint8Array();
       return { ok: true, requestId: req.requestId, payload: out };
     });
   }
@@ -38,8 +40,8 @@ describe('Node local E2E', () => {
     let seen: number[] = [];
     const subId = node.on('math', 'added', (evt) => {
       const av = AnyValue.fromBytes<{ sum: number }>(evt.payload);
-      const { sum } = av.as<{ sum: number }>();
-      seen.push(sum);
+      const r = av.as<{ sum: number }>();
+      if (r.ok) seen.push(r.value.sum);
     }, { includePast: 1 });
 
     // immediate retained replay enqueues delivery; wait a tick

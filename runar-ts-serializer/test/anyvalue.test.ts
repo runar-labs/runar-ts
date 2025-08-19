@@ -4,11 +4,15 @@ import { AnyValue } from '../src';
 describe('AnyValue', () => {
   it('wraps values and provides lazy serialization/deserialization', () => {
     const val = AnyValue.from({ a: 1, b: 'x' });
-    const bytes = val.serialize();
-    const back = AnyValue.fromBytes<typeof val.as> (bytes);
-    const obj = back.as<{ a: number; b: string }>();
-    expect(obj.a).toBe(1);
-    expect(obj.b).toBe('x');
+    const bytesRes = val.serialize();
+    expect(bytesRes.ok).toBe(true);
+    const back = AnyValue.fromBytes(bytesRes.ok ? bytesRes.value : new Uint8Array());
+    const objRes = back.as<{ a: number; b: string }>();
+    expect(objRes.ok).toBe(true);
+    if (objRes.ok) {
+      expect(objRes.value.a).toBe(1);
+      expect(objRes.value.b).toBe('x');
+    }
   });
 });
 

@@ -13,8 +13,8 @@ describe('Retained events clearing', () => {
     let seen: number[] = [];
     node.on('svc', '>', (evt) => {
       const av = AnyValue.fromBytes<{ n: number }>(evt.payload);
-      const { n } = av.as<{ n: number }>();
-      seen.push(n);
+      const r = av.as<{ n: number }>();
+      if (r.ok) seen.push(r.value.n);
     }, { includePast: 10 });
     await new Promise((r) => setTimeout(r, 10));
     expect(seen).toEqual([1, 2]);
@@ -25,8 +25,8 @@ describe('Retained events clearing', () => {
     let seen2: number[] = [];
     node.on('svc', '>', (evt) => {
       const av = AnyValue.fromBytes<{ n: number }>(evt.payload);
-      const { n } = av.as<{ n: number }>();
-      seen2.push(n);
+      const r = av.as<{ n: number }>();
+      if (r.ok) seen2.push(r.value.n);
     }, { includePast: 10 });
     await new Promise((r) => setTimeout(r, 10));
     expect(seen2).toEqual([]);

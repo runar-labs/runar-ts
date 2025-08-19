@@ -191,11 +191,15 @@ export class Node {
     if (handlers.length === 0) throw new Error(`No handler for ${actionTopic.asString?.() ?? `${this.networkId}:${service}/${action}`}`);
     // Use ArcValue in-memory for local call; serialize only to satisfy ActionRequest shape
     const inArc = AnyValue.from(payload);
-    const req: ActionRequest = { service, action, payload: inArc.serialize(), requestId: uuidv4() };
+    const ser = inArc.serialize();
+    if (!ser.ok) throw ser.error;
+    const req: ActionRequest = { service, action, payload: ser.value, requestId: uuidv4() };
     const res = await handlers[0]!(req);
     if (res.ok) {
       const outArc = AnyValue.fromBytes<TRes>(res.payload);
-      return outArc.as<TRes>();
+      const out = outArc.as<TRes>();
+      if (!out.ok) throw out.error;
+      return out.value;
     }
     throw new Error(res.error);
   }
@@ -205,8 +209,9 @@ export class Node {
     const evtTopic = TopicPath.newService(this.networkId, service).newEventTopic(event);
     const subs = this.registry.getSubscribers(evtTopic);
     const inArc = AnyValue.from(payload);
-    const bytes = inArc.serialize();
-    const message: EventMessage = { service, event, payload: bytes, timestampMs: Date.now() };
+    const bytesRes = inArc.serialize();
+    if (!bytesRes.ok) throw bytesRes.error;
+    const message: EventMessage = { service, event, payload: bytesRes.value, timestampMs: Date.now() };
     if (options?.retain) {
       const key = `${this.networkId}:${service}/${event}`;
       const list = this.retainedEvents.get(key) ?? [];
