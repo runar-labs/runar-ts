@@ -89,7 +89,18 @@ export class AnyValue<T = unknown> {
       if (!this.bytesInternal) return err(new Error('No bytes to decode'));
       const hdr = readHeader(this.bytesInternal);
       const offset = hdr.ok ? bodyOffset(this.bytesInternal) : 0;
-      const body = this.bytesInternal.subarray(offset);
+      let body = this.bytesInternal.subarray(offset);
+
+      // Encrypted path: decrypt via embedded ctx then decode
+      if (hdr.ok && hdr.value.category === ValueCategory.Encrypted) {
+        if (!this.lazyCtx?.decryptEnvelope) {
+          return err(new Error('Missing decrypt context'));
+        }
+        const dec = this.lazyCtx.decryptEnvelope(body);
+        if (!dec.ok) return err(dec.error);
+        body = dec.value;
+      }
+
       let decoded: any = decode(body);
       // Primitive mapping by wire name if provided
       if (hdr.ok && hdr.value.typeName) {

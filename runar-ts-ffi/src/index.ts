@@ -98,4 +98,34 @@ export function dlopenRunarFfi<T extends Record<string, any>>(symbols: T): BunFf
   }
 }
 
+// High-level symbol map for encryption-related FFI
+export function openEncryptionFfi() {
+  return dlopenRunarFfi({
+    rn_keys_new: {
+      args: ['pointer', 'pointer'],
+      returns: 'i32',
+    },
+    rn_keys_free: {
+      args: ['pointer'],
+      returns: 'void',
+    },
+    rn_keys_encrypt_with_envelope: {
+      args: ['pointer', 'pointer', 'usize', 'pointer', 'pointer', 'pointer', 'usize', 'pointer', 'pointer', 'pointer'],
+      returns: 'i32',
+    },
+    rn_keys_decrypt_envelope: {
+      args: ['pointer', 'pointer', 'usize', 'pointer', 'pointer', 'pointer'],
+      returns: 'i32',
+    },
+    rn_free: {
+      args: ['pointer', 'usize'],
+      returns: 'void',
+    },
+    rn_string_free: {
+      args: ['pointer'],
+      returns: 'void',
+    },
+  });
+}
+
 

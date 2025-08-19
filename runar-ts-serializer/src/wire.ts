@@ -16,6 +16,7 @@ export interface DeserializationContext {
   // Placeholder for label resolver, key info, etc.
   // Actual fields will be aligned with Rust serializer context once FFI is wired
   labelResolverName?: string;
+  decryptEnvelope?: (eed: Uint8Array) => Result<Uint8Array>;
 }
 
 export interface WireHeader {
