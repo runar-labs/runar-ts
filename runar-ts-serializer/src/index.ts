@@ -3,6 +3,7 @@ import { EncryptedClass, EncryptedField, PlainField, getEncryptedClassOptions, g
 import { loadRunarFfi } from 'runar-ts-ffi';
 import { Result, ok, err } from './result';
 import { ValueCategory, DeserializationContext, readHeader, writeHeader, bodyOffset } from './wire';
+export type { DeserializationContext } from './wire';
 import { resolveType, initWirePrimitives, resolvePrimitive } from './registry';
 export * from './result';
 export * from './wire';

@@ -102,27 +102,51 @@ export function dlopenRunarFfi<T extends Record<string, any>>(symbols: T): BunFf
 export function openEncryptionFfi() {
   return dlopenRunarFfi({
     rn_keys_new: {
-      args: ['pointer', 'pointer'],
+      args: ['ptr', 'ptr'],
       returns: 'i32',
     },
+    rn_keys_new_return: {
+      args: ['ptr'],
+      returns: 'ptr',
+    },
     rn_keys_free: {
-      args: ['pointer'],
+      args: ['ptr'],
       returns: 'void',
     },
+    rn_last_error: {
+      args: ['ptr', 'usize'],
+      returns: 'i32',
+    },
     rn_keys_encrypt_with_envelope: {
-      args: ['pointer', 'pointer', 'usize', 'pointer', 'pointer', 'pointer', 'usize', 'pointer', 'pointer', 'pointer'],
+      args: ['ptr', 'ptr', 'usize', 'ptr', 'ptr', 'ptr', 'usize', 'ptr', 'ptr', 'ptr'],
       returns: 'i32',
     },
     rn_keys_decrypt_envelope: {
-      args: ['pointer', 'pointer', 'usize', 'pointer', 'pointer', 'pointer'],
+      args: ['ptr', 'ptr', 'usize', 'ptr', 'ptr', 'ptr'],
+      returns: 'i32',
+    },
+    rn_keys_node_get_public_key: {
+      args: ['ptr', 'ptr', 'ptr', 'ptr'],
+      returns: 'i32',
+    },
+    rn_keys_encrypt_for_public_key: {
+      args: ['ptr', 'ptr', 'usize', 'ptr', 'usize', 'ptr', 'ptr', 'ptr'],
+      returns: 'i32',
+    },
+    rn_keys_encrypt_local_data: {
+      args: ['ptr', 'ptr', 'usize', 'ptr', 'ptr', 'ptr'],
+      returns: 'i32',
+    },
+    rn_keys_decrypt_local_data: {
+      args: ['ptr', 'ptr', 'usize', 'ptr', 'ptr', 'ptr'],
       returns: 'i32',
     },
     rn_free: {
-      args: ['pointer', 'usize'],
+      args: ['ptr', 'usize'],
       returns: 'void',
     },
     rn_string_free: {
-      args: ['pointer'],
+      args: ['ptr'],
       returns: 'void',
     },
   });

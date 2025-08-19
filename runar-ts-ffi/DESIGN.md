@@ -14,6 +14,7 @@ Goal: Implement the full TS stack (FFI wrapper + Node runtime + Common + Seriali
 
 - FFI Binding Strategy
   - Prefer Bun FFI (bun:ffi) with C ABI; fallback loader for Node (node-ffi-napi + ref-napi) if needed
+  - Out buffers (`uint8_t **out, size_t *len`) are read via Bun FFI using `ptr()` on out params and `toArrayBuffer(ptr,len)`, then freed with `rn_free(ptr,len)`
   - Map pointers to `void*` handles (`FfiKeysHandle`, `FfiTransportHandle`, `FfiDiscoveryHandle`) as opaque handles (BigInt or Buffer) hidden behind typed wrappers
   - Complex payloads as canonical CBOR `Uint8Array` per `runar_ffi/DESIGN.md`
   - Memory:
