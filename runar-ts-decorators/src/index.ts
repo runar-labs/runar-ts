@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 
-export type EncryptedClassOptions = { network?: string };
+export type EncryptedClassOptions = { network?: string; typeName?: string };
 export type EncryptedFieldOptions = { label?: string; profileRecipients?: () => Uint8Array[] };
 
 const CLASS_META_KEY = Symbol.for('runar.encrypted.class');
@@ -38,6 +38,11 @@ export function getEncryptedClassOptions(ctor: Function): EncryptedClassOptions 
 
 export function getFieldMetadata(ctor: Function): Array<any> {
   return Reflect.getMetadata(FIELD_META_KEY, ctor) ?? [];
+}
+
+export function getTypeName(ctor: Function): string | undefined {
+  const opts: EncryptedClassOptions | undefined = Reflect.getMetadata(CLASS_META_KEY, ctor);
+  return opts?.typeName;
 }
 
 

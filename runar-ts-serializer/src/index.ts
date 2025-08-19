@@ -3,6 +3,7 @@ import { EncryptedClass, EncryptedField, PlainField, getEncryptedClassOptions, g
 import { loadRunarFfi } from 'runar-ts-ffi';
 import { Result, ok, err } from './result';
 import { ValueCategory, DeserializationContext, readHeader, writeHeader } from './wire';
+import { resolveType } from './registry';
 export * from './result';
 export * from './wire';
 export * from './registry';
@@ -97,10 +98,23 @@ export class AnyValue<T = unknown> {
         bodyOffset = 0;
       }
       const body = this.bytesInternal.subarray(bodyOffset);
-      const decoded = decode(body) as U;
+      let decoded: any = decode(body);
+      // Attempt hydration via registry if typeName present and category suggests struct
+      if (hdr.ok && hdr.value.typeName) {
+        const entry = resolveType(hdr.value.typeName);
+        if (entry && entry.ctor) {
+          try {
+            const instance = new (entry.ctor as any)();
+            Object.assign(instance, decoded);
+            decoded = instance;
+          } catch (_) {
+            // Fallback to plain decoded object
+          }
+        }
+      }
       this.valueInternal = decoded as unknown as T;
-      this.cacheByType.set(key, decoded);
-      return ok(decoded);
+      this.cacheByType.set(key, decoded as U);
+      return ok(decoded as U);
     } catch (e) {
       return err(e as Error);
     }

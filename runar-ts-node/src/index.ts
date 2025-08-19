@@ -14,6 +14,7 @@ import {
   ServiceState,
 } from 'runar-ts-common';
 import { SubscriptionMetadata } from 'runar-ts-schemas';
+import { RegistryService } from './registry_service';
 
 type SubscriberKind = 'Local' | 'Remote';
 type FullSubscriptionEntry = {
@@ -122,6 +123,10 @@ export class Node {
     this.networkId = networkId;
   }
 
+  private getLocalServicesSnapshot = (): ServiceEntry[] => {
+    return this.registry.getLocalServices();
+  };
+
   addService(service: AbstractService): void {
     const serviceTopic = TopicPath.newService(this.networkId, service.path());
     const entry: ServiceEntry = {
@@ -136,8 +141,26 @@ export class Node {
 
   async start(): Promise<void> {
     if (this.running) return;
+
+    // Start internal registry service first
+    const reg = new RegistryService(this.getLocalServicesSnapshot);
+    reg.setNetworkId(this.networkId);
+    const regCtx: LifecycleContext = {
+      networkId: this.networkId,
+      addActionHandler: (actionName: string, handler: ActionHandler) => {
+        const topic = TopicPath.newService(this.networkId, reg.path()).newActionTopic(actionName);
+        this.registry.addLocalActionHandler(topic, handler);
+      },
+      publish: async (eventName: string, payload: Uint8Array) => {
+        await this.publish(reg.path(), eventName, payload);
+      },
+    };
+    await reg.init(regCtx);
+    this.addService(reg);
+
     for (const entry of this.registry.getLocalServices()) {
       const svc = entry.service;
+      if (svc === reg) continue; // already init
       svc.setNetworkId(this.networkId);
       const ctx: LifecycleContext = {
         networkId: this.networkId,

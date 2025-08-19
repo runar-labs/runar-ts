@@ -15,4 +15,8 @@ export function resolveType(typeName: string): TypeEntry | undefined {
   return typeNameToEntry.get(typeName);
 }
 
+export function clearRegistry(): void {
+  typeNameToEntry.clear();
+}
+
 
