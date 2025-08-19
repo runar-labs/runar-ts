@@ -6,7 +6,7 @@ import { ptr, toArrayBuffer } from 'bun:ffi';
 
 const f = (openEncryptionFfi() as any).symbols as any;
 
-export type KeysPtr = number; // pass as usize to bun:ffi when arg type is 'usize'
+export type KeysPtr = number; // Bun pointers are numbers per docs
 
 function lastError(): string {
   const buf = new Uint8Array(1024);
@@ -18,11 +18,11 @@ function lastError(): string {
 
 export function createKeys(): KeysPtr {
   const err = new Uint8Array(24);
-  const raw = f.rn_keys_new_return(ptr(err)) as bigint;
-  if (raw === 0n || raw === (BigInt.asUintN(64, -1n))) {
+  const raw = f.rn_keys_new_return(ptr(err)) as number;
+  if (!raw) {
     throw new RunarFfiError(`rn_keys_new returned invalid pointer`);
   }
-  return Number(raw);
+  return raw;
 }
 
 export function freeKeys(_ptr: KeysPtr): void {
@@ -45,7 +45,7 @@ export function encryptLocal(keys: KeysPtr, data: Uint8Array): Uint8Array {
     throw new RunarFfiError(`encrypt_local_data failed: ${lastError()}`, rc);
   }
   const len = Number(outLen[0]);
-  const view = new Uint8Array(toArrayBuffer((outPtr[0] as unknown) as any, len as any));
+  const view = new Uint8Array(toArrayBuffer(Number(outPtr[0]), 0, len));
   const bytes = new Uint8Array(view);
   f.rn_free(Number(outPtr[0]), len);
   return bytes;
@@ -67,7 +67,7 @@ export function decryptLocal(keys: KeysPtr, encrypted: Uint8Array): Uint8Array {
     throw new RunarFfiError(`decrypt_local_data failed: ${lastError()}`, rc);
   }
   const len = Number(outLen[0]);
-  const view = new Uint8Array(toArrayBuffer((outPtr[0] as unknown) as any, len as any));
+  const view = new Uint8Array(toArrayBuffer(Number(outPtr[0]), 0, len));
   const bytes = new Uint8Array(view);
   f.rn_free(Number(outPtr[0]), len);
   return bytes;
@@ -82,7 +82,7 @@ export function nodeGetPublicKey(keys: KeysPtr): Uint8Array {
     throw new RunarFfiError(`node_get_public_key failed: ${lastError()}`, rc);
   }
   const len = Number(outLen[0]);
-  const view = new Uint8Array(toArrayBuffer((outPtr[0] as unknown) as any, len as any));
+  const view = new Uint8Array(toArrayBuffer(Number(outPtr[0]), 0, len));
   const bytes = new Uint8Array(view);
   f.rn_free(Number(outPtr[0]), len);
   return bytes;
@@ -92,24 +92,71 @@ export function encryptWithEnvelope(keys: KeysPtr, data: Uint8Array, networkId: 
   const outPtr = new BigUint64Array(1);
   const outLen = new BigUint64Array(1);
   const err = new Uint8Array(24);
+  // Fast-paths to simpler FFI to avoid pointer-to-pointer arrays when possible
+  if (profilePublicKeys.length === 1 && networkId === null) {
+    const pk = profilePublicKeys[0]!;
+    const rc = f.rn_keys_encrypt_for_public_key(
+      keys,
+      ptr(data),
+      data.length,
+      ptr(pk),
+      pk.length,
+      ptr(outPtr),
+      ptr(outLen),
+      ptr(err),
+    );
+    if (rc !== 0) {
+      throw new RunarFfiError(`encrypt_for_public_key failed: ${lastError()}`, rc);
+    }
+    const len = Number(outLen[0]);
+    const view = new Uint8Array(toArrayBuffer(Number(outPtr[0]), 0, len));
+    const bytes = new Uint8Array(view);
+    f.rn_free(Number(outPtr[0]), len);
+    return bytes;
+  }
+  if (profilePublicKeys.length === 0 && networkId) {
+    const cstr = new Uint8Array([...new TextEncoder().encode(networkId), 0]);
+    const rc = f.rn_keys_encrypt_for_network(
+      keys,
+      ptr(data),
+      data.length,
+      ptr(cstr),
+      ptr(outPtr),
+      ptr(outLen),
+      ptr(err),
+    );
+    if (rc !== 0) {
+      throw new RunarFfiError(`encrypt_for_network failed: ${lastError()}`, rc);
+    }
+    const len = Number(outLen[0]);
+    const view = new Uint8Array(toArrayBuffer(Number(outPtr[0]), 0, len));
+    const bytes = new Uint8Array(view);
+    f.rn_free(Number(outPtr[0]), len);
+    return bytes;
+  }
   // Build arrays of pointers and lengths for profile keys (or pass null when empty)
   const hasProfiles = profilePublicKeys.length > 0;
-  const pkPtrs = hasProfiles ? new BigUint64Array(profilePublicKeys.length) : null;
-  const pkLens = hasProfiles ? new BigUint64Array(profilePublicKeys.length) : null;
+  const count = profilePublicKeys.length;
+  const pkPtrsBuf = hasProfiles ? new BigUint64Array(count) : null;
+  const pkLensBuf = hasProfiles ? new BigUint64Array(count) : null;
   if (hasProfiles) {
-    for (let i = 0; i < profilePublicKeys.length; i++) {
-      (pkPtrs as BigUint64Array)[i] = (ptr(profilePublicKeys[i]) as unknown) as bigint;
-      (pkLens as BigUint64Array)[i] = BigInt(profilePublicKeys[i].length);
+    for (let i = 0; i < count; i++) {
+      const keyBuf = profilePublicKeys[i]!;
+      (pkPtrsBuf as BigUint64Array)[i] = BigInt(ptr(keyBuf));
+      (pkLensBuf as BigUint64Array)[i] = BigInt(keyBuf.length);
     }
   }
+  const cstr = networkId ? new Uint8Array([...new TextEncoder().encode(networkId), 0]) : null;
+  // Keep buffers alive across the FFI call
+  const keepAlive = [data, err, outPtr, outLen, pkPtrsBuf, pkLensBuf, cstr, ...profilePublicKeys.filter(Boolean)];
   const rc = f.rn_keys_encrypt_with_envelope(
     keys,
     ptr(data),
     data.length,
-    networkId ? ptr(new TextEncoder().encode(networkId + '\u0000')) : 0n,
-    hasProfiles ? ptr(pkPtrs!) : 0n,
-    hasProfiles ? ptr(pkLens!) : 0n,
-    hasProfiles ? profilePublicKeys.length : 0,
+    cstr ? ptr(cstr) : 0,
+    hasProfiles ? ptr(pkPtrsBuf!) : 0,
+    hasProfiles ? ptr(pkLensBuf!) : 0,
+    hasProfiles ? count : 0,
     ptr(outPtr),
     ptr(outLen),
     ptr(err),
@@ -118,7 +165,7 @@ export function encryptWithEnvelope(keys: KeysPtr, data: Uint8Array, networkId: 
     throw new RunarFfiError(`encrypt_with_envelope failed: ${lastError()}`, rc);
   }
   const len = Number(outLen[0]);
-  const view = new Uint8Array(toArrayBuffer((outPtr[0] as unknown) as any, len as any));
+  const view = new Uint8Array(toArrayBuffer(Number(outPtr[0]), 0, len));
   const bytes = new Uint8Array(view);
   f.rn_free(Number(outPtr[0]), len);
   return bytes;
@@ -140,9 +187,9 @@ export function decryptEnvelope(keys: KeysPtr, eedCbor: Uint8Array): Uint8Array 
     throw new RunarFfiError(`decrypt_envelope failed: ${lastError()}`, rc);
   }
   const len = Number(outLen[0]);
-  const view = new Uint8Array(toArrayBuffer((outPtr[0] as unknown) as any, len as any));
+  const view = new Uint8Array(toArrayBuffer(Number(outPtr[0]), 0, len));
   const bytes = new Uint8Array(view);
-  f.rn_free((outPtr[0] as unknown) as any, len as any);
+  f.rn_free(Number(outPtr[0]), len);
   return bytes;
 }
 
