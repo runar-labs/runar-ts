@@ -115,6 +115,7 @@ export class Node {
   private running = false;
   private retainedEvents = new Map<string, Array<{ ts: number; data: Uint8Array | null }>>();
   private retainedIndex = new PathTrie<string>();
+  private retainedKeyToTopic = new Map<string, TopicPath>();
   private readonly maxRetainedPerTopic = 100;
 
   constructor(networkId = 'default') {
@@ -209,6 +210,7 @@ export class Node {
       }
       this.retainedEvents.set(key, list);
       this.retainedIndex.setValue(evtTopic, key);
+      this.retainedKeyToTopic.set(key, evtTopic);
     }
     await Promise.allSettled(subs.map((s) => s.subscriber(message)));
   }
@@ -257,6 +259,23 @@ export class Node {
         resolve(undefined);
       }, timeoutMs);
     });
+  }
+
+  clearRetainedEventsMatching(pattern: string): number {
+    const fullPattern = pattern.includes(':') ? pattern : `${this.networkId}:${pattern}`;
+    const topicPattern = TopicPath.new(fullPattern, this.networkId);
+    const matchedKeys = this.retainedIndex.findWildcardMatches(topicPattern).map((m) => m.content);
+    let removed = 0;
+    for (const key of matchedKeys) {
+      const topic = this.retainedKeyToTopic.get(key);
+      if (topic) {
+        // Remove exact mapping from index
+        this.retainedIndex.removeValues(topic);
+        this.retainedKeyToTopic.delete(key);
+      }
+      if (this.retainedEvents.delete(key)) removed++;
+    }
+    return removed;
   }
 }
 
