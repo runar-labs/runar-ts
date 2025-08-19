@@ -6,7 +6,7 @@ import { ptr, toArrayBuffer } from 'bun:ffi';
 
 const f = (openEncryptionFfi() as any).symbols as any;
 
-export type KeysPtr = bigint; // carry full 64-bit pointer safely
+export type KeysPtr = number; // pass as usize to bun:ffi when arg type is 'usize'
 
 function lastError(): string {
   const buf = new Uint8Array(1024);
@@ -22,7 +22,7 @@ export function createKeys(): KeysPtr {
   if (raw === 0n || raw === (BigInt.asUintN(64, -1n))) {
     throw new RunarFfiError(`rn_keys_new returned invalid pointer`);
   }
-  return raw;
+  return Number(raw);
 }
 
 export function freeKeys(_ptr: KeysPtr): void {
@@ -47,7 +47,7 @@ export function encryptLocal(keys: KeysPtr, data: Uint8Array): Uint8Array {
   const len = Number(outLen[0]);
   const view = new Uint8Array(toArrayBuffer((outPtr[0] as unknown) as any, len as any));
   const bytes = new Uint8Array(view);
-  f.rn_free((outPtr[0] as unknown) as any, len as any);
+  f.rn_free(Number(outPtr[0]), len);
   return bytes;
 }
 
@@ -69,7 +69,7 @@ export function decryptLocal(keys: KeysPtr, encrypted: Uint8Array): Uint8Array {
   const len = Number(outLen[0]);
   const view = new Uint8Array(toArrayBuffer((outPtr[0] as unknown) as any, len as any));
   const bytes = new Uint8Array(view);
-  f.rn_free((outPtr[0] as unknown) as any, len as any);
+  f.rn_free(Number(outPtr[0]), len);
   return bytes;
 }
 
@@ -84,7 +84,7 @@ export function nodeGetPublicKey(keys: KeysPtr): Uint8Array {
   const len = Number(outLen[0]);
   const view = new Uint8Array(toArrayBuffer((outPtr[0] as unknown) as any, len as any));
   const bytes = new Uint8Array(view);
-  f.rn_free((outPtr[0] as unknown) as any, len as any);
+  f.rn_free(Number(outPtr[0]), len);
   return bytes;
 }
 
@@ -120,7 +120,7 @@ export function encryptWithEnvelope(keys: KeysPtr, data: Uint8Array, networkId: 
   const len = Number(outLen[0]);
   const view = new Uint8Array(toArrayBuffer((outPtr[0] as unknown) as any, len as any));
   const bytes = new Uint8Array(view);
-  f.rn_free((outPtr[0] as unknown) as any, len as any);
+  f.rn_free(Number(outPtr[0]), len);
   return bytes;
 }
 
@@ -140,8 +140,8 @@ export function decryptEnvelope(keys: KeysPtr, eedCbor: Uint8Array): Uint8Array 
     throw new RunarFfiError(`decrypt_envelope failed: ${lastError()}`, rc);
   }
   const len = Number(outLen[0]);
-  const ab = toArrayBuffer((outPtr[0] as unknown) as any, len as any);
-  const bytes = new Uint8Array(ab.slice(0));
+  const view = new Uint8Array(toArrayBuffer((outPtr[0] as unknown) as any, len as any));
+  const bytes = new Uint8Array(view);
   f.rn_free((outPtr[0] as unknown) as any, len as any);
   return bytes;
 }

@@ -118,31 +118,31 @@ export function openEncryptionFfi() {
       returns: 'i32',
     },
     rn_keys_encrypt_with_envelope: {
-      args: ['ptr', 'ptr', 'usize', 'ptr', 'ptr', 'ptr', 'usize', 'ptr', 'ptr', 'ptr'],
+      args: ['usize', 'ptr', 'usize', 'ptr', 'ptr', 'ptr', 'usize', 'ptr', 'ptr', 'ptr'],
       returns: 'i32',
     },
     rn_keys_decrypt_envelope: {
-      args: ['ptr', 'ptr', 'usize', 'ptr', 'ptr', 'ptr'],
+      args: ['usize', 'ptr', 'usize', 'ptr', 'ptr', 'ptr'],
       returns: 'i32',
     },
     rn_keys_node_get_public_key: {
-      args: ['ptr', 'ptr', 'ptr', 'ptr'],
+      args: ['usize', 'ptr', 'ptr', 'ptr'],
       returns: 'i32',
     },
     rn_keys_encrypt_for_public_key: {
-      args: ['ptr', 'ptr', 'usize', 'ptr', 'usize', 'ptr', 'ptr', 'ptr'],
+      args: ['usize', 'ptr', 'usize', 'ptr', 'usize', 'ptr', 'ptr', 'ptr'],
       returns: 'i32',
     },
     rn_keys_encrypt_local_data: {
-      args: ['ptr', 'ptr', 'usize', 'ptr', 'ptr', 'ptr'],
+      args: ['usize', 'ptr', 'usize', 'ptr', 'ptr', 'ptr'],
       returns: 'i32',
     },
     rn_keys_decrypt_local_data: {
-      args: ['ptr', 'ptr', 'usize', 'ptr', 'ptr', 'ptr'],
+      args: ['usize', 'ptr', 'usize', 'ptr', 'ptr', 'ptr'],
       returns: 'i32',
     },
     rn_free: {
-      args: ['ptr', 'usize'],
+      args: ['usize', 'usize'],
       returns: 'void',
     },
     rn_string_free: {
