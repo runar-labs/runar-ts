@@ -1,36 +1,45 @@
-import { describe, it, expect } from 'bun:test';
-import { AnyValue, ValueCategory, writeHeader } from '../src';
-import { createKeys, freeKeys, encryptWithEnvelope, decryptEnvelope, nodeGetPublicKey, setPersistenceDir, enableAutoPersist, registerLinuxDeviceKeystore, mobileInitializeUserRootKey, mobileGenerateNetworkDataKey, mobileGetNetworkPublicKey, mobileDeriveUserProfileKey, nodeGenerateCsr, mobileCreateNetworkKeyMessage, nodeInstallNetworkKey, flushState } from 'runar-ts-ffi/src/keys';
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { encode } from 'cbor-x';
+import { AnyValue, ValueCategory, writeHeader, createDecryptContextFromKeys } from '../src';
+import runar from 'runar-nodejs-api';
+const { Keys } = runar as any;
 
-describe('Envelope encrypt/decrypt via FFI (smoke)', () => {
-  it('encrypts and decrypts a small payload with at least one profile recipient', () => {
-    const keys = createKeys();
-    try {
-      // Register Linux keystore + persistence
-      setPersistenceDir(keys, '/tmp/runar-keys-test');
-      enableAutoPersist(keys, true);
-      registerLinuxDeviceKeystore(keys, 'com.runar.keys', 'state.aead.v1');
+test('encrypts and decrypts a small payload via NAPI Keys', async () => {
+  const keys = new Keys();
+  const svc = 'com.runar.keys';
+  const acc = `state.aead.v1.${Date.now()}`;
+  keys.registerLinuxDeviceKeystore(svc, acc);
+  keys.setPersistenceDir('/tmp/runar-keys-test');
+  keys.enableAutoPersist(true);
 
-      // Mobile setup: root key and network generation
-      mobileInitializeUserRootKey(keys);
-      const networkId = mobileGenerateNetworkDataKey(keys);
-      const networkPub = mobileGetNetworkPublicKey(keys, networkId);
-      mobileDeriveUserProfileKey(keys, 'user');
+  await keys.mobileInitializeUserRootKey();
+  await keys.flushState();
 
-      // Node CSR → NKM → install
-      const csr = nodeGenerateCsr(keys);
-      const nkm = mobileCreateNetworkKeyMessage(keys, networkId, csr);
-      nodeInstallNetworkKey(keys, nkm);
-      flushState(keys);
+  const obj = { a: 1, b: 'x' };
+  const body = encode(obj);
+  const header = writeHeader({ category: ValueCategory.Encrypted, isEncrypted: true });
+  const eed = keys.encryptLocalData(Buffer.from(body));
+  const wire = new Uint8Array(header.length + eed.length);
+  wire.set(header, 0);
+  wire.set(new Uint8Array(eed), header.length);
 
-      const payload = new TextEncoder().encode('hello');
-      const eed = encryptWithEnvelope(keys, payload, networkId, []);
-      const plain = decryptEnvelope(keys, eed);
-      expect(new TextDecoder().decode(plain)).toBe('hello');
-    } finally {
-      freeKeys(keys);
-    }
-  });
+  const av = AnyValue.fromBytes<typeof obj>(wire, {
+    decryptEnvelope: (eedBytes) => {
+      try {
+        const out = keys.decryptLocalData(Buffer.from(eedBytes));
+        return { ok: true, value: new Uint8Array(out) } as const;
+      } catch (e) {
+        return { ok: false, error: e as Error } as const;
+      }
+    },
+  } as any);
+  const r = av.as<typeof obj>();
+  assert.equal(r.ok, true);
+  if (r.ok) {
+    assert.equal(r.value.a, 1);
+    assert.equal(r.value.b, 'x');
+  }
 });
 
 

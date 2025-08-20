@@ -137,7 +137,7 @@ Scope: Achieve feature parity with the local (non-networked, non-crypto) behavio
 
 - CBOR canonical form: `cbor-x` does not guarantee canonical by default; acceptable for local parity. Will revisit when wiring Rust serializer/FFI.
 - Performance: PathTrie implementation is functional; optimizations can follow once API parity is locked.
-- Decorators are scaffolding-only for now; encryption will be integrated via `runar-ts-ffi` later.
+- Decorators are scaffolding-only for now; encryption is integrated via `runar-rust/runar-nodejs-api` (NAPI).
 
 ### Short-Term Execution Plan
 

@@ -81,6 +81,81 @@ export function mobileGenerateNetworkDataKey(keys: KeysPtr): string {
   return s;
 }
 
+export function mobileGenerateNetworkDataKeyMock(keys: KeysPtr): string {
+  const outPtr = new BigUint64Array(1);
+  const outLen = new BigUint64Array(1);
+  // Try passing null err to rule out struct write issues
+  const rc = f.rn_keys_mobile_generate_network_data_key_mock(keys, ptr(outPtr), ptr(outLen), 0);
+  if (rc !== 0) throw new RunarFfiError(`mobile_generate_network_data_key_mock failed: ${lastError()}`, rc);
+  const len = Number(outLen[0]);
+  const view = new Uint8Array(toArrayBuffer(Number(outPtr[0]), 0, len));
+  const s = new TextDecoder().decode(view);
+  f.rn_string_free(Number(outPtr[0]));
+  return s;
+}
+
+export function mobileGenerateNetworkDataKeyMockDataView(keys: KeysPtr): string {
+  const bufPtr = new ArrayBuffer(8);
+  const bufLen = new ArrayBuffer(8);
+  const dvPtr = new DataView(bufPtr);
+  const dvLen = new DataView(bufLen);
+  const rc = f.rn_keys_mobile_generate_network_data_key_mock(keys, dvPtr, dvLen, 0);
+  if (rc !== 0) throw new RunarFfiError(`mobile_generate_network_data_key_mock(dv) failed: ${lastError()}`, rc);
+  const ptrNum = Number((dvPtr.getBigUint64 as any).call(dvPtr, 0, true));
+  const lenNum = Number((dvLen.getBigUint64 as any).call(dvLen, 0, true));
+  const view = new Uint8Array(toArrayBuffer(ptrNum, 0, lenNum));
+  const s = new TextDecoder().decode(view);
+  f.rn_string_free(ptrNum);
+  return s;
+}
+
+export function testCStringOutPPP(keys: KeysPtr): string {
+  const outPtr = new BigUint64Array(1);
+  const outLen = new BigUint64Array(1);
+  const rc = f.rn_test_cstring_out_ppp(keys, ptr(outPtr), ptr(outLen));
+  if (rc !== 0) throw new RunarFfiError(`rn_test_cstring_out_ppp failed: ${lastError()}`, rc);
+  const len = Number(outLen[0]);
+  const view = new Uint8Array(toArrayBuffer(Number(outPtr[0]), 0, len));
+  const s = new TextDecoder().decode(view);
+  f.rn_string_free(Number(outPtr[0]));
+  return s;
+}
+
+export function testCStringOutPP(): string {
+  const outPtr = new BigUint64Array(1);
+  const outLen = new BigUint64Array(1);
+  const rc = f.rn_test_cstring_out_pp(ptr(outPtr), ptr(outLen));
+  if (rc !== 0) throw new RunarFfiError(`rn_test_cstring_out_pp failed: ${lastError()}`, rc);
+  const len = Number(outLen[0]);
+  const view = new Uint8Array(toArrayBuffer(Number(outPtr[0]), 0, len));
+  const s = new TextDecoder().decode(view);
+  f.rn_string_free(Number(outPtr[0]));
+  return s;
+}
+
+export function testCStringReturn(): string {
+  const s = f.rn_test_cstring_return() as string;
+  return s;
+}
+
+export function mobileGenerateNetworkDataKeyReturn(keys: KeysPtr): string {
+  const s = f.rn_keys_mobile_generate_network_data_key_return(keys) as string;
+  return s;
+}
+
+export function mobileGenerateNetworkDataKeyBytes(keys: KeysPtr): string {
+  const outPtr = new BigUint64Array(1);
+  const outLen = new BigUint64Array(1);
+  const err = new Uint8Array(24);
+  const rc = f.rn_keys_mobile_generate_network_data_key_bytes(keys, ptr(outPtr), ptr(outLen), ptr(err));
+  if (rc !== 0) throw new RunarFfiError(`mobile_generate_network_data_key_bytes failed: ${lastError()}`, rc);
+  const len = Number(outLen[0]);
+  const view = new Uint8Array(toArrayBuffer(Number(outPtr[0]), 0, len));
+  const s = new TextDecoder().decode(view);
+  f.rn_free(Number(outPtr[0]), len);
+  return s;
+}
+
 export function mobileGetNetworkPublicKey(keys: KeysPtr, networkId: string): Uint8Array {
   const outPtr = new BigUint64Array(1);
   const outLen = new BigUint64Array(1);
@@ -113,6 +188,30 @@ export function nodeInstallNetworkKey(keys: KeysPtr, msgCbor: Uint8Array): void 
   const err = new Uint8Array(24);
   const rc = f.rn_keys_node_install_network_key(keys, ptr(msgCbor), msgCbor.length, ptr(err));
   if (rc !== 0) throw new RunarFfiError(`node_install_network_key failed: ${lastError()}`, rc);
+}
+
+export function mobileGetKeystoreState(keys: KeysPtr): number {
+  const out = new Int32Array(1);
+  const err = new Uint8Array(24);
+  const rc = f.rn_keys_mobile_get_keystore_state(keys, ptr(out), ptr(err));
+  if (rc !== 0) throw new RunarFfiError(`mobile_get_keystore_state failed: ${lastError()}`, rc);
+  return out[0] as number;
+}
+
+export function nodeGetKeystoreState(keys: KeysPtr): number {
+  const out = new Int32Array(1);
+  const err = new Uint8Array(24);
+  const rc = f.rn_keys_node_get_keystore_state(keys, ptr(out), ptr(err));
+  if (rc !== 0) throw new RunarFfiError(`node_get_keystore_state failed: ${lastError()}`, rc);
+  return out[0] as number;
+}
+
+export function getKeystoreCaps(keys: KeysPtr): { version: number; flags: number } {
+  const caps = new Uint32Array(2);
+  const err = new Uint8Array(24);
+  const rc = f.rn_keys_get_keystore_caps(keys, ptr(caps), ptr(err));
+  if (rc !== 0) throw new RunarFfiError(`get_keystore_caps failed: ${lastError()}`, rc);
+  return { version: caps[0]!, flags: caps[1]! };
 }
 
 export function nodeGenerateCsr(keys: KeysPtr): Uint8Array {
@@ -243,6 +342,19 @@ export function nodeGetPublicKey(keys: KeysPtr): Uint8Array {
   const bytes = new Uint8Array(view);
   f.rn_free(Number(outPtr[0]), len);
   return bytes;
+}
+
+export function nodeGetNodeId(keys: KeysPtr): string {
+  const outPtr = new BigUint64Array(1);
+  const outLen = new BigUint64Array(1);
+  const err = new Uint8Array(24);
+  const rc = f.rn_keys_node_get_node_id(keys, ptr(outPtr), ptr(outLen), ptr(err));
+  if (rc !== 0) throw new RunarFfiError(`node_get_node_id failed: ${lastError()}`, rc);
+  const len = Number(outLen[0]);
+  const view = new Uint8Array(toArrayBuffer(Number(outPtr[0]), 0, len));
+  const s = new TextDecoder().decode(view);
+  f.rn_string_free(Number(outPtr[0]));
+  return s;
 }
 
 export function encryptWithEnvelope(keys: KeysPtr, data: Uint8Array, networkId: string | null, profilePublicKeys: Uint8Array[]): Uint8Array {

@@ -1,6 +1,6 @@
 import { encode, decode } from 'cbor-x';
 import { EncryptedClass, EncryptedField, PlainField, getEncryptedClassOptions, getFieldMetadata, getTypeName as getDecoratedTypeName } from 'runar-ts-decorators';
-import { loadRunarFfi } from 'runar-ts-ffi';
+import type { Keys } from 'runar-nodejs-api';
 import { Result, ok, err } from './result';
 import { ValueCategory, DeserializationContext, readHeader, writeHeader, bodyOffset } from './wire';
 export type { DeserializationContext } from './wire';
@@ -189,6 +189,35 @@ export function toCbor(value: unknown): Uint8Array {
 
 export function fromCbor<T>(data: Uint8Array): T {
   return decode(data) as T;
+}
+
+// Encryption helpers using NAPI Keys API
+export function createDecryptContextFromKeys(keys: Keys): DeserializationContext {
+  return {
+    decryptEnvelope: (eed: Uint8Array) => {
+      try {
+        const out = (keys as any).decryptEnvelope(Buffer.from(eed)) as Buffer;
+        return ok(new Uint8Array(out));
+      } catch (e) {
+        return err(e as Error);
+      }
+    },
+  };
+}
+
+export function makeEncryptedWireFromKeys(
+  keys: Keys,
+  payload: Uint8Array,
+  opts?: { networkId?: string | null; profilePublicKeys?: Uint8Array[]; typeName?: string }
+): Uint8Array {
+  const networkId = opts?.networkId ?? null;
+  const profilePks = (opts?.profilePublicKeys ?? []).map((pk) => Buffer.from(pk));
+  const eed = (keys as any).encryptWithEnvelope(Buffer.from(payload), networkId, profilePks) as Buffer;
+  const header = writeHeader({ category: ValueCategory.Encrypted, isEncrypted: true, typeName: opts?.typeName });
+  const out = new Uint8Array(header.length + eed.length);
+  out.set(header, 0);
+  out.set(new Uint8Array(eed), header.length);
+  return out;
 }
 
 

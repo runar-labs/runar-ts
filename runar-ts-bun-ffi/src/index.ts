@@ -138,6 +138,10 @@ export function openEncryptionFfi() {
       args: ['ptr', 'ptr', 'ptr', 'ptr'],
       returns: 'i32',
     },
+    rn_keys_node_get_node_id: {
+      args: ['ptr', 'ptr', 'ptr', 'ptr'],
+      returns: 'i32',
+    },
     rn_keys_node_generate_csr: {
       args: ['ptr', 'ptr', 'ptr', 'ptr'],
       returns: 'i32',
@@ -173,6 +177,12 @@ export function openEncryptionFfi() {
     },
     rn_keys_mobile_install_network_public_key: { args: ['ptr', 'ptr', 'usize', 'ptr'], returns: 'i32' },
     rn_keys_mobile_generate_network_data_key: { args: ['ptr', 'ptr', 'ptr', 'ptr'], returns: 'i32' },
+    rn_keys_mobile_generate_network_data_key_mock: { args: ['ptr', 'ptr', 'ptr', 'ptr'], returns: 'i32' },
+    rn_test_cstring_out_ppp: { args: ['ptr', 'ptr', 'ptr'], returns: 'i32' },
+    rn_test_cstring_out_pp: { args: ['ptr', 'ptr'], returns: 'i32' },
+    rn_test_cstring_return: { args: [], returns: 'cstring' },
+    rn_keys_mobile_generate_network_data_key_return: { args: ['ptr'], returns: 'cstring' },
+    rn_keys_mobile_generate_network_data_key_bytes: { args: ['ptr', 'ptr', 'ptr', 'ptr'], returns: 'i32' },
     rn_keys_mobile_get_network_public_key: { args: ['ptr', 'cstring', 'ptr', 'ptr', 'ptr'], returns: 'i32' },
     rn_keys_mobile_create_network_key_message: { args: ['ptr', 'cstring', 'ptr', 'usize', 'ptr', 'ptr', 'ptr'], returns: 'i32' },
     rn_free: {

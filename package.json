@@ -4,7 +4,8 @@
   "version": "0.0.1",
   "packageManager": "bun@1.1.24",
   "workspaces": [
-    "runar-ts-*"
+    "runar-ts-*",
+    "runar-rust/runar-nodejs-api"
   ],
   "scripts": {
     "build": "./scripts/build-all.sh",

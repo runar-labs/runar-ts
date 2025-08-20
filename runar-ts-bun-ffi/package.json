@@ -1,0 +1,18 @@
+{
+  "name": "runar-ts-bun-ffi",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Bun-specific FFI bindings for Runar (parked due to bun:ffi issues)",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rimraf dist"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  }
+}
+
+
+
