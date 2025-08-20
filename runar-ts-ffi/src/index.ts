@@ -46,9 +46,10 @@ function candidatePaths(): string[] {
   const arches = [arch];
   const modes = ["debug", "release"];
   const targets = [
-    join(rustRepo, "target"),
+    // Prefer package-specific target dirs first to avoid stale workspace libs
     join(rustRepo, "runar-ffi", "target"),
     join(rustRepo, "runar-node", "target"),
+    join(rustRepo, "target"),
   ];
   for (const targetDir of targets) {
     for (const mode of modes) {
@@ -117,6 +118,14 @@ export function openEncryptionFfi() {
       args: ['ptr', 'usize'],
       returns: 'i32',
     },
+    rn_keys_set_persistence_dir: { args: ['ptr', 'cstring', 'ptr'], returns: 'i32' },
+    rn_keys_enable_auto_persist: { args: ['ptr', 'bool', 'ptr'], returns: 'i32' },
+    rn_keys_wipe_persistence: { args: ['ptr', 'ptr'], returns: 'i32' },
+    rn_keys_flush_state: { args: ['ptr', 'ptr'], returns: 'i32' },
+    rn_keys_node_get_keystore_state: { args: ['ptr', 'ptr', 'ptr'], returns: 'i32' },
+    rn_keys_mobile_get_keystore_state: { args: ['ptr', 'ptr', 'ptr'], returns: 'i32' },
+    rn_keys_get_keystore_caps: { args: ['ptr', 'ptr', 'ptr'], returns: 'i32' },
+    rn_keys_register_linux_device_keystore: { args: ['ptr', 'cstring', 'cstring', 'ptr'], returns: 'i32' },
     rn_keys_encrypt_with_envelope: {
       args: ['ptr', 'ptr', 'usize', 'cstring', 'ptr', 'ptr', 'usize', 'ptr', 'ptr', 'ptr'],
       returns: 'i32',
@@ -129,6 +138,19 @@ export function openEncryptionFfi() {
       args: ['ptr', 'ptr', 'ptr', 'ptr'],
       returns: 'i32',
     },
+    rn_keys_node_generate_csr: {
+      args: ['ptr', 'ptr', 'ptr', 'ptr'],
+      returns: 'i32',
+    },
+    rn_keys_mobile_process_setup_token: {
+      args: ['ptr', 'ptr', 'usize', 'ptr', 'ptr', 'ptr'],
+      returns: 'i32',
+    },
+    rn_keys_node_install_certificate: {
+      args: ['ptr', 'ptr', 'usize', 'ptr'],
+      returns: 'i32',
+    },
+    rn_keys_node_install_network_key: { args: ['ptr', 'ptr', 'usize', 'ptr'], returns: 'i32' },
     rn_keys_encrypt_for_public_key: {
       args: ['ptr', 'ptr', 'usize', 'ptr', 'usize', 'ptr', 'ptr', 'ptr'],
       returns: 'i32',
@@ -149,6 +171,10 @@ export function openEncryptionFfi() {
       args: ['ptr', 'ptr', 'usize', 'ptr', 'ptr', 'ptr'],
       returns: 'i32',
     },
+    rn_keys_mobile_install_network_public_key: { args: ['ptr', 'ptr', 'usize', 'ptr'], returns: 'i32' },
+    rn_keys_mobile_generate_network_data_key: { args: ['ptr', 'ptr', 'ptr', 'ptr'], returns: 'i32' },
+    rn_keys_mobile_get_network_public_key: { args: ['ptr', 'cstring', 'ptr', 'ptr', 'ptr'], returns: 'i32' },
+    rn_keys_mobile_create_network_key_message: { args: ['ptr', 'cstring', 'ptr', 'usize', 'ptr', 'ptr', 'ptr'], returns: 'i32' },
     rn_free: {
       args: ['ptr', 'usize'],
       returns: 'void',
@@ -156,6 +182,14 @@ export function openEncryptionFfi() {
     rn_string_free: {
       args: ['ptr'],
       returns: 'void',
+    },
+    rn_keys_mobile_initialize_user_root_key: {
+      args: ['ptr', 'ptr'],
+      returns: 'i32',
+    },
+    rn_keys_mobile_derive_user_profile_key: {
+      args: ['ptr', 'cstring', 'ptr', 'ptr', 'ptr'],
+      returns: 'i32',
     },
   });
 }

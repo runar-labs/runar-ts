@@ -29,6 +29,163 @@ export function freeKeys(_ptr: KeysPtr): void {
   f.rn_keys_free(_ptr);
 }
 
+export function setPersistenceDir(keys: KeysPtr, dir: string): void {
+  const err = new Uint8Array(24);
+  const cstr = new Uint8Array([...new TextEncoder().encode(dir), 0]);
+  const rc = f.rn_keys_set_persistence_dir(keys, ptr(cstr), ptr(err));
+  if (rc !== 0) throw new RunarFfiError(`set_persistence_dir failed: ${lastError()}`, rc);
+}
+
+export function enableAutoPersist(keys: KeysPtr, enabled: boolean): void {
+  const err = new Uint8Array(24);
+  const rc = f.rn_keys_enable_auto_persist(keys, enabled, ptr(err));
+  if (rc !== 0) throw new RunarFfiError(`enable_auto_persist failed: ${lastError()}`, rc);
+}
+
+export function flushState(keys: KeysPtr): void {
+  const err = new Uint8Array(24);
+  const rc = f.rn_keys_flush_state(keys, ptr(err));
+  if (rc !== 0) throw new RunarFfiError(`flush_state failed: ${lastError()}`, rc);
+}
+
+export function wipePersistence(keys: KeysPtr): void {
+  const err = new Uint8Array(24);
+  const rc = f.rn_keys_wipe_persistence(keys, ptr(err));
+  if (rc !== 0) throw new RunarFfiError(`wipe_persistence failed: ${lastError()}`, rc);
+}
+
+export function registerLinuxDeviceKeystore(keys: KeysPtr, service: string, account: string): void {
+  const err = new Uint8Array(24);
+  const svc = new Uint8Array([...new TextEncoder().encode(service), 0]);
+  const acc = new Uint8Array([...new TextEncoder().encode(account), 0]);
+  const rc = f.rn_keys_register_linux_device_keystore(keys, ptr(svc), ptr(acc), ptr(err));
+  if (rc !== 0) throw new RunarFfiError(`register_linux_device_keystore failed: ${lastError()}`, rc);
+}
+
+export function mobileInstallNetworkPublicKey(keys: KeysPtr, networkPublicKey: Uint8Array): void {
+  const err = new Uint8Array(24);
+  const rc = f.rn_keys_mobile_install_network_public_key(keys, ptr(networkPublicKey), networkPublicKey.length, ptr(err));
+  if (rc !== 0) throw new RunarFfiError(`mobile_install_network_public_key failed: ${lastError()}`, rc);
+}
+
+export function mobileGenerateNetworkDataKey(keys: KeysPtr): string {
+  const outPtr = new BigUint64Array(1);
+  const outLen = new BigUint64Array(1);
+  const err = new Uint8Array(24);
+  const rc = f.rn_keys_mobile_generate_network_data_key(keys, ptr(outPtr), ptr(outLen), ptr(err));
+  if (rc !== 0) throw new RunarFfiError(`mobile_generate_network_data_key failed: ${lastError()}`, rc);
+  const len = Number(outLen[0]);
+  const view = new Uint8Array(toArrayBuffer(Number(outPtr[0]), 0, len));
+  const s = new TextDecoder().decode(view);
+  f.rn_string_free(Number(outPtr[0]));
+  return s;
+}
+
+export function mobileGetNetworkPublicKey(keys: KeysPtr, networkId: string): Uint8Array {
+  const outPtr = new BigUint64Array(1);
+  const outLen = new BigUint64Array(1);
+  const err = new Uint8Array(24);
+  const nid = new Uint8Array([...new TextEncoder().encode(networkId), 0]);
+  const rc = f.rn_keys_mobile_get_network_public_key(keys, ptr(nid), ptr(outPtr), ptr(outLen), ptr(err));
+  if (rc !== 0) throw new RunarFfiError(`mobile_get_network_public_key failed: ${lastError()}`, rc);
+  const len = Number(outLen[0]);
+  const view = new Uint8Array(toArrayBuffer(Number(outPtr[0]), 0, len));
+  const bytes = new Uint8Array(view);
+  f.rn_free(Number(outPtr[0]), len);
+  return bytes;
+}
+
+export function mobileCreateNetworkKeyMessage(keys: KeysPtr, networkId: string, nodeAgreementPk: Uint8Array): Uint8Array {
+  const outPtr = new BigUint64Array(1);
+  const outLen = new BigUint64Array(1);
+  const err = new Uint8Array(24);
+  const nid = new Uint8Array([...new TextEncoder().encode(networkId), 0]);
+  const rc = f.rn_keys_mobile_create_network_key_message(keys, ptr(nid), ptr(nodeAgreementPk), nodeAgreementPk.length, ptr(outPtr), ptr(outLen), ptr(err));
+  if (rc !== 0) throw new RunarFfiError(`mobile_create_network_key_message failed: ${lastError()}`, rc);
+  const len = Number(outLen[0]);
+  const view = new Uint8Array(toArrayBuffer(Number(outPtr[0]), 0, len));
+  const bytes = new Uint8Array(view);
+  f.rn_free(Number(outPtr[0]), len);
+  return bytes;
+}
+
+export function nodeInstallNetworkKey(keys: KeysPtr, msgCbor: Uint8Array): void {
+  const err = new Uint8Array(24);
+  const rc = f.rn_keys_node_install_network_key(keys, ptr(msgCbor), msgCbor.length, ptr(err));
+  if (rc !== 0) throw new RunarFfiError(`node_install_network_key failed: ${lastError()}`, rc);
+}
+
+export function nodeGenerateCsr(keys: KeysPtr): Uint8Array {
+  const outPtr = new BigUint64Array(1);
+  const outLen = new BigUint64Array(1);
+  const err = new Uint8Array(24);
+  const rc = f.rn_keys_node_generate_csr(keys, ptr(outPtr), ptr(outLen), ptr(err));
+  if (rc !== 0) {
+    throw new RunarFfiError(`node_generate_csr failed: ${lastError()}`, rc);
+  }
+  const len = Number(outLen[0]);
+  const view = new Uint8Array(toArrayBuffer(Number(outPtr[0]), 0, len));
+  const bytes = new Uint8Array(view);
+  f.rn_free(Number(outPtr[0]), len);
+  return bytes;
+}
+
+export function mobileProcessSetupToken(keys: KeysPtr, setupTokenCbor: Uint8Array): Uint8Array {
+  const outPtr = new BigUint64Array(1);
+  const outLen = new BigUint64Array(1);
+  const err = new Uint8Array(24);
+  const rc = f.rn_keys_mobile_process_setup_token(
+    keys,
+    ptr(setupTokenCbor),
+    setupTokenCbor.length,
+    ptr(outPtr),
+    ptr(outLen),
+    ptr(err),
+  );
+  if (rc !== 0) {
+    throw new RunarFfiError(`mobile_process_setup_token failed: ${lastError()}`, rc);
+  }
+  const len = Number(outLen[0]);
+  const view = new Uint8Array(toArrayBuffer(Number(outPtr[0]), 0, len));
+  const bytes = new Uint8Array(view);
+  f.rn_free(Number(outPtr[0]), len);
+  return bytes;
+}
+
+export function nodeInstallCertificate(keys: KeysPtr, certMessageCbor: Uint8Array): void {
+  const err = new Uint8Array(24);
+  const rc = f.rn_keys_node_install_certificate(keys, ptr(certMessageCbor), certMessageCbor.length, ptr(err));
+  if (rc !== 0) {
+    throw new RunarFfiError(`node_install_certificate failed: ${lastError()}`, rc);
+  }
+}
+
+// testInstallLocalNetwork removed; use explicit public APIs instead
+
+export function mobileInitializeUserRootKey(keys: KeysPtr): void {
+  const err = new Uint8Array(24);
+  const rc = f.rn_keys_mobile_initialize_user_root_key(keys, ptr(err));
+  if (rc !== 0) {
+    throw new RunarFfiError(`mobile_initialize_user_root_key failed: ${lastError()}`, rc);
+  }
+}
+
+export function mobileDeriveUserProfileKey(keys: KeysPtr, label: string): Uint8Array {
+  const outPtr = new BigUint64Array(1);
+  const outLen = new BigUint64Array(1);
+  const err = new Uint8Array(24);
+  const cstr = new Uint8Array([...new TextEncoder().encode(label), 0]);
+  const rc = f.rn_keys_mobile_derive_user_profile_key(keys, ptr(cstr), ptr(outPtr), ptr(outLen), ptr(err));
+  if (rc !== 0) {
+    throw new RunarFfiError(`mobile_derive_user_profile_key failed: ${lastError()}`, rc);
+  }
+  const len = Number(outLen[0]);
+  const view = new Uint8Array(toArrayBuffer(Number(outPtr[0]), 0, len));
+  const bytes = new Uint8Array(view);
+  f.rn_free(Number(outPtr[0]), len);
+  return bytes;
+}
+
 export function encryptLocal(keys: KeysPtr, data: Uint8Array): Uint8Array {
   const outPtr = new BigUint64Array(1);
   const outLen = new BigUint64Array(1);
