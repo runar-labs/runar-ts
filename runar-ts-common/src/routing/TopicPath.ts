@@ -148,9 +148,9 @@ export class TopicPath {
       );
     }
 
-    // Check if action name contains invalid characters
-    if (actionName.includes('/') || actionName.includes(':')) {
-      return err('Invalid action name - cannot contain slashes or colons');
+    // Check if action name contains invalid characters (colons are reserved for network ID separation)
+    if (actionName.includes(':')) {
+      return err('Invalid action name - cannot contain colons');
     }
 
     const full = `${this.networkIdValue}:${this.servicePathValue}/${actionName}`;

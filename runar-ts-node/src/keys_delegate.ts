@@ -2,9 +2,14 @@ export interface KeysDelegate {
   ensureSymmetricKey(keyName: string): Promise<Uint8Array>;
 }
 
+// Type definition for NAPI keys interface
+interface NapiKeys {
+  ensureSymmetricKey(keyName: string): Buffer;
+}
+
 export class NapiKeysDelegate implements KeysDelegate {
-  private readonly keys: any;
-  constructor(keys: any) {
+  private readonly keys: NapiKeys;
+  constructor(keys: NapiKeys) {
     this.keys = keys;
   }
 

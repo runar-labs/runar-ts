@@ -16,20 +16,20 @@ export interface NapiRemoteAdapterOptions {
 }
 
 export class NapiRemoteAdapter implements RemoteAdapter {
-  private keys: any;
-  private transport: any;
-  private discovery?: any;
+  private keys: unknown;
+  private transport: unknown;
+  private discovery?: unknown;
   private destPeerId?: string;
   private profilePk?: Uint8Array;
   private discoveryOptsCbor?: Uint8Array;
 
-  constructor(keys: any, opts?: NapiRemoteAdapterOptions) {
+  constructor(keys: unknown, opts?: NapiRemoteAdapterOptions) {
     this.keys = keys;
     const optionsCbor = encode(opts?.transportOptions ?? {});
-    this.transport = new runarApi.Transport(keys, Buffer.from(optionsCbor));
+    this.transport = new runarApi.Transport(keys as any, Buffer.from(optionsCbor));
     if (opts?.discoveryOptions) {
       const discCbor = encode(opts.discoveryOptions);
-      this.discovery = new runarApi.Discovery(keys, Buffer.from(discCbor));
+      this.discovery = new runarApi.Discovery(keys as any, Buffer.from(discCbor));
       this.discoveryOptsCbor = discCbor;
     }
     this.destPeerId = opts?.destPeerId;
@@ -37,20 +37,20 @@ export class NapiRemoteAdapter implements RemoteAdapter {
   }
 
   async start(): Promise<void> {
-    await this.transport.start();
+    await (this.transport as any).start();
     if (this.discovery) {
-      await this.discovery.init(Buffer.from(this.discoveryOptsCbor ?? encode({})));
-      await this.discovery.bindEventsToTransport(this.transport);
-      await this.discovery.startAnnouncing();
+      await (this.discovery as any).init(Buffer.from(this.discoveryOptsCbor ?? encode({})));
+      await (this.discovery as any).bindEventsToTransport(this.transport);
+      await (this.discovery as any).startAnnouncing();
     }
   }
 
   async stop(): Promise<void> {
     if (this.discovery) {
-      await this.discovery.stopAnnouncing();
-      await this.discovery.shutdown();
+      await (this.discovery as any).stopAnnouncing();
+      await (this.discovery as any).shutdown();
     }
-    await this.transport.stop();
+    await (this.transport as any).stop();
   }
 
   async request(path: string, payload: Uint8Array): Promise<Uint8Array> {
@@ -58,7 +58,7 @@ export class NapiRemoteAdapter implements RemoteAdapter {
       throw new Error('NapiRemoteAdapter requires destPeerId and profilePublicKey');
     }
     const correlationId = crypto.randomUUID();
-    const res: Buffer = await this.transport.request(
+    const res: Buffer = await (this.transport as any).request(
       path,
       correlationId,
       Buffer.from(payload),
@@ -72,7 +72,12 @@ export class NapiRemoteAdapter implements RemoteAdapter {
     if (!this.destPeerId) {
       throw new Error('NapiRemoteAdapter requires destPeerId for publish');
     }
-    await this.transport.publish(path, crypto.randomUUID(), Buffer.from(payload), this.destPeerId);
+    await (this.transport as any).publish(
+      path,
+      crypto.randomUUID(),
+      Buffer.from(payload),
+      this.destPeerId
+    );
   }
 }
 
@@ -99,7 +104,7 @@ export class LoopbackRemoteAdapter implements RemoteAdapter {
 }
 
 export function makeNapiRemoteAdapter(
-  keys: any,
+  keys: unknown,
   opts?: NapiRemoteAdapterOptions
 ): NapiRemoteAdapter {
   return new NapiRemoteAdapter(keys, opts);

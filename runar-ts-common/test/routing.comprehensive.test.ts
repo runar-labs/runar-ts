@@ -125,7 +125,7 @@ describe('Comprehensive TopicPath and PathTrie Tests (Mirroring Rust)', () => {
     });
 
     it('should match paths against templates', () => {
-      const template = TopicPath.new('services/{service_path}/state', 'main');
+      // const template = TopicPath.new('services/{service_path}/state', 'main');
 
       // Paths that should match
       const path1 = TopicPath.new('main:services/math/state', 'default');
@@ -334,12 +334,6 @@ describe('Comprehensive TopicPath and PathTrie Tests (Mirroring Rust)', () => {
   });
 
   describe('Registry Service Use Cases', () => {
-    let trie: PathTrie<string>;
-
-    beforeEach(() => {
-      trie = PathTrie.default();
-    });
-
     it('should handle registry service path templates', () => {
       // Create actual request paths
       const listPath = TopicPath.new('main:services/list', 'default');

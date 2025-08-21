@@ -59,17 +59,17 @@ let globalConfig: LoggingConfig = LoggingConfig.default();
 let globalSink: LogSink = (level, formatted) => {
   switch (level) {
     case LogLevel.Error:
-      console.error(formatted);
+      process.stderr.write(formatted + '\n');
       break;
     case LogLevel.Warn:
-      console.warn(formatted);
+      process.stderr.write(formatted + '\n');
       break;
     case LogLevel.Info:
-      console.info(formatted);
+      process.stdout.write(formatted + '\n');
       break;
     default:
       // Debug/Trace → log
-      console.log(formatted);
+      process.stdout.write(formatted + '\n');
       break;
   }
 };

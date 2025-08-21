@@ -1,6 +1,6 @@
 import { encode, decode } from 'cbor-x';
 import { Result, ok, err } from './result';
-import { ValueCategory, DeserializationContext, readHeader, writeHeader, bodyOffset } from './wire';
+import { ValueCategory, DeserializationContext } from './wire';
 export type { DeserializationContext, WireHeader } from './wire';
 import { resolveType, initWirePrimitives, registerType, clearRegistry } from './registry';
 import { getTypeName } from 'runar-ts-decorators';
@@ -83,7 +83,7 @@ export class AnyValue<T = unknown> {
   }
 
   static newList<T>(list: T[]): AnyValue<T[]> {
-    const serializeFn: SerializeFn = (value, keystore, resolver) => {
+    const serializeFn: SerializeFn = (value, _keystore, _resolver) => {
       try {
         // TODO: Implement element-level encryption when keystore/resolver are available
         const bytes = encode(value);
@@ -97,7 +97,7 @@ export class AnyValue<T = unknown> {
   }
 
   static newMap<T>(map: Map<string, T>): AnyValue<Map<string, T>> {
-    const serializeFn: SerializeFn = (value, keystore, resolver) => {
+    const serializeFn: SerializeFn = (value, _keystore, _resolver) => {
       try {
         // TODO: Implement element-level encryption when keystore/resolver are available
         const bytes = encode(value);
@@ -112,7 +112,7 @@ export class AnyValue<T = unknown> {
 
   static newStruct<T>(value: T): AnyValue<T> {
     const typeName = AnyValue.getTypeName(value);
-    const serializeFn: SerializeFn = (value, keystore, resolver) => {
+    const serializeFn: SerializeFn = (value, _keystore, _resolver) => {
       try {
         // TODO: Implement struct encryption when keystore/resolver are available
         const bytes = encode(value);
@@ -126,17 +126,17 @@ export class AnyValue<T = unknown> {
   }
 
   static newBytes(bytes: Uint8Array): AnyValue<Uint8Array> {
-    const serializeFn: SerializeFn = value => {
-      return ok(value);
+    const serializeFn: SerializeFn = _value => {
+      return ok(_value);
     };
 
     return new AnyValue(ValueCategory.Bytes, bytes, serializeFn, 'bytes');
   }
 
   static newJson(json: any): AnyValue<any> {
-    const serializeFn: SerializeFn = value => {
+    const serializeFn: SerializeFn = _value => {
       try {
-        const bytes = encode(value);
+        const bytes = encode(_value);
         return ok(bytes);
       } catch (e) {
         return err(e as Error);
@@ -396,7 +396,7 @@ export class AnyValue<T = unknown> {
     return ok(this.value as unknown as U);
   }
 
-  // Compatibility methods for existing tests
+  // Core API method for creating AnyValue from JavaScript/TypeScript values
   static from<T>(value: T): AnyValue<T> {
     // Special handling for null
     if (value === null) {
@@ -415,9 +415,9 @@ export class AnyValue<T = unknown> {
         if (value instanceof Map) {
           return AnyValue.newMap(value) as AnyValue<T>;
         }
-        // Convert object to Map for compatibility
-        const map = new Map(Object.entries(value as Record<string, any>));
-        return AnyValue.newMap(map) as AnyValue<T>;
+        throw new Error(
+          `Expected Map instance for ValueCategory.Map, but got ${typeof value}: ${value}`
+        );
       case ValueCategory.Struct:
         return AnyValue.newStruct(value as any) as AnyValue<T>;
       case ValueCategory.Bytes:
@@ -431,17 +431,13 @@ export class AnyValue<T = unknown> {
     }
   }
 
+  // Core API method for deserializing AnyValue from wire format bytes
   static fromBytes<T = unknown>(bytes: Uint8Array, ctx?: DeserializationContext): AnyValue<T> {
     const result = AnyValue.deserialize(bytes, ctx);
     if (!result.ok) {
       throw new Error(`Failed to deserialize: ${result.error.message}`);
     }
     return result.value as AnyValue<T>;
-  }
-
-  // Legacy methods for compatibility
-  bytes(): Uint8Array | undefined {
-    return undefined; // TODO: Implement when needed
   }
 }
 
@@ -453,32 +449,6 @@ export type { Result } from './result';
 
 // Export the wire types
 export { ValueCategory, readHeader, writeHeader, bodyOffset } from './wire.js';
-
-// Helper function to determine category and wire name
-function determineCategoryAndWireName(val: any): { category: ValueCategory; wireName: string } {
-  if (val === null) return { category: ValueCategory.Null, wireName: 'null' };
-  if (typeof val === 'boolean') return { category: ValueCategory.Primitive, wireName: 'bool' };
-  if (typeof val === 'number') {
-    if (Number.isInteger(val)) return { category: ValueCategory.Primitive, wireName: 'int' };
-    return { category: ValueCategory.Primitive, wireName: 'float' };
-  }
-  if (typeof val === 'string') return { category: ValueCategory.Primitive, wireName: 'string' };
-  if (val instanceof Uint8Array) return { category: ValueCategory.Bytes, wireName: 'bytes' };
-  if (Array.isArray(val)) return { category: ValueCategory.List, wireName: 'list' };
-  if (typeof val === 'object') {
-    // Check for decorator metadata
-    if (val.constructor && val.constructor.name) {
-      try {
-        // TODO: Implement decorator metadata lookup when available
-        // For now, fall back to default behavior
-      } catch (e) {
-        // If decorator module is not available, fall back to default
-      }
-    }
-    return { category: ValueCategory.Struct, wireName: 'json' };
-  }
-  return { category: ValueCategory.Json, wireName: 'json' };
-}
 
 // Export function to serialize entities
 export function serializeEntity(entity: any): Uint8Array {

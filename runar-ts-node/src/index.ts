@@ -13,6 +13,7 @@ import {
 } from './core';
 import { SubscriptionMetadata } from 'runar-ts-schemas';
 import type { RemoteAdapter } from './remote';
+import { isOk, unwrap, unwrapErr } from 'runar-ts-common/src/routing/Result';
 export { NodeConfig } from './config';
 export type { RemoteAdapter } from './remote';
 import { RegistryService } from './registry_service';
@@ -165,7 +166,7 @@ export class Node {
     defaultNetworkId: string;
     transportOptions?: unknown;
     discoveryOptions?: unknown;
-    keys?: any;
+    keys?: unknown;
   }): Node {
     const n = new Node(cfg.defaultNetworkId);
     if (cfg.keys) {
@@ -212,8 +213,14 @@ export class Node {
     const regCtx: LifecycleContext = {
       networkId: this.networkId,
       addActionHandler: (actionName: string, handler: ActionHandler) => {
-        const topic = TopicPath.newService(this.networkId, reg.path()).newActionTopic(actionName);
-        this.registry.addLocalActionHandler(topic, handler);
+        const topicResult = TopicPath.newService(this.networkId, reg.path()).newActionTopic(
+          actionName
+        );
+        if (isOk(topicResult)) {
+          this.registry.addLocalActionHandler(unwrap(topicResult), handler);
+        } else {
+          throw new Error(`Failed to create action topic: ${unwrapErr(topicResult)}`);
+        }
       },
       publish: async (eventName: string, payload: AnyValue) => {
         await this.publish(reg.path(), eventName, payload);
@@ -229,8 +236,14 @@ export class Node {
       const ctx: LifecycleContext = {
         networkId: this.networkId,
         addActionHandler: (actionName: string, handler: ActionHandler) => {
-          const topic = TopicPath.newService(this.networkId, svc.path()).newActionTopic(actionName);
-          this.registry.addLocalActionHandler(topic, handler);
+          const topicResult = TopicPath.newService(this.networkId, svc.path()).newActionTopic(
+            actionName
+          );
+          if (isOk(topicResult)) {
+            this.registry.addLocalActionHandler(unwrap(topicResult), handler);
+          } else {
+            throw new Error(`Failed to create action topic: ${unwrapErr(topicResult)}`);
+          }
         },
         publish: async (eventName: string, payload: AnyValue) => {
           await this.publish(svc.path(), eventName, payload);
@@ -244,8 +257,14 @@ export class Node {
       const ctx: LifecycleContext = {
         networkId: this.networkId,
         addActionHandler: (actionName: string, handler: ActionHandler) => {
-          const topic = TopicPath.newService(this.networkId, svc.path()).newActionTopic(actionName);
-          this.registry.addLocalActionHandler(topic, handler);
+          const topicResult = TopicPath.newService(this.networkId, svc.path()).newActionTopic(
+            actionName
+          );
+          if (isOk(topicResult)) {
+            this.registry.addLocalActionHandler(unwrap(topicResult), handler);
+          } else {
+            throw new Error(`Failed to create action topic: ${unwrapErr(topicResult)}`);
+          }
         },
         publish: async (eventName: string, payload: AnyValue) => {
           await this.publish(svc.path(), eventName, payload);
@@ -284,7 +303,11 @@ export class Node {
     payload: TReq
   ): Promise<TRes> {
     if (!this.running) throw new Error('Node not started');
-    const actionTopic = TopicPath.newService(this.networkId, service).newActionTopic(action);
+    const actionTopicResult = TopicPath.newService(this.networkId, service).newActionTopic(action);
+    if (!isOk(actionTopicResult)) {
+      throw new Error(`Failed to create action topic: ${unwrapErr(actionTopicResult)}`);
+    }
+    const actionTopic = unwrap(actionTopicResult);
     const handlers = this.registry.findLocalActionHandlers(actionTopic);
     if (handlers.length === 0) {
       // Remote fallback per Rust behavior
@@ -324,10 +347,14 @@ export class Node {
     if (!actionPath) {
       throw new Error('Invalid path - missing action segment');
     }
-    const actionTopic = TopicPath.newService(
+    const actionTopicResult = TopicPath.newService(
       this.networkId,
       topicPath.servicePath()
     ).newActionTopic(actionPath);
+    if (!isOk(actionTopicResult)) {
+      throw new Error(`Failed to create action topic: ${unwrapErr(actionTopicResult)}`);
+    }
+    const actionTopic = unwrap(actionTopicResult);
     const handlers = this.registry.findLocalActionHandlers(actionTopic);
     if (handlers.length === 0) {
       if (this.remoteAdapter) {
@@ -368,7 +395,11 @@ export class Node {
     options?: PublishOptions
   ): Promise<void> {
     if (!this.running) throw new Error('Node not started');
-    const evtTopic = TopicPath.newService(this.networkId, service).newEventTopic(event);
+    const evtTopicResult = TopicPath.newService(this.networkId, service).newEventTopic(event);
+    if (!isOk(evtTopicResult)) {
+      throw new Error(`Failed to create event topic: ${unwrapErr(evtTopicResult)}`);
+    }
+    const evtTopic = unwrap(evtTopicResult);
     const subs = this.registry.getSubscribers(evtTopic);
     const inArc = AnyValue.from(payload);
     const message: EventMessage = {
@@ -411,9 +442,14 @@ export class Node {
     if (!actionPath) {
       throw new Error('Invalid path - missing event/action segment');
     }
-    const evtTopic = TopicPath.newService(this.networkId, topicPath.servicePath()).newEventTopic(
-      actionPath
-    );
+    const evtTopicResult = TopicPath.newService(
+      this.networkId,
+      topicPath.servicePath()
+    ).newEventTopic(actionPath);
+    if (!isOk(evtTopicResult)) {
+      throw new Error(`Failed to create event topic: ${unwrapErr(evtTopicResult)}`);
+    }
+    const evtTopic = unwrap(evtTopicResult);
     const subs = this.registry.getSubscribers(evtTopic);
     const inArc = AnyValue.from(payload);
     const message: EventMessage = {
@@ -450,7 +486,11 @@ export class Node {
     subscriber: EventSubscriber,
     options?: EventRegistrationOptions
   ): string {
-    const topic = TopicPath.newService(this.networkId, service).newEventTopic(eventOrPattern);
+    const topicResult = TopicPath.newService(this.networkId, service).newEventTopic(eventOrPattern);
+    if (!isOk(topicResult)) {
+      throw new Error(`Failed to create event topic: ${unwrapErr(topicResult)}`);
+    }
+    const topic = unwrap(topicResult);
     const serviceTopic = TopicPath.newService(this.networkId, service);
     const metadata: SubscriptionMetadata = {
       path: topic.asString?.() ?? `${this.networkId}:${service}/${eventOrPattern}`,
@@ -488,7 +528,11 @@ export class Node {
     eventOrPattern: string,
     timeoutMs = 5000
   ): Promise<EventMessage | undefined> {
-    const topic = TopicPath.newService(this.networkId, service).newEventTopic(eventOrPattern);
+    const topicResult = TopicPath.newService(this.networkId, service).newEventTopic(eventOrPattern);
+    if (!isOk(topicResult)) {
+      throw new Error(`Failed to create event topic: ${unwrapErr(topicResult)}`);
+    }
+    const topic = unwrap(topicResult);
     return new Promise(resolve => {
       let resolved = false;
       const serviceTopic = TopicPath.newService(this.networkId, service);

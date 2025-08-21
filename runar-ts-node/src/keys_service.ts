@@ -27,7 +27,7 @@ export class KeysService implements AbstractService {
 
   async init(context: LifecycleContext): Promise<void> {
     context.addActionHandler('ensure_symmetric_key', async req => {
-      const r = req.payload.as<any>();
+      const r = req.payload.as<unknown>();
       let label = '';
       if (r.ok) {
         const v = r.value;

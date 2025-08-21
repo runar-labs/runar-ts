@@ -18,7 +18,9 @@ export interface EncryptedClassOptions {
 
 const metadataRegistry = new Map<string, DecoratorMetadata>();
 
-export function EncryptedClass(options: EncryptedClassOptions) {
+export function EncryptedClass(
+  options: EncryptedClassOptions
+): (target: new (...args: any[]) => any) => void {
   return function (target: new (...args: any[]) => any) {
     const existing = metadataRegistry.get(target.name) || {
       typeName: options.typeName || target.name,
@@ -29,7 +31,9 @@ export function EncryptedClass(options: EncryptedClassOptions) {
   };
 }
 
-export function EncryptedField(options: { label: string }) {
+export function EncryptedField(options: {
+  label: string;
+}): (target: any, propertyKey: string) => void {
   return function (target: any, propertyKey: string) {
     const className = target.constructor.name;
     const existing = metadataRegistry.get(className) || {
@@ -45,7 +49,7 @@ export function EncryptedField(options: { label: string }) {
   };
 }
 
-export function PlainField() {
+export function PlainField(): (target: any, propertyKey: string) => void {
   return function (target: any, propertyKey: string) {
     const className = target.constructor.name;
     const existing = metadataRegistry.get(className) || {
