@@ -97,4 +97,8 @@ export class LoopbackRemoteAdapter implements RemoteAdapter {
   }
 }
 
+export function makeNapiRemoteAdapter(keys: any, opts?: NapiRemoteAdapterOptions): NapiRemoteAdapter {
+  return new NapiRemoteAdapter(keys, opts);
+}
+
 

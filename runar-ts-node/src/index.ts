@@ -18,6 +18,11 @@ import type { RemoteAdapter } from './remote';
 export { NodeConfig } from './config';
 export type { RemoteAdapter } from './remote';
 import { RegistryService } from './registry_service';
+export { RegistryService } from './registry_service';
+export { NodeRegistryDelegate } from './registry_delegate';
+export type { RegistryDelegate } from './registry_delegate';
+export { NapiRemoteAdapter, LoopbackRemoteAdapter, makeNapiRemoteAdapter } from './remote';
+import { NapiRemoteAdapter as NapiRemoteAdapterValue } from './remote';
 
 type SubscriberKind = 'Local' | 'Remote';
 type FullSubscriptionEntry = {
@@ -79,7 +84,7 @@ export class ServiceRegistry {
   }
 
   addLocalService(entry: ServiceEntry): void {
-    this.localServices.set(entry.serviceTopic.asString?.() ?? `${entry.serviceTopic.networkId()}:${entry.service.path()}`, entry);
+    this.localServices.set(entry.serviceTopic.asString?.() ?? `${entry.serviceTopic.networkId()}:${entry.serviceTopic.servicePath()}`, entry);
     this.localServiceStates.set(entry.service.path(), entry.serviceState);
   }
 
@@ -146,6 +151,17 @@ export class Node {
 
   constructor(networkId = 'default') {
     this.networkId = networkId;
+  }
+
+  static fromConfig(cfg: { defaultNetworkId: string; transportOptions?: unknown; discoveryOptions?: unknown; keys?: any }): Node {
+    const n = new Node(cfg.defaultNetworkId);
+    if (cfg.keys) {
+      n.setRemoteAdapter(new NapiRemoteAdapterValue(cfg.keys, {
+        transportOptions: cfg.transportOptions,
+        discoveryOptions: cfg.discoveryOptions,
+      }));
+    }
+    return n;
   }
 
   setRemoteAdapter(remote: RemoteAdapter): void {
