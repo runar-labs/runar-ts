@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rimraf dist",
-    "test": "bun test"
+    "test": "tsx --test test/*.ts"
   },
   "dependencies": {
     "runar-ts-serializer": "workspace:*",
@@ -19,7 +19,8 @@
   "devDependencies": {
     "typescript": "^5.5.4",
     "rimraf": "^6.0.1",
-    "@types/uuid": "^9.0.7"
+    "@types/uuid": "^9.0.7",
+    "tsx": "^4.19.2"
   }
 }
 

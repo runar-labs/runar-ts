@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
 import { Node } from '../src';
 import { AnyValue } from 'runar-ts-serializer';
 import { AbstractService, LifecycleContext } from 'runar-ts-common';
@@ -32,7 +33,7 @@ describe('Node local E2E', () => {
     await node.start();
 
     const res = await node.request<{ a: number; b: number }, { sum: number }>('math', 'add', { a: 2, b: 3 });
-    expect(res.sum).toBe(5);
+    assert.equal(res.sum, 5);
 
     // publish retained event before subscribe
     await node.publish('math', 'added', { sum: 5 }, { retain: true });
@@ -46,13 +47,13 @@ describe('Node local E2E', () => {
 
     // immediate retained replay enqueues delivery; wait a tick
     await new Promise((r) => setTimeout(r, 10));
-    expect(seen).toEqual([5]);
+    assert.deepEqual(seen, [5]);
 
     await node.publish('math', 'added', { sum: 7 });
     await new Promise((r) => setTimeout(r, 10));
-    expect(seen).toEqual([5, 7]);
+    assert.deepEqual(seen, [5, 7]);
 
-    expect(node.unsubscribe(subId)).toBe(true);
+    assert.equal(node.unsubscribe(subId), true);
 
     await node.stop();
   });

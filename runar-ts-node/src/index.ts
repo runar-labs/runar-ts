@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { AnyValue, fromCbor, toCbor } from 'runar-ts-serializer';
+import { AnyValue } from 'runar-ts-serializer';
 import {
   ActionHandler,
   ActionRequest,
@@ -14,6 +14,9 @@ import {
   ServiceState,
 } from 'runar-ts-common';
 import { SubscriptionMetadata } from 'runar-ts-schemas';
+import type { RemoteAdapter } from './remote';
+export { NodeConfig } from './config';
+export type { RemoteAdapter } from './remote';
 import { RegistryService } from './registry_service';
 
 type SubscriberKind = 'Local' | 'Remote';
@@ -31,6 +34,7 @@ export class ServiceRegistry {
   private subscriptionIdToTopic = new Map<string, TopicPath>();
   private subscriptionIdToServiceTopic = new Map<string, TopicPath>();
   private localServices = new Map<string, ServiceEntry>();
+  private localServiceStates = new Map<string, ServiceState>();
 
   addLocalActionHandler(topic: TopicPath, handler: ActionHandler): void {
     this.actionHandlers.setValue(topic, handler);
@@ -76,6 +80,7 @@ export class ServiceRegistry {
 
   addLocalService(entry: ServiceEntry): void {
     this.localServices.set(entry.serviceTopic.asString?.() ?? `${entry.serviceTopic.networkId()}:${entry.service.path()}`, entry);
+    this.localServiceStates.set(entry.service.path(), entry.serviceState);
   }
 
   getLocalServices(): ServiceEntry[] {
@@ -88,8 +93,27 @@ export class ServiceRegistry {
         v.serviceState = state;
         if (state === ServiceState.Running) v.lastStartTime = Date.now();
         this.localServices.set(k, v);
+        this.localServiceStates.set(servicePath, state);
         break;
       }
+    }
+  }
+
+  getLocalServiceState(serviceTopic: TopicPath): ServiceState | undefined {
+    return this.localServiceStates.get(serviceTopic.servicePath());
+  }
+
+  validatePauseTransition(serviceTopic: TopicPath): void {
+    const curr = this.getLocalServiceState(serviceTopic);
+    if (curr !== ServiceState.Running) {
+      throw new Error('Service must be Running to pause');
+    }
+  }
+
+  validateResumeTransition(serviceTopic: TopicPath): void {
+    const curr = this.getLocalServiceState(serviceTopic);
+    if (curr !== ServiceState.Paused) {
+      throw new Error('Service must be Paused to resume');
     }
   }
 }
@@ -118,9 +142,14 @@ export class Node {
   private retainedIndex = new PathTrie<string>();
   private retainedKeyToTopic = new Map<string, TopicPath>();
   private readonly maxRetainedPerTopic = 100;
+  private remoteAdapter?: RemoteAdapter;
 
   constructor(networkId = 'default') {
     this.networkId = networkId;
+  }
+
+  setRemoteAdapter(remote: RemoteAdapter): void {
+    this.remoteAdapter = remote;
   }
 
   private getLocalServicesSnapshot = (): ServiceEntry[] => {
@@ -173,6 +202,7 @@ export class Node {
         },
       };
       await svc.init(ctx);
+      this.registry.updateServiceState(svc.path(), ServiceState.Initialized);
     }
     for (const entry of this.registry.getLocalServices()) {
       const svc = entry.service;
@@ -189,11 +219,17 @@ export class Node {
       await svc.start(ctx);
       this.registry.updateServiceState(svc.path(), ServiceState.Running);
     }
+    if (this.remoteAdapter?.start) {
+      await this.remoteAdapter.start();
+    }
     this.running = true;
   }
 
   async stop(): Promise<void> {
     if (!this.running) return;
+    if (this.remoteAdapter?.stop) {
+      await this.remoteAdapter.stop();
+    }
     for (const entry of this.registry.getLocalServices()) {
       const svc = entry.service;
       const ctx: LifecycleContext = {
@@ -211,12 +247,64 @@ export class Node {
     if (!this.running) throw new Error('Node not started');
     const actionTopic = TopicPath.newService(this.networkId, service).newActionTopic(action);
     const handlers = this.registry.findLocalActionHandlers(actionTopic);
-    if (handlers.length === 0) throw new Error(`No handler for ${actionTopic.asString?.() ?? `${this.networkId}:${service}/${action}`}`);
+    if (handlers.length === 0) {
+      // Remote fallback per Rust behavior
+      if (this.remoteAdapter) {
+        const path = actionTopic.asString?.() ?? `${this.networkId}:${service}/${action}`;
+        const inArc = AnyValue.from(payload);
+        const ser = inArc.serialize();
+        if (!ser.ok) throw ser.error;
+        const outBytes = await this.remoteAdapter.request(path, ser.value);
+        const outArc = AnyValue.fromBytes<TRes>(outBytes);
+        const out = outArc.as<TRes>();
+        if (!out.ok) throw out.error;
+        return out.value;
+      }
+      throw new Error(`No handler for ${actionTopic.asString?.() ?? `${this.networkId}:${service}/${action}`}`);
+    }
     // Use ArcValue in-memory for local call; serialize only to satisfy ActionRequest shape
     const inArc = AnyValue.from(payload);
     const ser = inArc.serialize();
     if (!ser.ok) throw ser.error;
     const req: ActionRequest = { service, action, payload: ser.value, requestId: uuidv4() };
+    const res = await handlers[0]!(req);
+    if (res.ok) {
+      const outArc = AnyValue.fromBytes<TRes>(res.payload);
+      const out = outArc.as<TRes>();
+      if (!out.ok) throw out.error;
+      return out.value;
+    }
+    throw new Error(res.error);
+  }
+
+  // Rust-compatible path-based request API
+  async requestPath<TReq = unknown, TRes = unknown>(path: string, payload: TReq): Promise<TRes> {
+    if (!this.running) throw new Error('Node not started');
+    const topicPath = TopicPath.new(path, this.networkId);
+    const segments = topicPath.getSegments();
+    const actionPath = segments.slice(1).join('/');
+    if (!actionPath) {
+      throw new Error('Invalid path - missing action segment');
+    }
+    const actionTopic = TopicPath.newService(this.networkId, topicPath.servicePath()).newActionTopic(actionPath);
+    const handlers = this.registry.findLocalActionHandlers(actionTopic);
+    if (handlers.length === 0) {
+      if (this.remoteAdapter) {
+        const inArc = AnyValue.from(payload);
+        const ser = inArc.serialize();
+        if (!ser.ok) throw ser.error;
+        const outBytes = await this.remoteAdapter.request(path.includes(':') ? path : `${this.networkId}:${path}`, ser.value);
+        const outArc = AnyValue.fromBytes<TRes>(outBytes);
+        const out = outArc.as<TRes>();
+        if (!out.ok) throw out.error;
+        return out.value;
+      }
+      throw new Error(`No handler for ${path}`);
+    }
+    const inArc = AnyValue.from(payload);
+    const ser = inArc.serialize();
+    if (!ser.ok) throw ser.error;
+    const req = { service: topicPath.servicePath(), action: topicPath.actionPath(), payload: ser.value, requestId: uuidv4() } as ActionRequest;
     const res = await handlers[0]!(req);
     if (res.ok) {
       const outArc = AnyValue.fromBytes<TRes>(res.payload);
@@ -247,6 +335,43 @@ export class Node {
       this.retainedKeyToTopic.set(key, evtTopic);
     }
     await Promise.allSettled(subs.map((s) => s.subscriber(message)));
+    // If no locals and remote is configured, forward publish
+    if (subs.length === 0 && this.remoteAdapter) {
+      const path = evtTopic.asString?.() ?? `${this.networkId}:${service}/${event}`;
+      await this.remoteAdapter.publish(path, message.payload);
+    }
+  }
+
+  // Rust-compatible path-based publish API
+  async publishPath<T = unknown>(path: string, payload: T, options?: PublishOptions): Promise<void> {
+    if (!this.running) throw new Error('Node not started');
+    const topicPath = TopicPath.new(path, this.networkId);
+    const segments = topicPath.getSegments();
+    const actionPath = segments.slice(1).join('/');
+    if (!actionPath) {
+      throw new Error('Invalid path - missing event/action segment');
+    }
+    const evtTopic = TopicPath.newService(this.networkId, topicPath.servicePath()).newEventTopic(actionPath);
+    const subs = this.registry.getSubscribers(evtTopic);
+    const inArc = AnyValue.from(payload);
+    const bytesRes = inArc.serialize();
+    if (!bytesRes.ok) throw bytesRes.error;
+    const message: EventMessage = { service: topicPath.servicePath(), event: actionPath, payload: bytesRes.value, timestampMs: Date.now() };
+    if (options?.retain) {
+      const key = `${this.networkId}:${topicPath.servicePath()}/${actionPath}`;
+      const list = this.retainedEvents.get(key) ?? [];
+      list.push({ ts: message.timestampMs, data: message.payload });
+      if (list.length > this.maxRetainedPerTopic) {
+        list.splice(0, list.length - this.maxRetainedPerTopic);
+      }
+      this.retainedEvents.set(key, list);
+      this.retainedIndex.setValue(evtTopic, key);
+      this.retainedKeyToTopic.set(key, evtTopic);
+    }
+    await Promise.allSettled(subs.map((s) => s.subscriber(message)));
+    if (subs.length === 0 && this.remoteAdapter) {
+      await this.remoteAdapter.publish(path.includes(':') ? path : `${this.networkId}:${path}`, message.payload);
+    }
   }
 
   on(service: ServiceName, eventOrPattern: string, subscriber: EventSubscriber, options?: EventRegistrationOptions): string {

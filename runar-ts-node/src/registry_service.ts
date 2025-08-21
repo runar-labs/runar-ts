@@ -1,4 +1,4 @@
-import { AbstractService, LifecycleContext } from 'runar-ts-common';
+import { AbstractService, LifecycleContext, ServiceState } from 'runar-ts-common';
 import { ServiceEntry } from './index';
 import { AnyValue } from 'runar-ts-serializer';
 import { ServiceMetadata, ActionMetadata, NodeMetadata } from 'runar-ts-schemas';
@@ -39,9 +39,40 @@ export class RegistryService implements AbstractService {
     context.addActionHandler('services/{service_path}/state', async (req) => {
       const services = this.getLocalServices();
       const match = this.findServiceByParam(req.service, req.action, services);
-      const state = match?.serviceState ?? 'Unknown';
+      const state = match?.serviceState ?? ServiceState.Unknown;
       const out = AnyValue.from({ service_path: match?.service.path() ?? '', state }).serialize();
       return { ok: true, requestId: req.requestId, payload: out.ok ? out.value : new Uint8Array() };
+    });
+
+    // services/{service_path}/pause -> transition to Paused if valid
+    context.addActionHandler('services/{service_path}/pause', async (req) => {
+      const services = this.getLocalServices();
+      const match = this.findServiceByParam(req.service, req.action, services);
+      if (match) {
+        if (match.serviceState !== ServiceState.Running) {
+          const out = AnyValue.from({ error: 'Invalid transition' }).serialize();
+          return { ok: false, requestId: req.requestId, error: 'Invalid transition' } as const;
+        }
+        match.serviceState = ServiceState.Paused;
+        const out = AnyValue.from(ServiceState.Paused).serialize();
+        return { ok: true, requestId: req.requestId, payload: out.ok ? out.value : new Uint8Array() };
+      }
+      return { ok: false, requestId: req.requestId, error: 'Service not found' } as const;
+    });
+
+    // services/{service_path}/resume -> transition to Running if valid
+    context.addActionHandler('services/{service_path}/resume', async (req) => {
+      const services = this.getLocalServices();
+      const match = this.findServiceByParam(req.service, req.action, services);
+      if (match) {
+        if (match.serviceState !== ServiceState.Paused) {
+          return { ok: false, requestId: req.requestId, error: 'Invalid transition' } as const;
+        }
+        match.serviceState = ServiceState.Running;
+        const out = AnyValue.from(ServiceState.Running).serialize();
+        return { ok: true, requestId: req.requestId, payload: out.ok ? out.value : new Uint8Array() };
+      }
+      return { ok: false, requestId: req.requestId, error: 'Service not found' } as const;
     });
   }
 

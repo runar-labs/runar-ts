@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
 import { Node } from '../src';
 import { AnyValue } from 'runar-ts-serializer';
 
@@ -17,10 +18,10 @@ describe('Retained events clearing', () => {
       if (r.ok) seen.push(r.value.n);
     }, { includePast: 10 });
     await new Promise((r) => setTimeout(r, 10));
-    expect(seen).toEqual([1, 2]);
+    assert.deepEqual(seen, [1, 2]);
 
     const removed = node.clearRetainedEventsMatching('svc/>');
-    expect(removed).toBe(2);
+    assert.equal(removed, 2);
 
     let seen2: number[] = [];
     node.on('svc', '>', (evt) => {
@@ -29,7 +30,7 @@ describe('Retained events clearing', () => {
       if (r.ok) seen2.push(r.value.n);
     }, { includePast: 10 });
     await new Promise((r) => setTimeout(r, 10));
-    expect(seen2).toEqual([]);
+    assert.deepEqual(seen2, []);
   });
 });
 
