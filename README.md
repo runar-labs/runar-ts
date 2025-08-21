@@ -12,12 +12,14 @@ A TypeScript implementation of the Runar distributed computing framework.
 ### Setup
 
 1. **Clone the repository**:
+
    ```bash
    git clone <repository-url>
    cd runar-ts
    ```
 
 2. **Install dependencies**:
+
    ```bash
    bun install
    ```
@@ -56,6 +58,7 @@ This repository contains several TypeScript packages:
 ### Code Quality
 
 The project uses:
+
 - **ESLint** for code linting with TypeScript support
 - **Prettier** for code formatting
 - **TypeScript** for type checking
@@ -70,10 +73,12 @@ The project uses:
 ## 🔄 CI/CD
 
 GitHub Actions automatically runs on:
+
 - Push to `main` and `develop` branches
 - Pull requests to `main` and `develop` branches
 
 The CI pipeline includes:
+
 - Building all packages
 - Running tests
 - Linting and formatting checks

@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+
+echo "🔧 Auto-fixing code before commit..."
+
+# Auto-fix linting issues (never fails)
+echo "🧹 Auto-fixing linting issues..."
+bun run lint:fix || echo "⚠️  Some linting issues couldn't be auto-fixed, but continuing..."
+
+# Auto-format code (never fails)
+echo "💅 Auto-formatting code..."
+bun run format || echo "⚠️  Some formatting issues couldn't be auto-fixed, but continuing..."
+
+echo "✅ Pre-commit formatting complete! (Commit will proceed regardless of any remaining issues)"

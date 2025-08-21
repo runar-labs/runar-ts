@@ -3,6 +3,7 @@
 This document captures discrepancies between the current TypeScript node implementation and the Rust API/semantics, and defines a concrete plan to reach 100% behavioral and public API parity. The TS code should remain idiomatic TypeScript, but the external/public API, dataflow, and runtime behavior must match Rust exactly.
 
 ### Scope
+
 - Node request/response APIs (service and path-based)
 - Event system (publish/subscribe, retention, include_past)
 - AnyValue usage and wire boundaries
@@ -51,7 +52,7 @@ This document captures discrepancies between the current TypeScript node impleme
 
 All changes are breaking across `runar-ts-common` and `runar-ts-node`. They are required for parity.
 
-1) runar-ts-common public types
+1. runar-ts-common public types
    - Change payload types from wire bytes to `AnyValue` for in-memory runtime primitives:
      - `ActionRequest.payload: AnyValue`
      - `ActionResponseOk.payload: AnyValue`
@@ -60,7 +61,7 @@ All changes are breaking across `runar-ts-common` and `runar-ts-node`. They are 
    - Keep `CborBytes` for wire-only context. Do not use it in action/event in-memory APIs.
    - Add an explicit comment that these are in-memory runtime types; bytes are handled at network boundary.
 
-2) runar-ts-node Node public API
+2. runar-ts-node Node public API
    - `request<TReq, TRes>(service, action, payload: TReq): Promise<TRes>`
      - Local: wrap `payload` with `AnyValue.from(payload)` and pass to handler (no serialization). Expect `ActionResponseOk.payload` to be `AnyValue` and `.as<TRes>()` to return result.
      - Remote fallback: serialize `AnyValue` to bytes to call remote adapter; decode response bytes into `AnyValue` then `.as<TRes>()`.
@@ -72,27 +73,27 @@ All changes are breaking across `runar-ts-common` and `runar-ts-node`. They are 
    - `publishPath<T>(path, payload: T, options?: { retain?: boolean }): Promise<void>`
      - Same as above with path-based routing.
 
-3) New wire entrypoints on Node
+3. New wire entrypoints on Node
    - `requestPathWire(path: string, payloadBytes: Uint8Array): Promise<Uint8Array>`
      - Construct `AnyValue.fromBytes(payloadBytes)`, call local action handler (which receives `AnyValue`), take `AnyValue` response, and serialize to bytes.
    - `publishPathWire(path: string, payloadBytes: Uint8Array): Promise<void>`
      - Construct `AnyValue.fromBytes(payloadBytes)` and publish locally to subscribers with `AnyValue` payload; apply retention as `AnyValue`.
    - These allow remote adapters to preserve AnyValue semantics across hops without lossy decode/encode to raw JS values.
 
-4) Event retention and include_past
+4. Event retention and include_past
    - Retention store should keep `{ ts, event: string, payload: AnyValue }` so we can replay the real event name and payload (not the subscription pattern).
    - `includePast` delivery must build `EventMessage` with the original `event` name and `AnyValue` payload.
    - Confirm ordering policy: TS currently sorts by timestamp ascending and delivers the last N. Keep if Rust does the same; otherwise match Rust’s specified ordering precisely.
    - Ensure multi-wildcard/topic patterns return all matching retained events with correct service/event metadata.
 
-5) RemoteAdapter remains wire-level
+5. RemoteAdapter remains wire-level
    - Keep `RemoteAdapter.request(path: string, payload: Uint8Array): Promise<Uint8Array>` and `publish(path: string, payload: Uint8Array): Promise<void>`.
    - Update `LinkedNodesRemoteAdapter` to use the new `node.requestPathWire` and `node.publishPathWire` to avoid lossy conversions.
 
-6) RegistryService
+6. RegistryService
    - Update action handlers to return `AnyValue` directly (no `serialize()`), relying on Node to convert to bytes only for remote calls.
 
-7) Tests
+7. Tests
    - Update all tests registering action handlers to accept `request.payload` as `AnyValue` and return `AnyValue` in the `ActionResponseOk`.
    - Update event tests to read `evt.payload` as `AnyValue` directly (no `fromBytes`).
    - Add tests for `requestPathWire` and `publishPathWire` to ensure preservation of AnyValue semantics across remote adapters.
@@ -151,12 +152,12 @@ Please provide links to the authoritative Rust definitions if these differ so we
 
 ### Migration strategy
 
-1) Type changes in `runar-ts-common` (introduce `AnyValue` payloads) and bump versions of dependent packages.
-2) Refactor `Node` methods to in-memory `AnyValue` flows; add wire entrypoints.
-3) Update `LinkedNodesRemoteAdapter` to call wire entrypoints.
-4) Update `RegistryService` to return `AnyValue`.
-5) Update tests and add new coverage for wire entrypoints and retained replay correctness.
-6) Verify all transports still pass bytes and interoperate with Rust wire format.
+1. Type changes in `runar-ts-common` (introduce `AnyValue` payloads) and bump versions of dependent packages.
+2. Refactor `Node` methods to in-memory `AnyValue` flows; add wire entrypoints.
+3. Update `LinkedNodesRemoteAdapter` to call wire entrypoints.
+4. Update `RegistryService` to return `AnyValue`.
+5. Update tests and add new coverage for wire entrypoints and retained replay correctness.
+6. Verify all transports still pass bytes and interoperate with Rust wire format.
 
 ---
 
@@ -167,5 +168,3 @@ Please provide links to the authoritative Rust definitions if these differ so we
 - Remote adapters continue to use bytes; wire entrypoints preserve AnyValue semantics over the network.
 - All existing tests updated; add tests for wire entrypoints and retained replay; all green.
 - Cross-language roundtrips verified with Rust using the same wire format.
-
-
