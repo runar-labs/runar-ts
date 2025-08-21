@@ -1,5 +1,4 @@
-import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
+import { describe, it, expect } from 'bun:test';
 import { Node } from '../src';
 import { LinkedNodesRemoteAdapter } from '../src/remote';
 import { AbstractService, LifecycleContext } from 'runar-ts-common';
@@ -60,7 +59,7 @@ describe('LinkedNodesRemoteAdapter', () => {
       a: 3,
       b: 4,
     });
-    assert.equal(r.p, 12);
+    expect(r.p).toBe(12);
 
     await a.stop();
     await b.stop();

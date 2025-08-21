@@ -2,11 +2,10 @@ import { describe, it, expect } from 'bun:test';
 import { AnyValue, ValueCategory } from '../../runar-ts-serializer/src/index.js';
 
 describe('Cross-Language Compatibility (TypeScript ↔ Rust)', () => {
-
   describe('Wire Format Compatibility', () => {
     it('should produce identical wire format for primitives', () => {
       // Test string
-      const stringValue = AnyValue.from("hello world");
+      const stringValue = AnyValue.from('hello world');
       const stringBytes = stringValue.serialize();
       expect(stringBytes.ok).toBe(true);
 
@@ -15,7 +14,7 @@ describe('Cross-Language Compatibility (TypeScript ↔ Rust)', () => {
         expect(stringBytes.value[0]).toBe(ValueCategory.Primitive); // category
         expect(stringBytes.value[1]).toBe(0); // not encrypted
         expect(stringBytes.value[2]).toBe(6); // type name length ("string")
-        expect(new TextDecoder().decode(stringBytes.value.subarray(3, 9))).toBe("string");
+        expect(new TextDecoder().decode(stringBytes.value.subarray(3, 9))).toBe('string');
       }
 
       // Test boolean
@@ -27,7 +26,7 @@ describe('Cross-Language Compatibility (TypeScript ↔ Rust)', () => {
         expect(boolBytes.value[0]).toBe(ValueCategory.Primitive);
         expect(boolBytes.value[1]).toBe(0);
         expect(boolBytes.value[2]).toBe(4); // "bool"
-        expect(new TextDecoder().decode(boolBytes.value.subarray(3, 7))).toBe("bool");
+        expect(new TextDecoder().decode(boolBytes.value.subarray(3, 7))).toBe('bool');
       }
 
       // Test integer
@@ -39,7 +38,7 @@ describe('Cross-Language Compatibility (TypeScript ↔ Rust)', () => {
         expect(intBytes.value[0]).toBe(ValueCategory.Primitive);
         expect(intBytes.value[1]).toBe(0);
         expect(intBytes.value[2]).toBe(3); // "i64"
-        expect(new TextDecoder().decode(intBytes.value.subarray(3, 6))).toBe("i64");
+        expect(new TextDecoder().decode(intBytes.value.subarray(3, 6))).toBe('i64');
       }
     });
 
@@ -63,12 +62,12 @@ describe('Cross-Language Compatibility (TypeScript ↔ Rust)', () => {
         expect(arrayBytes.value[0]).toBe(ValueCategory.List);
         expect(arrayBytes.value[1]).toBe(0); // not encrypted
         expect(arrayBytes.value[2]).toBe(4); // "list"
-        expect(new TextDecoder().decode(arrayBytes.value.subarray(3, 7))).toBe("list");
+        expect(new TextDecoder().decode(arrayBytes.value.subarray(3, 7))).toBe('list');
       }
     });
 
     it('should handle objects with struct category', () => {
-      const objectValue = AnyValue.from({ name: "test", value: 123 });
+      const objectValue = AnyValue.from({ name: 'test', value: 123 });
       const objectBytes = objectValue.serialize();
       expect(objectBytes.ok).toBe(true);
 
@@ -76,7 +75,7 @@ describe('Cross-Language Compatibility (TypeScript ↔ Rust)', () => {
         expect(objectBytes.value[0]).toBe(ValueCategory.Struct);
         expect(objectBytes.value[1]).toBe(0); // not encrypted
         expect(objectBytes.value[2]).toBe(6); // "struct"
-        expect(new TextDecoder().decode(objectBytes.value.subarray(3, 9))).toBe("struct");
+        expect(new TextDecoder().decode(objectBytes.value.subarray(3, 9))).toBe('struct');
       }
     });
   });
@@ -84,7 +83,7 @@ describe('Cross-Language Compatibility (TypeScript ↔ Rust)', () => {
   describe('Roundtrip Serialization', () => {
     it('should serialize and deserialize primitives correctly', () => {
       // Test string roundtrip
-      const originalString = "hello world";
+      const originalString = 'hello world';
       const stringValue = AnyValue.from(originalString);
       const stringBytes = stringValue.serialize();
 
@@ -125,14 +124,14 @@ describe('Cross-Language Compatibility (TypeScript ↔ Rust)', () => {
 
     it('should handle complex object serialization', () => {
       const originalObject = {
-        name: "John Doe",
+        name: 'John Doe',
         age: 30,
         active: true,
         scores: [85, 92, 78],
         metadata: {
-          created: "2023-01-01",
-          version: 1
-        }
+          created: '2023-01-01',
+          version: 1,
+        },
       };
 
       const objectValue = AnyValue.from(originalObject);
@@ -157,11 +156,11 @@ describe('Cross-Language Compatibility (TypeScript ↔ Rust)', () => {
   describe('Category Detection', () => {
     it('should correctly categorize different value types', () => {
       expect(AnyValue.from(null).getCategory()).toBe(ValueCategory.Null);
-      expect(AnyValue.from("string").getCategory()).toBe(ValueCategory.Primitive);
+      expect(AnyValue.from('string').getCategory()).toBe(ValueCategory.Primitive);
       expect(AnyValue.from(42).getCategory()).toBe(ValueCategory.Primitive);
       expect(AnyValue.from(true).getCategory()).toBe(ValueCategory.Primitive);
       expect(AnyValue.from([1, 2, 3]).getCategory()).toBe(ValueCategory.List);
-      expect(AnyValue.from({ key: "value" }).getCategory()).toBe(ValueCategory.Struct);
+      expect(AnyValue.from({ key: 'value' }).getCategory()).toBe(ValueCategory.Struct);
     });
   });
 
@@ -180,7 +179,7 @@ describe('Cross-Language Compatibility (TypeScript ↔ Rust)', () => {
 
   describe('Wire Format Structure', () => {
     it('should produce correct wire format structure', () => {
-      const value = AnyValue.from("test");
+      const value = AnyValue.from('test');
       const bytes = value.serialize();
 
       expect(bytes.ok).toBe(true);
@@ -198,12 +197,12 @@ describe('Cross-Language Compatibility (TypeScript ↔ Rust)', () => {
 
         expect(category).toBe(ValueCategory.Primitive);
         expect(isEncrypted).toBe(0); // Not encrypted
-        expect(typeName).toBe("string");
+        expect(typeName).toBe('string');
         // The data bytes contain CBOR-encoded data, not raw UTF-8
         // For a string primitive, we expect CBOR encoding of the string value
         expect(dataBytes.length).toBeGreaterThan(0);
         expect(category).toBe(ValueCategory.Primitive);
-        expect(typeName).toBe("string");
+        expect(typeName).toBe('string');
         expect(isEncrypted).toBe(0);
       }
     });

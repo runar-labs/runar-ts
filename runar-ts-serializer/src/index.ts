@@ -46,7 +46,12 @@ export class AnyValue<T = unknown> {
   private serializeFn: SerializeFn | null;
   private typeName: string | null;
 
-  private constructor(cat: ValueCategory, val: T | null, serFn: SerializeFn | null, tn: string | null) {
+  private constructor(
+    cat: ValueCategory,
+    val: T | null,
+    serFn: SerializeFn | null,
+    tn: string | null
+  ) {
     this.category = cat;
     this.value = val;
     this.serializeFn = serFn;
@@ -121,7 +126,7 @@ export class AnyValue<T = unknown> {
   }
 
   static newBytes(bytes: Uint8Array): AnyValue<Uint8Array> {
-    const serializeFn: SerializeFn = (value) => {
+    const serializeFn: SerializeFn = value => {
       return ok(value);
     };
 
@@ -129,7 +134,7 @@ export class AnyValue<T = unknown> {
   }
 
   static newJson(json: any): AnyValue<any> {
-    const serializeFn: SerializeFn = (value) => {
+    const serializeFn: SerializeFn = value => {
       try {
         const bytes = encode(value);
         return ok(bytes);
@@ -204,7 +209,18 @@ export class AnyValue<T = unknown> {
       default:
         return err(new Error(`Unsupported category for deserialization: ${category}`));
     }
-    return ok(new AnyValue(category, value, null, typeName));
+
+    // Create a basic serialize function for deserialized values
+    const serializeFn: SerializeFn = () => {
+      try {
+        const bytes = encode(value);
+        return ok(bytes);
+      } catch (e) {
+        return err(e as Error);
+      }
+    };
+
+    return ok(new AnyValue(category, value, serializeFn, typeName));
   }
 
   // Helper methods
@@ -246,20 +262,44 @@ export class AnyValue<T = unknown> {
   }
 
   private static isPrimitive(typeName: string): boolean {
-    const primitives = ['string', 'bool', 'i8', 'i16', 'i32', 'i64', 'i128', 'u8', 'u16', 'u32', 'u64', 'u128', 'f32', 'f64', 'char'];
+    const primitives = [
+      'string',
+      'bool',
+      'i8',
+      'i16',
+      'i32',
+      'i64',
+      'i128',
+      'u8',
+      'u16',
+      'u32',
+      'u64',
+      'u128',
+      'f32',
+      'f64',
+      'char',
+    ];
     return primitives.includes(typeName);
   }
 
   private static categoryFromByte(byte: number): ValueCategory | null {
     switch (byte) {
-      case 0: return ValueCategory.Null;
-      case 1: return ValueCategory.Primitive;
-      case 2: return ValueCategory.List;
-      case 3: return ValueCategory.Map;
-      case 4: return ValueCategory.Struct;
-      case 5: return ValueCategory.Bytes;
-      case 6: return ValueCategory.Json;
-      default: return null;
+      case 0:
+        return ValueCategory.Null;
+      case 1:
+        return ValueCategory.Primitive;
+      case 2:
+        return ValueCategory.List;
+      case 3:
+        return ValueCategory.Map;
+      case 4:
+        return ValueCategory.Struct;
+      case 5:
+        return ValueCategory.Bytes;
+      case 6:
+        return ValueCategory.Json;
+      default:
+        return null;
     }
   }
 
@@ -364,7 +404,7 @@ export class AnyValue<T = unknown> {
     }
 
     const category = AnyValue.determineCategory(value);
-    
+
     // Create appropriate factory method based on category
     switch (category) {
       case ValueCategory.Primitive:
@@ -384,7 +424,7 @@ export class AnyValue<T = unknown> {
         if (value instanceof Uint8Array) {
           return AnyValue.newBytes(value as Uint8Array) as AnyValue<T>;
         }
-        // Fall through to default
+      // Fall through to default
       case ValueCategory.Json:
       default:
         return AnyValue.newJson(value as any) as AnyValue<T>;

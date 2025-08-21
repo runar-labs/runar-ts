@@ -1,5 +1,4 @@
-import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
+import { describe, it, expect } from 'bun:test';
 import { Node } from '../src';
 import { AnyValue } from 'runar-ts-serializer';
 import { AbstractService, LifecycleContext } from 'runar-ts-common';
@@ -45,7 +44,7 @@ describe('Node path-based APIs', () => {
     n.addService(new EchoService());
     await n.start();
     const resp = await n.requestPath<{ msg: string }, { pong: string }>('echo/ping', { msg: 'hi' });
-    assert.equal(resp.pong, 'hi');
+    expect(resp.pong).toBe('hi');
     await n.stop();
   });
 
@@ -60,7 +59,7 @@ describe('Node path-based APIs', () => {
     );
     await n.start();
     const resp = await n.requestPath<{ msg: string }, { pong: string }>('echo/ping', { msg: 'hi' });
-    assert.equal(resp.pong, 'HI');
+    expect(resp.pong).toBe('HI');
     await n.stop();
   });
 });

@@ -51,11 +51,11 @@ export function initWirePrimitives(): void {
   registerWireName('f32', 'f32');
   registerWireName('f64', 'f64');
   registerWireName('char', 'char');
-  
+
   // Container types
   registerWireName('alloc::vec::Vec<T>', 'list<T>');
   registerWireName('std::collections::HashMap<K, V>', 'map<K,V>');
-  
+
   // Special types
   registerWireName('serde_json::value::Value', 'json');
   registerWireName('alloc::vec::Vec<u8>', 'bytes');
