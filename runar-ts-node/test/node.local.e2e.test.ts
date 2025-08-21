@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { Node } from '../src';
 import { AnyValue } from 'runar-ts-serializer';
-import { AbstractService, LifecycleContext } from 'runar-ts-common';
+import { AbstractService, LifecycleContext } from '../src/core';
 
 class MathService implements AbstractService {
   private _networkId?: string;

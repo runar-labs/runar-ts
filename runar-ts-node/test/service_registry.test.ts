@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { ServiceRegistry } from '../src';
-import { TopicPath } from 'runar-ts-common';
+import { TopicPath } from 'runar-ts-common/dist/index.d.ts';
 
 describe('ServiceRegistry subscriptions', () => {
   it('subscribe and unsubscribe', () => {

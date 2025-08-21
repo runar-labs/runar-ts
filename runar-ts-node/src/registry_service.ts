@@ -1,4 +1,5 @@
 import { AbstractService, LifecycleContext, ServiceState } from './core';
+import { ok, err } from 'runar-ts-common';
 import { TopicPath } from 'runar-ts-common';
 import { ServiceEntry } from './index';
 import { NodeRegistryDelegate, RegistryDelegate } from './registry_delegate';
@@ -36,65 +37,73 @@ export class RegistryService implements AbstractService {
 
   async init(context: LifecycleContext): Promise<void> {
     // services/list -> Vec<ServiceMetadata>
-    context.addActionHandler('services/list', async req => {
+    const result1 = await context.registerAction('services/list', async (payload, context) => {
       const all = await this.delegate.getAllServiceMetadata(true);
       const list = Array.from(all.values());
-      return { ok: true, requestId: req.requestId, payload: AnyValue.from(list) };
+      return ok(AnyValue.from(list));
     });
 
     // services/{service_path} -> ServiceMetadata
-    context.addActionHandler('services/{service_path}', async req => {
+    const result2 = await context.registerAction('services/{service_path}', async (payload, context) => {
       const services = this.getLocalServices();
-      // Extract parameters best-effort by scanning segments
-      const match = this.findServiceByParam(req.service, req.action, services);
+      // Extract service_path parameter from context or payload
+      // In the new API, parameters are extracted from the request context
+      const servicePath = context.servicePath;
+      const match = this.findServiceByPath(servicePath, services);
       const meta = match
         ? await this.delegate.getServiceMetadata(
             TopicPath.newService(this._networkId ?? 'default', match.service.path())
           )
         : null;
-      return { ok: true, requestId: req.requestId, payload: AnyValue.from(meta) };
+      return ok(AnyValue.from(meta));
     });
 
     // services/{service_path}/state -> minimal metadata with state
-    context.addActionHandler('services/{service_path}/state', async req => {
+    const result3 = await context.registerAction('services/{service_path}/state', async (payload, context) => {
       const services = this.getLocalServices();
-      const match = this.findServiceByParam(req.service, req.action, services);
+      const servicePath = context.servicePath;
+      const match = this.findServiceByPath(servicePath, services);
       const state = match?.serviceState ?? ServiceState.Unknown;
-      return {
-        ok: true,
-        requestId: req.requestId,
-        payload: AnyValue.from({ service_path: match?.service.path() ?? '', state }),
-      };
+      return ok(AnyValue.from({ service_path: match?.service.path() ?? '', state }));
     });
 
     // services/{service_path}/pause -> transition to Paused if valid
-    context.addActionHandler('services/{service_path}/pause', async req => {
+    const result4 = await context.registerAction('services/{service_path}/pause', async (payload, context) => {
       const services = this.getLocalServices();
-      const match = this.findServiceByParam(req.service, req.action, services);
+      const servicePath = context.servicePath;
+      const match = this.findServiceByPath(servicePath, services);
       if (match) {
         // validate via delegate
         await this.delegate.validatePauseTransition(
           TopicPath.newService(this._networkId ?? 'default', match.service.path())
         );
         match.serviceState = ServiceState.Paused;
-        return { ok: true, requestId: req.requestId, payload: AnyValue.from(ServiceState.Paused) };
+        return ok(AnyValue.from(ServiceState.Paused));
       }
-      return { ok: false, requestId: req.requestId, error: 'Service not found' } as const;
+      return err('Service not found');
     });
 
     // services/{service_path}/resume -> transition to Running if valid
-    context.addActionHandler('services/{service_path}/resume', async req => {
+    const result5 = await context.registerAction('services/{service_path}/resume', async (payload, context) => {
       const services = this.getLocalServices();
-      const match = this.findServiceByParam(req.service, req.action, services);
+      const servicePath = context.servicePath;
+      const match = this.findServiceByPath(servicePath, services);
       if (match) {
         await this.delegate.validateResumeTransition(
           TopicPath.newService(this._networkId ?? 'default', match.service.path())
         );
         match.serviceState = ServiceState.Running;
-        return { ok: true, requestId: req.requestId, payload: AnyValue.from(ServiceState.Running) };
+        return ok(AnyValue.from(ServiceState.Running));
       }
-      return { ok: false, requestId: req.requestId, error: 'Service not found' } as const;
+      return err('Service not found');
     });
+
+    // Check all registration results
+    if (!result1.ok) throw new Error(`Failed to register services/list: ${result1.error}`);
+    if (!result2.ok) throw new Error(`Failed to register services/{service_path}: ${result2.error}`);
+    if (!result3.ok) throw new Error(`Failed to register services/{service_path}/state: ${result3.error}`);
+    if (!result4.ok) throw new Error(`Failed to register services/{service_path}/pause: ${result4.error}`);
+    if (!result5.ok) throw new Error(`Failed to register services/{service_path}/resume: ${result5.error}`);
   }
 
   async start(_context: LifecycleContext): Promise<void> {}
@@ -122,6 +131,13 @@ export class RegistryService implements AbstractService {
     // The action string may look like services/{service_path} or services/{service_path}/state
     const parts = action.split('/');
     const svcPath = parts.length >= 2 ? parts[1] : '';
+    return list.find(e => e.service.path() === svcPath);
+  }
+
+  private findServiceByPath(servicePath: string, list: ServiceEntry[]): ServiceEntry | undefined {
+    // Extract service path from full path like "services/my-service" -> "my-service"
+    const parts = servicePath.split('/');
+    const svcPath = parts.length >= 2 ? parts[1] : servicePath;
     return list.find(e => e.service.path() === svcPath);
   }
 }

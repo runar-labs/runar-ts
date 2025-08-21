@@ -9,11 +9,13 @@ import {
   ServiceName,
   AbstractService,
   LifecycleContext,
+  NodeLifecycleContext,
   ServiceState,
+  RequestContext,
 } from './core';
 import { SubscriptionMetadata } from 'runar-ts-schemas';
 import type { RemoteAdapter } from './remote';
-import { isOk, unwrap, unwrapErr } from 'runar-ts-common/src/routing/Result';
+import { isOk, unwrap, unwrapErr, Result, ok, err } from 'runar-ts-common';
 export { NodeConfig } from './config';
 export type { RemoteAdapter } from './remote';
 import { RegistryService } from './registry_service';
@@ -148,6 +150,7 @@ export interface ServiceEntry {
 export class Node {
   private readonly networkId: string;
   private readonly registry = new ServiceRegistry();
+  private readonly logger: any; // Logger instance
   private running = false;
   private retainedEvents = new Map<
     string,
@@ -160,6 +163,7 @@ export class Node {
 
   constructor(networkId = 'default') {
     this.networkId = networkId;
+    this.logger = console; // Simple logger for now - can be enhanced later
   }
 
   static fromConfig(cfg: {
@@ -210,22 +214,7 @@ export class Node {
     // Start internal registry service first
     const reg = new RegistryService(this.getLocalServicesSnapshot);
     reg.setNetworkId(this.networkId);
-    const regCtx: LifecycleContext = {
-      networkId: this.networkId,
-      addActionHandler: (actionName: string, handler: ActionHandler) => {
-        const topicResult = TopicPath.newService(this.networkId, reg.path()).newActionTopic(
-          actionName
-        );
-        if (isOk(topicResult)) {
-          this.registry.addLocalActionHandler(unwrap(topicResult), handler);
-        } else {
-          throw new Error(`Failed to create action topic: ${unwrapErr(topicResult)}`);
-        }
-      },
-      publish: async (eventName: string, payload: AnyValue) => {
-        await this.publish(reg.path(), eventName, payload);
-      },
-    };
+    const regCtx = new NodeLifecycleContext(this.networkId, reg.path(), this.logger, this);
     await reg.init(regCtx);
     this.addService(reg);
 
@@ -233,43 +222,13 @@ export class Node {
       const svc = entry.service;
       if (svc === reg) continue; // already init
       svc.setNetworkId(this.networkId);
-      const ctx: LifecycleContext = {
-        networkId: this.networkId,
-        addActionHandler: (actionName: string, handler: ActionHandler) => {
-          const topicResult = TopicPath.newService(this.networkId, svc.path()).newActionTopic(
-            actionName
-          );
-          if (isOk(topicResult)) {
-            this.registry.addLocalActionHandler(unwrap(topicResult), handler);
-          } else {
-            throw new Error(`Failed to create action topic: ${unwrapErr(topicResult)}`);
-          }
-        },
-        publish: async (eventName: string, payload: AnyValue) => {
-          await this.publish(svc.path(), eventName, payload);
-        },
-      };
+      const ctx = new NodeLifecycleContext(this.networkId, svc.path(), this.logger, this);
       await svc.init(ctx);
       this.registry.updateServiceState(svc.path(), ServiceState.Initialized);
     }
     for (const entry of this.registry.getLocalServices()) {
       const svc = entry.service;
-      const ctx: LifecycleContext = {
-        networkId: this.networkId,
-        addActionHandler: (actionName: string, handler: ActionHandler) => {
-          const topicResult = TopicPath.newService(this.networkId, svc.path()).newActionTopic(
-            actionName
-          );
-          if (isOk(topicResult)) {
-            this.registry.addLocalActionHandler(unwrap(topicResult), handler);
-          } else {
-            throw new Error(`Failed to create action topic: ${unwrapErr(topicResult)}`);
-          }
-        },
-        publish: async (eventName: string, payload: AnyValue) => {
-          await this.publish(svc.path(), eventName, payload);
-        },
-      };
+      const ctx = new NodeLifecycleContext(this.networkId, svc.path(), this.logger, this);
       await svc.start(ctx);
       this.registry.updateServiceState(svc.path(), ServiceState.Running);
     }
@@ -286,18 +245,14 @@ export class Node {
     }
     for (const entry of this.registry.getLocalServices()) {
       const svc = entry.service;
-      const ctx: LifecycleContext = {
-        networkId: this.networkId,
-        addActionHandler: () => {},
-        publish: async () => {},
-      } as LifecycleContext;
+      const ctx = new NodeLifecycleContext(this.networkId, svc.path(), this.logger, this);
       await svc.stop(ctx);
       this.registry.updateServiceState(svc.path(), ServiceState.Stopped);
     }
     this.running = false;
   }
 
-  async request<TReq = unknown, TRes = unknown>(
+  async requestLegacy<TReq = unknown, TRes = unknown>(
     service: ServiceName,
     action: string,
     payload: TReq
@@ -328,18 +283,27 @@ export class Node {
     }
     // In-memory AnyValue path
     const payloadAv = payload instanceof AnyValue ? (payload as AnyValue) : AnyValue.from(payload);
-    const req: ActionRequest = { service, action, payload: payloadAv, requestId: uuidv4() };
-    const res = await handlers[0]!(req);
-    if (res.ok) {
-      const out = res.payload.as<TRes>();
+    const requestId = uuidv4();
+
+    // Create RequestContext for handler
+    const requestContext: RequestContext = {
+      networkId: this.networkId,
+      servicePath: service,
+      requestId: requestId
+    };
+
+    // Call handler with new signature
+    const res = await handlers[0]!(payloadAv, requestContext);
+    if (res.ok && res.value) {
+      const out = res.value.as<TRes>();
       if (!out.ok) throw out.error;
       return out.value;
     }
-    throw new Error(res.error);
+    throw new Error(res.error || 'Unknown error');
   }
 
   // Rust-compatible path-based request API
-  async requestPath<TReq = unknown, TRes = unknown>(path: string, payload: TReq): Promise<TRes> {
+  async requestPathLegacy<TReq = unknown, TRes = unknown>(path: string, payload: TReq): Promise<TRes> {
     if (!this.running) throw new Error('Node not started');
     const topicPath = TopicPath.new(path, this.networkId);
     const segments = topicPath.getSegments();
@@ -373,22 +337,26 @@ export class Node {
       throw new Error(`No handler for ${path}`);
     }
     const payloadAv = payload instanceof AnyValue ? (payload as AnyValue) : AnyValue.from(payload);
-    const req = {
-      service: topicPath.servicePath(),
-      action: topicPath.actionPath(),
-      payload: payloadAv,
-      requestId: uuidv4(),
-    } as ActionRequest;
-    const res = await handlers[0]!(req);
-    if (res.ok) {
-      const out = res.payload.as<TRes>();
+    const requestId = uuidv4();
+
+    // Create RequestContext for handler
+    const requestContext: RequestContext = {
+      networkId: this.networkId,
+      servicePath: topicPath.servicePath(),
+      requestId: requestId
+    };
+
+    // Call handler with new signature
+    const res = await handlers[0]!(payloadAv, requestContext);
+    if (res.ok && res.value) {
+      const out = res.value.as<TRes>();
       if (!out.ok) throw out.error;
       return out.value;
     }
-    throw new Error(res.error);
+    throw new Error(res.error || 'Unknown error');
   }
 
-  async publish<T = unknown>(
+  async publishLegacy<T = unknown>(
     service: ServiceName,
     event: string,
     payload: T,
@@ -430,7 +398,7 @@ export class Node {
   }
 
   // Rust-compatible path-based publish API
-  async publishPath<T = unknown>(
+  async publishPathLegacy<T = unknown>(
     path: string,
     payload: T,
     options?: PublishOptions
@@ -480,7 +448,7 @@ export class Node {
     }
   }
 
-  on(
+  onLegacy(
     service: ServiceName,
     eventOrPattern: string,
     subscriber: EventSubscriber,
@@ -519,11 +487,11 @@ export class Node {
     return id;
   }
 
-  unsubscribe(subscriptionId: string): boolean {
+  unsubscribeLegacy(subscriptionId: string): boolean {
     return this.registry.unsubscribe(subscriptionId);
   }
 
-  onOnce(
+  onOnceLegacy(
     service: ServiceName,
     eventOrPattern: string,
     timeoutMs = 5000
@@ -577,17 +545,257 @@ export class Node {
     return removed;
   }
 
-  // Wire entrypoints for remote adapters
-  async requestPathWire(path: string, payload: Uint8Array): Promise<Uint8Array> {
-    const av = AnyValue.fromBytes(payload);
-    const res = await this.requestPath(path, av);
-    const out = AnyValue.from(res).serialize();
-    if (!out.ok) throw out.error;
-    return out.value;
+
+
+  // Helper method to get retained events for a topic
+  private getRetainedEvents(topicPath: TopicPath): EventMessage[] {
+    const key = `${this.networkId}:${topicPath.servicePath()}/${topicPath.actionPath()}`;
+    const list = this.retainedEvents.get(key);
+    if (!list) return [];
+
+    return list.map(event => ({
+      service: topicPath.servicePath(),
+      event: event.event,
+      payload: event.payload,
+      timestampMs: event.ts,
+    }));
   }
 
-  async publishPathWire(path: string, payload: Uint8Array): Promise<void> {
-    const av = AnyValue.fromBytes(payload);
-    await this.publishPath(path, av);
+  // === Rust-compatible API methods ===
+
+  /**
+   * Rust-compatible request method - matches Rust API exactly
+   */
+  async request<P = unknown>(path: string, payload?: P): Promise<Result<AnyValue, string>> {
+    try {
+      if (!this.running) return err('Node not started');
+
+      const topicPath = TopicPath.new(path, this.networkId);
+      if (!topicPath) {
+        return err(`Invalid topic path: ${path}`);
+      }
+
+      const handlers = this.registry.findLocalActionHandlers(topicPath);
+      if (handlers.length === 0) {
+        // Remote fallback per Rust behavior
+        if (this.remoteAdapter) {
+          const inArc = payload !== undefined ? AnyValue.from(payload) : AnyValue.null();
+          const ser = inArc.serialize();
+          if (!ser.ok) return err(String(ser.error));
+          const outBytes = await this.remoteAdapter.request(path, ser.value);
+          const outArc = AnyValue.fromBytes(outBytes);
+          return ok(outArc);
+        }
+        return err(`No handler for ${path}`);
+      }
+
+      // In-memory AnyValue path
+      const payloadAv = payload !== undefined ? (payload instanceof AnyValue ? payload : AnyValue.from(payload)) : AnyValue.null();
+      const service = topicPath.servicePath();
+      const action = path.split('/').pop() || '';
+      const requestId = uuidv4();
+
+      // Create RequestContext for handler
+      const requestContext: RequestContext = {
+        networkId: this.networkId,
+        servicePath: service,
+        requestId: requestId
+      };
+
+      // Call handler with new signature
+      const res = await handlers[0]!(payloadAv, requestContext);
+      if (res.ok && res.value) {
+        return ok(res.value);
+      }
+      return err(res.error || 'Unknown error');
+    } catch (error) {
+      return err(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  // Helper method for publish with options (used by LifecycleContext)
+  async publish_with_options(topic: string, data?: AnyValue, options?: any): Promise<Result<void, string>> {
+    try {
+      if (!this.running) return err('Node not started');
+
+      const topicPath = TopicPath.new(topic, this.networkId);
+      if (!topicPath) {
+        return err(`Invalid topic path: ${topic}`);
+      }
+
+      const subs = this.registry.getSubscribers(topicPath);
+      const payload = data || AnyValue.null();
+      const service = topicPath.servicePath();
+      const event = topic.split('/').pop() || '';
+      const message: EventMessage = {
+        service,
+        event,
+        payload,
+        timestampMs: Date.now(),
+      };
+
+      // Always deliver locally first
+      await Promise.allSettled(subs.map(s => s.subscriber(message)));
+
+      // Forward to remote if configured and there are remote subscribers
+      if (this.remoteAdapter) {
+        const ser = payload.serialize();
+        if (!ser.ok) return err(String(ser.error));
+        await this.remoteAdapter.publish(topic, ser.value);
+      }
+
+      return ok(undefined);
+    } catch (error) {
+      return err(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  /**
+   * Rust-compatible publish method - matches Rust API exactly
+   */
+  async publish(topic: string, data?: AnyValue): Promise<Result<void, string>> {
+    try {
+      if (!this.running) return err('Node not started');
+
+      const topicPath = TopicPath.new(topic, this.networkId);
+      if (!topicPath) {
+        return err(`Invalid topic path: ${topic}`);
+      }
+
+      const subs = this.registry.getSubscribers(topicPath);
+      const payload = data || AnyValue.null();
+      const service = topicPath.servicePath();
+      const event = topic.split('/').pop() || '';
+      const message: EventMessage = {
+        service,
+        event,
+        payload,
+        timestampMs: Date.now(),
+      };
+
+      // Always deliver locally first
+      await Promise.allSettled(subs.map(s => s.subscriber(message)));
+
+      // Forward to remote if configured and there are remote subscribers
+      if (this.remoteAdapter) {
+        const ser = payload.serialize();
+        if (!ser.ok) return err(String(ser.error));
+        await this.remoteAdapter.publish(topic, ser.value);
+      }
+
+      return ok(undefined);
+    } catch (error) {
+      return err(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  /**
+   * Rust-compatible subscribe method - matches Rust API exactly
+   */
+  async subscribe(
+    topic: string,
+    callback: EventSubscriber,
+    options?: { includePast?: boolean }
+  ): Promise<Result<string, string>> {
+    try {
+      if (!this.running) return err('Node not started');
+
+      const topicPath = TopicPath.new(topic, this.networkId);
+      if (!topicPath) {
+        return err(`Invalid topic path: ${topic}`);
+      }
+
+      const metadata: SubscriptionMetadata = {
+        path: topic,
+      };
+
+      const subscriptionId = this.registry.subscribe(topicPath, topicPath, callback, metadata, 'Local');
+
+      // Deliver past events if requested
+      if (options?.includePast) {
+        const pastEvents = this.getRetainedEvents(topicPath);
+        for (const event of pastEvents) {
+          callback(event);
+        }
+      }
+
+      return ok(subscriptionId);
+    } catch (error) {
+      return err(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  /**
+   * Rust-compatible unsubscribe method - matches Rust API exactly
+   */
+  async unsubscribe(subscriptionId: string): Promise<Result<void, string>> {
+    try {
+      const success = this.registry.unsubscribe(subscriptionId);
+      if (!success) {
+        return err(`Subscription not found: ${subscriptionId}`);
+      }
+      return ok(undefined);
+    } catch (error) {
+      return err(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  /**
+   * Rust-compatible on method - matches Rust API exactly
+   * Waits for a single event and returns it
+   */
+  async on(topic: string, options?: { timeout?: number; includePast?: boolean }): Promise<Result<AnyValue | undefined, string>> {
+    if (!this.running) {
+      return err('Node not started');
+    }
+
+    return new Promise((resolve) => {
+      let resolved = false;
+      let timeoutId: NodeJS.Timeout | undefined;
+
+      const cleanup = (subscriptionId?: string) => {
+        if (subscriptionId) {
+          this.registry.unsubscribe(subscriptionId);
+        }
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+      };
+
+      const callback = (event: EventMessage) => {
+        if (!resolved) {
+          resolved = true;
+          resolve(ok(event.payload));
+        }
+      };
+
+      // Set up timeout
+      if (options?.timeout) {
+        timeoutId = setTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            resolve(ok(undefined)); // Timeout with no event
+          }
+        }, options.timeout);
+      }
+
+      // Subscribe (this is the only await in the Promise constructor)
+      (async () => {
+        const subscribeResult = await this.subscribe(topic, callback, { includePast: options?.includePast });
+        if (!isOk(subscribeResult)) {
+          resolve(err(unwrapErr(subscribeResult)));
+          return;
+        }
+
+        const subscriptionId = unwrap(subscribeResult);
+
+        // Clean up subscription after timeout or event
+        setImmediate(() => {
+          if (resolved) {
+            cleanup(subscriptionId as string);
+          }
+        });
+      })();
+    });
   }
 }
