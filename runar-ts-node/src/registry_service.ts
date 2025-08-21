@@ -1,14 +1,17 @@
-import { AbstractService, LifecycleContext, ServiceState } from 'runar-ts-common';
+import { AbstractService, LifecycleContext, ServiceState, TopicPath } from 'runar-ts-common';
 import { ServiceEntry } from './index';
+import { NodeRegistryDelegate, RegistryDelegate } from './registry_delegate';
 import { AnyValue } from 'runar-ts-serializer';
 import { ServiceMetadata, ActionMetadata, NodeMetadata } from 'runar-ts-schemas';
 
 export class RegistryService implements AbstractService {
   private _networkId?: string;
   private readonly getLocalServices: () => ServiceEntry[];
+  private readonly delegate: RegistryDelegate;
 
   constructor(getLocalServices: () => ServiceEntry[]) {
     this.getLocalServices = getLocalServices;
+    this.delegate = new NodeRegistryDelegate(this.getLocalServices);
   }
 
   name(): string { return 'Registry'; }
@@ -21,7 +24,8 @@ export class RegistryService implements AbstractService {
   async init(context: LifecycleContext): Promise<void> {
     // services/list -> Vec<ServiceMetadata>
     context.addActionHandler('services/list', async (req) => {
-      const list = this.getLocalServices().map((s) => this.toServiceMetadata(s));
+      const all = await this.delegate.getAllServiceMetadata(true);
+      const list = Array.from(all.values());
       const out = AnyValue.from(list).serialize();
       return { ok: true, requestId: req.requestId, payload: out.ok ? out.value : new Uint8Array() };
     });
@@ -31,7 +35,7 @@ export class RegistryService implements AbstractService {
       const services = this.getLocalServices();
       // Extract parameters best-effort by scanning segments
       const match = this.findServiceByParam(req.service, req.action, services);
-      const out = AnyValue.from(match ? this.toServiceMetadata(match) : null).serialize();
+      const out = AnyValue.from(match ? await this.delegate.getServiceMetadata(TopicPath.newService(this._networkId ?? 'default', match.service.path())) : null).serialize();
       return { ok: true, requestId: req.requestId, payload: out.ok ? out.value : new Uint8Array() };
     });
 
@@ -49,10 +53,8 @@ export class RegistryService implements AbstractService {
       const services = this.getLocalServices();
       const match = this.findServiceByParam(req.service, req.action, services);
       if (match) {
-        if (match.serviceState !== ServiceState.Running) {
-          const out = AnyValue.from({ error: 'Invalid transition' }).serialize();
-          return { ok: false, requestId: req.requestId, error: 'Invalid transition' } as const;
-        }
+        // validate via delegate
+        await this.delegate.validatePauseTransition(TopicPath.newService(this._networkId ?? 'default', match.service.path()));
         match.serviceState = ServiceState.Paused;
         const out = AnyValue.from(ServiceState.Paused).serialize();
         return { ok: true, requestId: req.requestId, payload: out.ok ? out.value : new Uint8Array() };
@@ -65,9 +67,7 @@ export class RegistryService implements AbstractService {
       const services = this.getLocalServices();
       const match = this.findServiceByParam(req.service, req.action, services);
       if (match) {
-        if (match.serviceState !== ServiceState.Paused) {
-          return { ok: false, requestId: req.requestId, error: 'Invalid transition' } as const;
-        }
+        await this.delegate.validateResumeTransition(TopicPath.newService(this._networkId ?? 'default', match.service.path()));
         match.serviceState = ServiceState.Running;
         const out = AnyValue.from(ServiceState.Running).serialize();
         return { ok: true, requestId: req.requestId, payload: out.ok ? out.value : new Uint8Array() };
