@@ -17,7 +17,7 @@ describe('RemoteAdapter integration', () => {
         const out = AnyValue.from({ y: (r.ok ? r.value.x : 0) + 1 }).serialize();
         assert.equal(out.ok, true);
         return out.ok ? out.value : new Uint8Array();
-      }),
+      })
     );
     await node.start();
     const res = await node.request<{ x: number }, { y: number }>('remote', 'inc', { x: 10 });
@@ -25,5 +25,3 @@ describe('RemoteAdapter integration', () => {
     await node.stop();
   });
 });
-
-

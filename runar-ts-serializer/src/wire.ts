@@ -64,5 +64,3 @@ export function writeHeader(h: WireHeader): Uint8Array {
   if (typeBytes.length) buf.set(typeBytes, 3);
   return buf;
 }
-
-

@@ -38,5 +38,3 @@ describe('TopicPath', () => {
     expect(params.get('user_id')).toBe('123');
   });
 });
-
-

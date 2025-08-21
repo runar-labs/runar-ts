@@ -15,10 +15,12 @@ describe('KeysService', () => {
     const delegate = new MockKeysDelegate();
     node.addService(new KeysService(delegate));
     await node.start();
-    const out = await node.request<Uint8Array, Uint8Array>('$keys', 'ensure_symmetric_key', new TextEncoder().encode('label'));
+    const out = await node.request<Uint8Array, Uint8Array>(
+      '$keys',
+      'ensure_symmetric_key',
+      new TextEncoder().encode('label')
+    );
     assert.equal(new TextDecoder().decode(out), 'pk:label');
     await node.stop();
   });
 });
-
-

@@ -14,16 +14,28 @@ export class RegistryService implements AbstractService {
     this.delegate = new NodeRegistryDelegate(this.getLocalServices);
   }
 
-  name(): string { return 'Registry'; }
-  version(): string { return '1.0.0'; }
-  path(): string { return '$registry'; }
-  description(): string { return 'Local registry service'; }
-  networkId(): string | undefined { return this._networkId; }
-  setNetworkId(networkId: string): void { this._networkId = networkId; }
+  name(): string {
+    return 'Registry';
+  }
+  version(): string {
+    return '1.0.0';
+  }
+  path(): string {
+    return '$registry';
+  }
+  description(): string {
+    return 'Local registry service';
+  }
+  networkId(): string | undefined {
+    return this._networkId;
+  }
+  setNetworkId(networkId: string): void {
+    this._networkId = networkId;
+  }
 
   async init(context: LifecycleContext): Promise<void> {
     // services/list -> Vec<ServiceMetadata>
-    context.addActionHandler('services/list', async (req) => {
+    context.addActionHandler('services/list', async req => {
       const all = await this.delegate.getAllServiceMetadata(true);
       const list = Array.from(all.values());
       const out = AnyValue.from(list).serialize();
@@ -31,16 +43,22 @@ export class RegistryService implements AbstractService {
     });
 
     // services/{service_path} -> ServiceMetadata
-    context.addActionHandler('services/{service_path}', async (req) => {
+    context.addActionHandler('services/{service_path}', async req => {
       const services = this.getLocalServices();
       // Extract parameters best-effort by scanning segments
       const match = this.findServiceByParam(req.service, req.action, services);
-      const out = AnyValue.from(match ? await this.delegate.getServiceMetadata(TopicPath.newService(this._networkId ?? 'default', match.service.path())) : null).serialize();
+      const out = AnyValue.from(
+        match
+          ? await this.delegate.getServiceMetadata(
+              TopicPath.newService(this._networkId ?? 'default', match.service.path())
+            )
+          : null
+      ).serialize();
       return { ok: true, requestId: req.requestId, payload: out.ok ? out.value : new Uint8Array() };
     });
 
     // services/{service_path}/state -> minimal metadata with state
-    context.addActionHandler('services/{service_path}/state', async (req) => {
+    context.addActionHandler('services/{service_path}/state', async req => {
       const services = this.getLocalServices();
       const match = this.findServiceByParam(req.service, req.action, services);
       const state = match?.serviceState ?? ServiceState.Unknown;
@@ -49,28 +67,40 @@ export class RegistryService implements AbstractService {
     });
 
     // services/{service_path}/pause -> transition to Paused if valid
-    context.addActionHandler('services/{service_path}/pause', async (req) => {
+    context.addActionHandler('services/{service_path}/pause', async req => {
       const services = this.getLocalServices();
       const match = this.findServiceByParam(req.service, req.action, services);
       if (match) {
         // validate via delegate
-        await this.delegate.validatePauseTransition(TopicPath.newService(this._networkId ?? 'default', match.service.path()));
+        await this.delegate.validatePauseTransition(
+          TopicPath.newService(this._networkId ?? 'default', match.service.path())
+        );
         match.serviceState = ServiceState.Paused;
         const out = AnyValue.from(ServiceState.Paused).serialize();
-        return { ok: true, requestId: req.requestId, payload: out.ok ? out.value : new Uint8Array() };
+        return {
+          ok: true,
+          requestId: req.requestId,
+          payload: out.ok ? out.value : new Uint8Array(),
+        };
       }
       return { ok: false, requestId: req.requestId, error: 'Service not found' } as const;
     });
 
     // services/{service_path}/resume -> transition to Running if valid
-    context.addActionHandler('services/{service_path}/resume', async (req) => {
+    context.addActionHandler('services/{service_path}/resume', async req => {
       const services = this.getLocalServices();
       const match = this.findServiceByParam(req.service, req.action, services);
       if (match) {
-        await this.delegate.validateResumeTransition(TopicPath.newService(this._networkId ?? 'default', match.service.path()));
+        await this.delegate.validateResumeTransition(
+          TopicPath.newService(this._networkId ?? 'default', match.service.path())
+        );
         match.serviceState = ServiceState.Running;
         const out = AnyValue.from(ServiceState.Running).serialize();
-        return { ok: true, requestId: req.requestId, payload: out.ok ? out.value : new Uint8Array() };
+        return {
+          ok: true,
+          requestId: req.requestId,
+          payload: out.ok ? out.value : new Uint8Array(),
+        };
       }
       return { ok: false, requestId: req.requestId, error: 'Service not found' } as const;
     });
@@ -93,13 +123,15 @@ export class RegistryService implements AbstractService {
     };
   }
 
-  private findServiceByParam(service: string, action: string, list: ServiceEntry[]): ServiceEntry | undefined {
+  private findServiceByParam(
+    service: string,
+    action: string,
+    list: ServiceEntry[]
+  ): ServiceEntry | undefined {
     // The action string may look like services/{service_path} or services/{service_path}/state
     const parts = action.split('/');
-    const idx = parts.findIndex((p) => p !== 'services');
+    const idx = parts.findIndex(p => p !== 'services');
     const svcPath = parts.length >= 2 ? parts[1] : '';
-    return list.find((e) => e.service.path() === svcPath);
+    return list.find(e => e.service.path() === svcPath);
   }
 }
-
-

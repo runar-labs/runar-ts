@@ -16,11 +16,15 @@ export class PathTrie<T extends unknown> {
   private networks: Map<string, TrieNode<T>> = new Map();
   private totalCount = 0;
 
-  static default<T>(): PathTrie<T> { return new PathTrie<T>(); }
+  static default<T>(): PathTrie<T> {
+    return new PathTrie<T>();
+  }
 
   setValues(topic: TopicPath, contentList: T[]): void {
     const net = topic.networkId();
-    const root = this.networks.get(net) ?? (this.networks.set(net, new TrieNode<T>()), this.networks.get(net)!);
+    const root =
+      this.networks.get(net) ??
+      (this.networks.set(net, new TrieNode<T>()), this.networks.get(net)!);
     const segments = topic.getSegments();
     const added = this.setValuesInternal(root, segments, 0, contentList);
     this.totalCount += added;
@@ -94,7 +98,12 @@ export class PathTrie<T extends unknown> {
     return results;
   }
 
-  private setValuesInternal(node: TrieNode<T>, segments: string[], index: number, handlers: T[]): number {
+  private setValuesInternal(
+    node: TrieNode<T>,
+    segments: string[],
+    index: number,
+    handlers: T[]
+  ): number {
     if (index >= segments.length) {
       const prev = node.content.length;
       node.content = [...handlers];
@@ -123,7 +132,9 @@ export class PathTrie<T extends unknown> {
       node.count += node.templateChild.count - before;
       return added;
     }
-    const child = node.children.get(seg) ?? (node.children.set(seg, new TrieNode<T>()), node.children.get(seg)!);
+    const child =
+      node.children.get(seg) ??
+      (node.children.set(seg, new TrieNode<T>()), node.children.get(seg)!);
     const before = child.count;
     const added = this.setValuesInternal(child, segments, index + 1, handlers);
     node.count += child.count - before;
@@ -160,7 +171,13 @@ export class PathTrie<T extends unknown> {
     return removed;
   }
 
-  private findMatchesInternal(node: TrieNode<T>, segments: string[], index: number, results: Array<PathTrieMatch<T>>, params: Map<string, string>): void {
+  private findMatchesInternal(
+    node: TrieNode<T>,
+    segments: string[],
+    index: number,
+    results: Array<PathTrieMatch<T>>,
+    params: Map<string, string>
+  ): void {
     if (index >= segments.length) {
       for (const c of node.content) results.push({ content: c, params: new Map(params) });
       // Multi wildcard at this level also applies
@@ -178,12 +195,18 @@ export class PathTrie<T extends unknown> {
       params.delete(node.templateParamName);
     }
     // Wildcard child matches exactly one segment
-    if (node.wildcardChild) this.findMatchesInternal(node.wildcardChild, segments, index + 1, results, params);
+    if (node.wildcardChild)
+      this.findMatchesInternal(node.wildcardChild, segments, index + 1, results, params);
     // Multi wildcard at this level matches any tail
     for (const c of node.multiWildcard) results.push({ content: c, params: new Map(params) });
   }
 
-  private collectWildcardMatches(node: TrieNode<T>, patternSegments: string[], index: number, results: Array<PathTrieMatch<T>>): void {
+  private collectWildcardMatches(
+    node: TrieNode<T>,
+    patternSegments: string[],
+    index: number,
+    results: Array<PathTrieMatch<T>>
+  ): void {
     if (index >= patternSegments.length) {
       // Collect everything from this node down
       this.collectAllHandlers(node, results);
@@ -199,9 +222,12 @@ export class PathTrie<T extends unknown> {
       return;
     }
     if (seg.startsWith('{') && seg.endsWith('}')) {
-      if (node.templateChild) this.collectWildcardMatches(node.templateChild, patternSegments, index + 1, results);
-      if (node.wildcardChild) this.collectWildcardMatches(node.wildcardChild, patternSegments, index + 1, results);
-      for (const [, child] of node.children) this.collectWildcardMatches(child, patternSegments, index + 1, results);
+      if (node.templateChild)
+        this.collectWildcardMatches(node.templateChild, patternSegments, index + 1, results);
+      if (node.wildcardChild)
+        this.collectWildcardMatches(node.wildcardChild, patternSegments, index + 1, results);
+      for (const [, child] of node.children)
+        this.collectWildcardMatches(child, patternSegments, index + 1, results);
       return;
     }
     const child = node.children.get(seg);
@@ -216,5 +242,3 @@ export class PathTrie<T extends unknown> {
     for (const [, child] of node.children) this.collectAllHandlers(child, results);
   }
 }
-
-

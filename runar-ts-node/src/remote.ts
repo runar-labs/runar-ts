@@ -25,7 +25,7 @@ export class NapiRemoteAdapter implements RemoteAdapter {
   private discoveryOptsCbor?: Uint8Array;
 
   constructor(keys: any, opts?: NapiRemoteAdapterOptions) {
-    const api = (require('runar-nodejs-api') as typeof runar) as any;
+    const api = require('runar-nodejs-api') as typeof runar as any;
     this.keys = keys;
     const optionsCbor = encode(opts?.transportOptions ?? {});
     this.transport = new api.Transport(keys, Buffer.from(optionsCbor));
@@ -65,7 +65,7 @@ export class NapiRemoteAdapter implements RemoteAdapter {
       correlationId,
       Buffer.from(payload),
       this.destPeerId,
-      Buffer.from(this.profilePk),
+      Buffer.from(this.profilePk)
     );
     return new Uint8Array(res);
   }
@@ -84,7 +84,7 @@ export class LoopbackRemoteAdapter implements RemoteAdapter {
 
   constructor(
     onRequest: (path: string, payload: Uint8Array) => Promise<Uint8Array> | Uint8Array,
-    onPublish?: (path: string, payload: Uint8Array) => void | Promise<void>,
+    onPublish?: (path: string, payload: Uint8Array) => void | Promise<void>
   ) {
     this.onRequest = onRequest;
     this.onPublish = onPublish;
@@ -100,12 +100,20 @@ export class LoopbackRemoteAdapter implements RemoteAdapter {
   }
 }
 
-export function makeNapiRemoteAdapter(keys: any, opts?: NapiRemoteAdapterOptions): NapiRemoteAdapter {
+export function makeNapiRemoteAdapter(
+  keys: any,
+  opts?: NapiRemoteAdapterOptions
+): NapiRemoteAdapter {
   return new NapiRemoteAdapter(keys, opts);
 }
 
 export class LinkedNodesRemoteAdapter implements RemoteAdapter {
-  constructor(private readonly destNode: { requestPath: (path: string, payload: any) => Promise<any>; publishPath: (path: string, payload: any) => Promise<void> }) {}
+  constructor(
+    private readonly destNode: {
+      requestPath: (path: string, payload: any) => Promise<any>;
+      publishPath: (path: string, payload: any) => Promise<void>;
+    }
+  ) {}
 
   async request(path: string, payload: Uint8Array): Promise<Uint8Array> {
     const req = AnyValue.fromBytes<any>(payload).as<any>();
@@ -119,5 +127,3 @@ export class LinkedNodesRemoteAdapter implements RemoteAdapter {
     await this.destNode.publishPath(path, req.ok ? req.value : undefined);
   }
 }
-
-

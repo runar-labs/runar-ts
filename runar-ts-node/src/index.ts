@@ -48,7 +48,7 @@ export class ServiceRegistry {
   }
 
   findLocalActionHandlers(topic: TopicPath): ActionHandler[] {
-    return this.actionHandlers.findMatches(topic).map((m) => m.content);
+    return this.actionHandlers.findMatches(topic).map(m => m.content);
   }
 
   subscribe(
@@ -56,7 +56,7 @@ export class ServiceRegistry {
     serviceTopic: TopicPath,
     subscriber: EventSubscriber,
     metadata: SubscriptionMetadata,
-    kind: SubscriberKind = 'Local',
+    kind: SubscriberKind = 'Local'
   ): string {
     const id = uuidv4();
     const existingMatches = this.eventSubscriptions.findMatches(topic);
@@ -73,7 +73,7 @@ export class ServiceRegistry {
     if (!topic) return false;
     const existingMatches = this.eventSubscriptions.findMatches(topic);
     const existing = existingMatches.length > 0 ? existingMatches[0]!.content : [];
-    const filtered = existing.filter((e) => e.id !== subscriptionId);
+    const filtered = existing.filter(e => e.id !== subscriptionId);
     this.eventSubscriptions.setValue(topic, filtered);
     this.subscriptionIdToTopic.delete(subscriptionId);
     this.subscriptionIdToServiceTopic.delete(subscriptionId);
@@ -82,11 +82,15 @@ export class ServiceRegistry {
 
   getSubscribers(topic: TopicPath): FullSubscriptionEntry[] {
     const exact = this.eventSubscriptions.getExactValues(topic);
-    return exact.flatMap((list) => list);
+    return exact.flatMap(list => list);
   }
 
   addLocalService(entry: ServiceEntry): void {
-    this.localServices.set(entry.serviceTopic.asString?.() ?? `${entry.serviceTopic.networkId()}:${entry.serviceTopic.servicePath()}`, entry);
+    this.localServices.set(
+      entry.serviceTopic.asString?.() ??
+        `${entry.serviceTopic.networkId()}:${entry.serviceTopic.servicePath()}`,
+      entry
+    );
     this.localServiceStates.set(entry.service.path(), entry.serviceState);
   }
 
@@ -155,13 +159,20 @@ export class Node {
     this.networkId = networkId;
   }
 
-  static fromConfig(cfg: { defaultNetworkId: string; transportOptions?: unknown; discoveryOptions?: unknown; keys?: any }): Node {
+  static fromConfig(cfg: {
+    defaultNetworkId: string;
+    transportOptions?: unknown;
+    discoveryOptions?: unknown;
+    keys?: any;
+  }): Node {
     const n = new Node(cfg.defaultNetworkId);
     if (cfg.keys) {
-      n.setRemoteAdapter(new NapiRemoteAdapterValue(cfg.keys, {
-        transportOptions: cfg.transportOptions,
-        discoveryOptions: cfg.discoveryOptions,
-      }));
+      n.setRemoteAdapter(
+        new NapiRemoteAdapterValue(cfg.keys, {
+          transportOptions: cfg.transportOptions,
+          discoveryOptions: cfg.discoveryOptions,
+        })
+      );
     }
     return n;
   }
@@ -266,7 +277,11 @@ export class Node {
     this.running = false;
   }
 
-  async request<TReq = unknown, TRes = unknown>(service: ServiceName, action: string, payload: TReq): Promise<TRes> {
+  async request<TReq = unknown, TRes = unknown>(
+    service: ServiceName,
+    action: string,
+    payload: TReq
+  ): Promise<TRes> {
     if (!this.running) throw new Error('Node not started');
     const actionTopic = TopicPath.newService(this.networkId, service).newActionTopic(action);
     const handlers = this.registry.findLocalActionHandlers(actionTopic);
@@ -283,7 +298,9 @@ export class Node {
         if (!out.ok) throw out.error;
         return out.value;
       }
-      throw new Error(`No handler for ${actionTopic.asString?.() ?? `${this.networkId}:${service}/${action}`}`);
+      throw new Error(
+        `No handler for ${actionTopic.asString?.() ?? `${this.networkId}:${service}/${action}`}`
+      );
     }
     // Use ArcValue in-memory for local call; serialize only to satisfy ActionRequest shape
     const inArc = AnyValue.from(payload);
@@ -309,14 +326,20 @@ export class Node {
     if (!actionPath) {
       throw new Error('Invalid path - missing action segment');
     }
-    const actionTopic = TopicPath.newService(this.networkId, topicPath.servicePath()).newActionTopic(actionPath);
+    const actionTopic = TopicPath.newService(
+      this.networkId,
+      topicPath.servicePath()
+    ).newActionTopic(actionPath);
     const handlers = this.registry.findLocalActionHandlers(actionTopic);
     if (handlers.length === 0) {
       if (this.remoteAdapter) {
         const inArc = AnyValue.from(payload);
         const ser = inArc.serialize();
         if (!ser.ok) throw ser.error;
-        const outBytes = await this.remoteAdapter.request(path.includes(':') ? path : `${this.networkId}:${path}`, ser.value);
+        const outBytes = await this.remoteAdapter.request(
+          path.includes(':') ? path : `${this.networkId}:${path}`,
+          ser.value
+        );
         const outArc = AnyValue.fromBytes<TRes>(outBytes);
         const out = outArc.as<TRes>();
         if (!out.ok) throw out.error;
@@ -327,7 +350,12 @@ export class Node {
     const inArc = AnyValue.from(payload);
     const ser = inArc.serialize();
     if (!ser.ok) throw ser.error;
-    const req = { service: topicPath.servicePath(), action: topicPath.actionPath(), payload: ser.value, requestId: uuidv4() } as ActionRequest;
+    const req = {
+      service: topicPath.servicePath(),
+      action: topicPath.actionPath(),
+      payload: ser.value,
+      requestId: uuidv4(),
+    } as ActionRequest;
     const res = await handlers[0]!(req);
     if (res.ok) {
       const outArc = AnyValue.fromBytes<TRes>(res.payload);
@@ -338,14 +366,24 @@ export class Node {
     throw new Error(res.error);
   }
 
-  async publish<T = unknown>(service: ServiceName, event: string, payload: T, options?: PublishOptions): Promise<void> {
+  async publish<T = unknown>(
+    service: ServiceName,
+    event: string,
+    payload: T,
+    options?: PublishOptions
+  ): Promise<void> {
     if (!this.running) throw new Error('Node not started');
     const evtTopic = TopicPath.newService(this.networkId, service).newEventTopic(event);
     const subs = this.registry.getSubscribers(evtTopic);
     const inArc = AnyValue.from(payload);
     const bytesRes = inArc.serialize();
     if (!bytesRes.ok) throw bytesRes.error;
-    const message: EventMessage = { service, event, payload: bytesRes.value, timestampMs: Date.now() };
+    const message: EventMessage = {
+      service,
+      event,
+      payload: bytesRes.value,
+      timestampMs: Date.now(),
+    };
     if (options?.retain) {
       const key = `${this.networkId}:${service}/${event}`;
       const list = this.retainedEvents.get(key) ?? [];
@@ -357,7 +395,7 @@ export class Node {
       this.retainedIndex.setValue(evtTopic, key);
       this.retainedKeyToTopic.set(key, evtTopic);
     }
-    await Promise.allSettled(subs.map((s) => s.subscriber(message)));
+    await Promise.allSettled(subs.map(s => s.subscriber(message)));
     // If no locals and remote is configured, forward publish
     if (subs.length === 0 && this.remoteAdapter) {
       const path = evtTopic.asString?.() ?? `${this.networkId}:${service}/${event}`;
@@ -366,7 +404,11 @@ export class Node {
   }
 
   // Rust-compatible path-based publish API
-  async publishPath<T = unknown>(path: string, payload: T, options?: PublishOptions): Promise<void> {
+  async publishPath<T = unknown>(
+    path: string,
+    payload: T,
+    options?: PublishOptions
+  ): Promise<void> {
     if (!this.running) throw new Error('Node not started');
     const topicPath = TopicPath.new(path, this.networkId);
     const segments = topicPath.getSegments();
@@ -374,12 +416,19 @@ export class Node {
     if (!actionPath) {
       throw new Error('Invalid path - missing event/action segment');
     }
-    const evtTopic = TopicPath.newService(this.networkId, topicPath.servicePath()).newEventTopic(actionPath);
+    const evtTopic = TopicPath.newService(this.networkId, topicPath.servicePath()).newEventTopic(
+      actionPath
+    );
     const subs = this.registry.getSubscribers(evtTopic);
     const inArc = AnyValue.from(payload);
     const bytesRes = inArc.serialize();
     if (!bytesRes.ok) throw bytesRes.error;
-    const message: EventMessage = { service: topicPath.servicePath(), event: actionPath, payload: bytesRes.value, timestampMs: Date.now() };
+    const message: EventMessage = {
+      service: topicPath.servicePath(),
+      event: actionPath,
+      payload: bytesRes.value,
+      timestampMs: Date.now(),
+    };
     if (options?.retain) {
       const key = `${this.networkId}:${topicPath.servicePath()}/${actionPath}`;
       const list = this.retainedEvents.get(key) ?? [];
@@ -391,19 +440,29 @@ export class Node {
       this.retainedIndex.setValue(evtTopic, key);
       this.retainedKeyToTopic.set(key, evtTopic);
     }
-    await Promise.allSettled(subs.map((s) => s.subscriber(message)));
+    await Promise.allSettled(subs.map(s => s.subscriber(message)));
     if (subs.length === 0 && this.remoteAdapter) {
-      await this.remoteAdapter.publish(path.includes(':') ? path : `${this.networkId}:${path}`, message.payload);
+      await this.remoteAdapter.publish(
+        path.includes(':') ? path : `${this.networkId}:${path}`,
+        message.payload
+      );
     }
   }
 
-  on(service: ServiceName, eventOrPattern: string, subscriber: EventSubscriber, options?: EventRegistrationOptions): string {
+  on(
+    service: ServiceName,
+    eventOrPattern: string,
+    subscriber: EventSubscriber,
+    options?: EventRegistrationOptions
+  ): string {
     const topic = TopicPath.newService(this.networkId, service).newEventTopic(eventOrPattern);
     const serviceTopic = TopicPath.newService(this.networkId, service);
-    const metadata: SubscriptionMetadata = { path: topic.asString?.() ?? `${this.networkId}:${service}/${eventOrPattern}` };
+    const metadata: SubscriptionMetadata = {
+      path: topic.asString?.() ?? `${this.networkId}:${service}/${eventOrPattern}`,
+    };
     const id = this.registry.subscribe(topic, serviceTopic, subscriber, metadata, 'Local');
     if (options?.includePast && options.includePast > 0) {
-      const matched = this.retainedIndex.findWildcardMatches(topic).map((m) => m.content);
+      const matched = this.retainedIndex.findWildcardMatches(topic).map(m => m.content);
       const history: Array<{ ts: number; data: Uint8Array | null }> = [];
       for (const key of matched) {
         const list = this.retainedEvents.get(key) ?? [];
@@ -412,7 +471,14 @@ export class Node {
       history.sort((a, b) => a.ts - b.ts);
       const deliver = history.slice(-options.includePast);
       void Promise.allSettled(
-        deliver.map((e) => subscriber({ service, event: eventOrPattern, payload: e.data ?? new Uint8Array(), timestampMs: e.ts })),
+        deliver.map(e =>
+          subscriber({
+            service,
+            event: eventOrPattern,
+            payload: e.data ?? new Uint8Array(),
+            timestampMs: e.ts,
+          })
+        )
       );
     }
     return id;
@@ -422,18 +488,30 @@ export class Node {
     return this.registry.unsubscribe(subscriptionId);
   }
 
-  onOnce(service: ServiceName, eventOrPattern: string, timeoutMs = 5000): Promise<EventMessage | undefined> {
+  onOnce(
+    service: ServiceName,
+    eventOrPattern: string,
+    timeoutMs = 5000
+  ): Promise<EventMessage | undefined> {
     const topic = TopicPath.newService(this.networkId, service).newEventTopic(eventOrPattern);
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
       let resolved = false;
       const serviceTopic = TopicPath.newService(this.networkId, service);
-      const metadata: SubscriptionMetadata = { path: topic.asString?.() ?? `${this.networkId}:${service}/${eventOrPattern}` };
-      const id = this.registry.subscribe(topic, serviceTopic, async (evt) => {
-        if (resolved) return;
-        resolved = true;
-        this.registry.unsubscribe(id);
-        resolve(evt);
-      }, metadata, 'Local');
+      const metadata: SubscriptionMetadata = {
+        path: topic.asString?.() ?? `${this.networkId}:${service}/${eventOrPattern}`,
+      };
+      const id = this.registry.subscribe(
+        topic,
+        serviceTopic,
+        async evt => {
+          if (resolved) return;
+          resolved = true;
+          this.registry.unsubscribe(id);
+          resolve(evt);
+        },
+        metadata,
+        'Local'
+      );
       setTimeout(() => {
         if (resolved) return;
         resolved = true;
@@ -446,7 +524,7 @@ export class Node {
   clearRetainedEventsMatching(pattern: string): number {
     const fullPattern = pattern.includes(':') ? pattern : `${this.networkId}:${pattern}`;
     const topicPattern = TopicPath.new(fullPattern, this.networkId);
-    const matchedKeys = this.retainedIndex.findWildcardMatches(topicPattern).map((m) => m.content);
+    const matchedKeys = this.retainedIndex.findWildcardMatches(topicPattern).map(m => m.content);
     let removed = 0;
     for (const key of matchedKeys) {
       const topic = this.retainedKeyToTopic.get(key);
@@ -460,5 +538,3 @@ export class Node {
     return removed;
   }
 }
-
-

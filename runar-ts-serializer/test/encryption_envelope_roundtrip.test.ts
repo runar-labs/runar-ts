@@ -25,7 +25,7 @@ test('encrypts and decrypts a small payload via NAPI Keys', async () => {
   wire.set(new Uint8Array(eed), header.length);
 
   const av = AnyValue.fromBytes<typeof obj>(wire, {
-    decryptEnvelope: (eedBytes) => {
+    decryptEnvelope: eedBytes => {
       try {
         const out = keys.decryptLocalData(Buffer.from(eedBytes));
         return { ok: true, value: new Uint8Array(out) } as const;
@@ -41,5 +41,3 @@ test('encrypts and decrypts a small payload via NAPI Keys', async () => {
     assert.equal(r.value.b, 'x');
   }
 });
-
-

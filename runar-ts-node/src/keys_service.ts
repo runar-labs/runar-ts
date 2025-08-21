@@ -6,15 +6,27 @@ export class KeysService implements AbstractService {
   private _networkId?: string;
   constructor(private readonly delegate: KeysDelegate) {}
 
-  name(): string { return 'runar keys'; }
-  version(): string { return '1.0.0'; }
-  path(): string { return '$keys'; }
-  description(): string { return 'Keys service for key management'; }
-  networkId(): string | undefined { return this._networkId; }
-  setNetworkId(networkId: string): void { this._networkId = networkId; }
+  name(): string {
+    return 'runar keys';
+  }
+  version(): string {
+    return '1.0.0';
+  }
+  path(): string {
+    return '$keys';
+  }
+  description(): string {
+    return 'Keys service for key management';
+  }
+  networkId(): string | undefined {
+    return this._networkId;
+  }
+  setNetworkId(networkId: string): void {
+    this._networkId = networkId;
+  }
 
   async init(context: LifecycleContext): Promise<void> {
-    context.addActionHandler('ensure_symmetric_key', async (req) => {
+    context.addActionHandler('ensure_symmetric_key', async req => {
       const av = AnyValue.fromBytes(req.payload);
       const r = av.as<any>();
       let label = '';
@@ -35,5 +47,3 @@ export class KeysService implements AbstractService {
   async start(_context: LifecycleContext): Promise<void> {}
   async stop(_context: LifecycleContext): Promise<void> {}
 }
-
-

@@ -9,5 +9,3 @@ export function ok<V>(value: V): Ok<V> {
 export function err<E = Error>(error: E): Err<E> {
   return { ok: false, error };
 }
-
-

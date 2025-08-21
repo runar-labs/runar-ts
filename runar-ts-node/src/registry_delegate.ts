@@ -9,7 +9,11 @@ export interface RegistryDelegate {
   getRemoteServiceState(serviceTopic: TopicPath): Promise<ServiceState | undefined>;
   validatePauseTransition(serviceTopic: TopicPath): Promise<void>;
   validateResumeTransition(serviceTopic: TopicPath): Promise<void>;
-  updateLocalServiceStateIfValid(serviceTopic: TopicPath, newState: ServiceState, currentState: ServiceState): Promise<void>;
+  updateLocalServiceStateIfValid(
+    serviceTopic: TopicPath,
+    newState: ServiceState,
+    currentState: ServiceState
+  ): Promise<void>;
 }
 
 export class NodeRegistryDelegate implements RegistryDelegate {
@@ -28,12 +32,16 @@ export class NodeRegistryDelegate implements RegistryDelegate {
   }
 
   async getServiceMetadata(serviceTopic: TopicPath): Promise<ServiceMetadata | undefined> {
-    const svc = this.getLocalServicesSnapshot().find((e) => e.service.path() === serviceTopic.servicePath());
+    const svc = this.getLocalServicesSnapshot().find(
+      e => e.service.path() === serviceTopic.servicePath()
+    );
     return svc ? this.toServiceMetadata(svc) : undefined;
   }
 
   async getLocalServiceState(serviceTopic: TopicPath): Promise<ServiceState | undefined> {
-    const svc = this.getLocalServicesSnapshot().find((e) => e.service.path() === serviceTopic.servicePath());
+    const svc = this.getLocalServicesSnapshot().find(
+      e => e.service.path() === serviceTopic.servicePath()
+    );
     return svc?.serviceState;
   }
 
@@ -52,8 +60,14 @@ export class NodeRegistryDelegate implements RegistryDelegate {
     if (curr !== ServiceState.Paused) throw new Error('Service must be Paused to resume');
   }
 
-  async updateLocalServiceStateIfValid(serviceTopic: TopicPath, newState: ServiceState, currentState: ServiceState): Promise<void> {
-    const svc = this.getLocalServicesSnapshot().find((e) => e.service.path() === serviceTopic.servicePath());
+  async updateLocalServiceStateIfValid(
+    serviceTopic: TopicPath,
+    newState: ServiceState,
+    currentState: ServiceState
+  ): Promise<void> {
+    const svc = this.getLocalServicesSnapshot().find(
+      e => e.service.path() === serviceTopic.servicePath()
+    );
     if (!svc) throw new Error('Service not found');
     if (svc.serviceState !== currentState) throw new Error('State changed concurrently');
     svc.serviceState = newState;
@@ -72,5 +86,3 @@ export class NodeRegistryDelegate implements RegistryDelegate {
     } as unknown as ServiceMetadata;
   }
 }
-
-

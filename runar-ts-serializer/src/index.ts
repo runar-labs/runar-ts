@@ -1,5 +1,12 @@
 import { encode, decode } from 'cbor-x';
-import { EncryptedClass, EncryptedField, PlainField, getEncryptedClassOptions, getFieldMetadata, getTypeName as getDecoratedTypeName } from 'runar-ts-decorators';
+import {
+  EncryptedClass,
+  EncryptedField,
+  PlainField,
+  getEncryptedClassOptions,
+  getFieldMetadata,
+  getTypeName as getDecoratedTypeName,
+} from 'runar-ts-decorators';
 import type { Keys } from 'runar-nodejs-api';
 import { Result, ok, err } from './result';
 import { ValueCategory, DeserializationContext, readHeader, writeHeader, bodyOffset } from './wire';
@@ -161,7 +168,7 @@ export function serializeEntity(entity: any): Uint8Array {
   const encryptedPayload: Record<string, unknown> = {};
 
   for (const key of Object.keys(entity)) {
-    const fieldMeta = fields.find((f) => String(f.key) === key);
+    const fieldMeta = fields.find(f => String(f.key) === key);
     if (!fieldMeta) {
       encryptedPayload[key] = entity[key];
       continue;
@@ -211,13 +218,19 @@ export function makeEncryptedWireFromKeys(
   opts?: { networkId?: string | null; profilePublicKeys?: Uint8Array[]; typeName?: string }
 ): Uint8Array {
   const networkId = opts?.networkId ?? null;
-  const profilePks = (opts?.profilePublicKeys ?? []).map((pk) => Buffer.from(pk));
-  const eed = (keys as any).encryptWithEnvelope(Buffer.from(payload), networkId, profilePks) as Buffer;
-  const header = writeHeader({ category: ValueCategory.Encrypted, isEncrypted: true, typeName: opts?.typeName });
+  const profilePks = (opts?.profilePublicKeys ?? []).map(pk => Buffer.from(pk));
+  const eed = (keys as any).encryptWithEnvelope(
+    Buffer.from(payload),
+    networkId,
+    profilePks
+  ) as Buffer;
+  const header = writeHeader({
+    category: ValueCategory.Encrypted,
+    isEncrypted: true,
+    typeName: opts?.typeName,
+  });
   const out = new Uint8Array(header.length + eed.length);
   out.set(header, 0);
   out.set(new Uint8Array(eed), header.length);
   return out;
 }
-
-

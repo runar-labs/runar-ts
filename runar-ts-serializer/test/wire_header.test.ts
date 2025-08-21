@@ -25,5 +25,3 @@ describe('wire header', () => {
     assert.equal(r.ok, false);
   });
 });
-
-

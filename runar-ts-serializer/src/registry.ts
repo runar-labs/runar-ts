@@ -31,15 +31,15 @@ export function resolvePrimitive(name: string): ((v: any) => any) | undefined {
 }
 
 export function initWirePrimitives(): void {
-  registerPrimitive('string', (v) => String(v));
-  registerPrimitive('bool', (v) => Boolean(v));
-  registerPrimitive('bytes', (v) => (v instanceof Uint8Array ? v : new Uint8Array()));
-  registerPrimitive('f64', (v) => Number(v));
+  registerPrimitive('string', v => String(v));
+  registerPrimitive('bool', v => Boolean(v));
+  registerPrimitive('bytes', v => (v instanceof Uint8Array ? v : new Uint8Array()));
+  registerPrimitive('f64', v => Number(v));
   // Integers default to JS number; future: bigint mapping as needed (i64/u64 etc.)
-  ['i8','i16','i32','i64','u8','u16','u32','u64'].forEach((n) => registerPrimitive(n, (v) => Number(v)));
-  registerPrimitive('list', (v) => (Array.isArray(v) ? v : []));
-  registerPrimitive('map', (v) => (v && typeof v === 'object' ? v : {}));
-  registerPrimitive('json', (v) => v);
+  ['i8', 'i16', 'i32', 'i64', 'u8', 'u16', 'u32', 'u64'].forEach(n =>
+    registerPrimitive(n, v => Number(v))
+  );
+  registerPrimitive('list', v => (Array.isArray(v) ? v : []));
+  registerPrimitive('map', v => (v && typeof v === 'object' ? v : {}));
+  registerPrimitive('json', v => v);
 }
-
-

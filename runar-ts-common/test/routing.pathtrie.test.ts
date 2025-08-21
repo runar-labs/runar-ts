@@ -8,7 +8,7 @@ describe('PathTrie', () => {
     const topic = TopicPath.new('net:service/action', 'default');
     trie.setValue(topic, 'handler1');
     const matches = trie.findMatches(TopicPath.new('net:service/action', 'default'));
-    expect(matches.map((m) => m.content)).toEqual(['handler1']);
+    expect(matches.map(m => m.content)).toEqual(['handler1']);
   });
 
   it('handles single wildcard', () => {
@@ -32,5 +32,3 @@ describe('PathTrie', () => {
     expect(matches[0]?.content).toBe('h');
   });
 });
-
-

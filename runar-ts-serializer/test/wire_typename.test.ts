@@ -6,7 +6,10 @@ import { AnyValue, readHeader, ValueCategory } from '../src';
 
 @EncryptedClass({ network: 'default', typeName: 'profile.User' })
 class User {
-  constructor(public id: number, public name: string) {}
+  constructor(
+    public id: number,
+    public name: string
+  ) {}
 }
 
 describe('Wire type names', () => {
@@ -23,5 +26,3 @@ describe('Wire type names', () => {
     }
   });
 });
-
-

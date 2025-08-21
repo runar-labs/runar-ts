@@ -69,5 +69,3 @@ export interface NodeInfo {
   node_metadata: NodeMetadata;
   version: number;
 }
-
-

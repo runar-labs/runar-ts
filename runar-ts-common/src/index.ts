@@ -13,7 +13,7 @@ export interface NodeInfo {
 export class RunarError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "RunarError";
+    this.name = 'RunarError';
   }
 }
 
@@ -50,7 +50,6 @@ export interface AbstractService {
   start(context: LifecycleContext): Promise<void>;
   stop(context: LifecycleContext): Promise<void>;
 }
-
 
 // Messaging primitives for local runtime
 export type ServiceName = string;
@@ -92,5 +91,3 @@ export interface ServiceRegistration {
   service: ServiceName;
   handler: ActionHandler;
 }
-
-

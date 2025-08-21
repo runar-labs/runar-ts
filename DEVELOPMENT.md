@@ -11,12 +11,14 @@ This document describes the development workflow and tools used in the Runar Typ
 ## Setup
 
 1. **Clone the repository**:
+
    ```bash
    git clone <repository-url>
    cd runar-ts
    ```
 
 2. **Install dependencies**:
+
    ```bash
    bun install
    ```
@@ -31,6 +33,7 @@ This document describes the development workflow and tools used in the Runar Typ
 ### Available Scripts
 
 #### Root Level Commands
+
 - `bun run build` - Build all packages
 - `bun run clean` - Clean all build artifacts
 - `bun run test` - Run tests in all packages
@@ -43,7 +46,9 @@ This document describes the development workflow and tools used in the Runar Typ
 - `bun run ci` - Run full CI pipeline locally
 
 #### Package Level Commands
+
 Each package has its own scripts:
+
 - `bun run --cwd <package-name> build` - Build specific package
 - `bun run --cwd <package-name> test` - Test specific package
 - `bun run --cwd <package-name> clean` - Clean specific package
@@ -51,53 +56,63 @@ Each package has its own scripts:
 ### Code Quality Tools
 
 #### ESLint
+
 - **Configuration**: `.eslintrc.js`
 - **Rules**: Strict TypeScript rules with Prettier integration
 - **Usage**: `bun run lint` or `bun run lint:fix`
 
 #### Prettier
+
 - **Configuration**: `.prettierrc`
 - **Usage**: `bun run format` or `bun run format:check`
 
 #### TypeScript
+
 - **Configuration**: `tsconfig.base.json`
 - **Usage**: `bun run type-check`
 
 ### Git Hooks
 
 #### Pre-commit Hook
+
 Automatically runs before each commit:
+
 - Type checking
 - Linting
 - Format checking
 
 #### Commit Message Hook
+
 Enforces conventional commit format:
+
 - Format: `<type>(<scope>): <description>`
 - Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`, `ci`, `build`, `revert`
 
 ### Local Development
 
 1. **Before starting work**:
+
    ```bash
    bun run clean
    bun install
    ```
 
 2. **During development**:
+
    ```bash
    # Run tests in watch mode
    bun run test:watch
-   
+
    # Check types
    bun run type-check
-   
+
    # Lint and format
    bun run lint:fix
    bun run format
    ```
 
 3. **Before committing**:
+
    ```bash
    # Run full CI pipeline locally
    bun run ci
@@ -114,6 +129,7 @@ Enforces conventional commit format:
 ### GitHub Actions
 
 The CI pipeline runs on:
+
 - Push to `main` and `develop` branches
 - Pull requests to `main` and `develop` branches
 
@@ -137,11 +153,13 @@ The CI pipeline runs on:
 ### Local CI
 
 Run the full CI pipeline locally:
+
 ```bash
 bun run ci
 ```
 
 This command runs:
+
 1. Clean all packages
 2. Build all packages
 3. Lint all code
@@ -154,6 +172,7 @@ This command runs:
 ### Common Issues
 
 #### Linting Errors
+
 ```bash
 # Fix auto-fixable issues
 bun run lint:fix
@@ -163,6 +182,7 @@ bun run lint -- path/to/file.ts
 ```
 
 #### Formatting Issues
+
 ```bash
 # Format all files
 bun run format
@@ -172,6 +192,7 @@ bun run format:check -- path/to/file.ts
 ```
 
 #### Type Errors
+
 ```bash
 # Check types
 bun run type-check
@@ -181,6 +202,7 @@ bun run --cwd <package-name> build
 ```
 
 #### Test Failures
+
 ```bash
 # Run tests for specific package
 bun run --cwd <package-name> test
@@ -192,6 +214,7 @@ bun run --cwd <package-name> test --verbose
 ### Git Hook Issues
 
 If git hooks aren't working:
+
 ```bash
 # Reinstall hooks
 bun run postinstall
@@ -212,14 +235,18 @@ npx husky install
 ## IDE Setup
 
 ### VS Code
+
 Recommended extensions:
+
 - ESLint
 - Prettier
 - TypeScript Importer
 - GitLens
 
 ### Configuration
+
 Add to your VS Code settings:
+
 ```json
 {
   "editor.formatOnSave": true,

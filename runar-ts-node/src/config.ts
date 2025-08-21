@@ -46,5 +46,3 @@ export class NodeConfig {
     return this;
   }
 }
-
-

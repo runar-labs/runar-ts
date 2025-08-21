@@ -17,5 +17,3 @@ describe('TopicPath templates', () => {
     expect(state.matches_template(stateTemplate)).toBe(true);
   });
 });
-
-

@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'bun:test';
 import 'reflect-metadata';
-import { EncryptedClass, EncryptedField, PlainField, getEncryptedClassOptions, getFieldMetadata } from '../src';
+import {
+  EncryptedClass,
+  EncryptedField,
+  PlainField,
+  getEncryptedClassOptions,
+  getFieldMetadata,
+} from '../src';
 
 @EncryptedClass({ network: 'default' })
 class ExampleEntity {
@@ -19,5 +25,3 @@ describe('Decorators metadata', () => {
     expect(fields.length).toBe(2);
   });
 });
-
-

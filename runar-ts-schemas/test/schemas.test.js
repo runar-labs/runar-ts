@@ -8,7 +8,12 @@ describe('Schemas mirror', () => {
             version: '1.0.0',
             description: 'desc',
             actions: [
-                { name: 'add', description: 'Adds', input_schema: { name: 'AddInput', data_type: 'Object' }, output_schema: { name: 'AddOutput', data_type: 'Double' } },
+                {
+                    name: 'add',
+                    description: 'Adds',
+                    input_schema: { name: 'AddInput', data_type: 'Object' },
+                    output_schema: { name: 'AddOutput', data_type: 'Double' },
+                },
             ],
             registration_time: 1,
             last_start_time: 2,

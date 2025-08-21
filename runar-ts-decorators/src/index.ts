@@ -7,7 +7,7 @@ const CLASS_META_KEY = Symbol.for('runar.encrypted.class');
 const FIELD_META_KEY = Symbol.for('runar.encrypted.field');
 
 export function EncryptedClass(options?: EncryptedClassOptions): ClassDecorator {
-  return (target) => {
+  return target => {
     Reflect.defineMetadata(CLASS_META_KEY, options ?? {}, target);
   };
 }
@@ -44,5 +44,3 @@ export function getTypeName(ctor: Function): string | undefined {
   const opts: EncryptedClassOptions | undefined = Reflect.getMetadata(CLASS_META_KEY, ctor);
   return opts?.typeName;
 }
-
-

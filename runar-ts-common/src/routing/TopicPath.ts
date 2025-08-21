@@ -31,7 +31,7 @@ export class TopicPath {
     servicePath: string,
     cachedActionPath: string,
     segmentCount: number,
-    segmentTypeBitmap: number,
+    segmentTypeBitmap: number
   ) {
     this.path = path;
     this.networkIdValue = networkId;
@@ -45,10 +45,11 @@ export class TopicPath {
   }
 
   static fromFullPath(path: string): TopicPath {
-    const idx = path.indexOf(":");
+    const idx = path.indexOf(':');
     if (idx < 0) throw new Error(`Invalid path format - missing network_id received: ${path}`);
     const networkId = path.slice(0, idx);
-    if (!networkId) throw new Error(`Invalid path format - network ID cannot be empty received: ${path}`);
+    if (!networkId)
+      throw new Error(`Invalid path format - network ID cannot be empty received: ${path}`);
     const rest = path.slice(idx + 1);
     return TopicPath.new(rest, networkId);
   }
@@ -56,9 +57,12 @@ export class TopicPath {
   static new(path: string, defaultNetwork: string): TopicPath {
     let networkId: string;
     let withoutNetwork: string;
-    if (path.includes(":")) {
-      const parts = path.split(":");
-      if (parts.length !== 2) throw new Error(`Invalid path format - should be 'network_id:service_path' or 'service_path': ${path}`);
+    if (path.includes(':')) {
+      const parts = path.split(':');
+      if (parts.length !== 2)
+        throw new Error(
+          `Invalid path format - should be 'network_id:service_path' or 'service_path': ${path}`
+        );
       if (!parts[0]) throw new Error(`Network ID cannot be empty: ${path}`);
       networkId = parts[0]!;
       withoutNetwork = parts[1]!;
@@ -67,7 +71,7 @@ export class TopicPath {
       withoutNetwork = path;
     }
 
-    const rawSegments = withoutNetwork.split("/").filter((s) => s.length > 0);
+    const rawSegments = withoutNetwork.split('/').filter(s => s.length > 0);
     if (rawSegments.length === 0) {
       throw new Error(`Invalid path - must have at least one segment: ${path}`);
     }
@@ -86,7 +90,7 @@ export class TopicPath {
           break;
         case PathSegmentType.MultiWildcard:
           if (i < rawSegments.length - 1) {
-            throw new Error("Multi-segment wildcard (>) must be the last segment in a path");
+            throw new Error('Multi-segment wildcard (>) must be the last segment in a path');
           }
           isPattern = true;
           bitmap = TopicPath.setSegmentType(bitmap, i, PathSegmentType.MultiWildcard);
@@ -104,7 +108,8 @@ export class TopicPath {
 
     const servicePath = TopicPath.segmentToString(segments[0]!);
     const fullPath = `${networkId}:${withoutNetwork}`;
-    const actionPath = segments.length <= 1 ? "" : segments.map(TopicPath.segmentToString).join("/");
+    const actionPath =
+      segments.length <= 1 ? '' : segments.map(TopicPath.segmentToString).join('/');
 
     return new TopicPath(
       fullPath,
@@ -115,7 +120,7 @@ export class TopicPath {
       servicePath,
       actionPath,
       segments.length,
-      bitmap,
+      bitmap
     );
   }
 
@@ -128,15 +133,17 @@ export class TopicPath {
       false,
       false,
       serviceName,
-      "",
+      '',
       1,
-      0,
+      0
     );
   }
 
   newActionTopic(actionName: string): TopicPath {
     if (this.segments.length > 1) {
-      throw new Error("Invalid action path - cannot create an action path on top of another action path");
+      throw new Error(
+        'Invalid action path - cannot create an action path on top of another action path'
+      );
     }
     const full = `${this.networkIdValue}:${this.servicePathValue}/${actionName}`;
     return TopicPath.new(full, this.networkIdValue);
@@ -152,7 +159,8 @@ export class TopicPath {
 
   hasMultiWildcard(): boolean {
     for (let i = 0; i < this.segmentCount; i++) {
-      if (TopicPath.getSegmentType(this.segmentTypeBitmap, i) === PathSegmentType.MultiWildcard) return true;
+      if (TopicPath.getSegmentType(this.segmentTypeBitmap, i) === PathSegmentType.MultiWildcard)
+        return true;
     }
     return false;
   }
@@ -169,30 +177,45 @@ export class TopicPath {
     return this.networkIdValue;
   }
 
-  networkId(): string { return this.networkIdValue; }
+  networkId(): string {
+    return this.networkIdValue;
+  }
 
-  service_path(): string { return this.servicePathValue; }
-  servicePath(): string { return this.servicePathValue; }
+  service_path(): string {
+    return this.servicePathValue;
+  }
+  servicePath(): string {
+    return this.servicePathValue;
+  }
 
   get_segments(): string[] {
     return this.segments.map(TopicPath.segmentToString);
   }
 
-  getSegments(): string[] { return this.get_segments(); }
+  getSegments(): string[] {
+    return this.get_segments();
+  }
 
   starts_with(other: TopicPath): boolean {
-    return this.networkIdValue === other.networkIdValue && this.servicePathValue.startsWith(other.servicePathValue);
+    return (
+      this.networkIdValue === other.networkIdValue &&
+      this.servicePathValue.startsWith(other.servicePathValue)
+    );
   }
 
   child(segment: string): TopicPath {
-    if (segment.includes("/")) throw new Error(`Child segment cannot contain slashes: ${segment}`);
-    const newPath = this.cachedActionPath === ""
-      ? `${this.servicePathValue}/${segment}`
-      : `${this.cachedActionPath}/${segment}`;
+    if (segment.includes('/')) throw new Error(`Child segment cannot contain slashes: ${segment}`);
+    const newPath =
+      this.cachedActionPath === ''
+        ? `${this.servicePathValue}/${segment}`
+        : `${this.cachedActionPath}/${segment}`;
     const full = `${this.networkIdValue}:${newPath}`;
 
     const newSegment = TopicPath.segmentFromString(segment);
-    const isPattern = this.pattern || newSegment.kind === PathSegmentType.SingleWildcard || newSegment.kind === PathSegmentType.MultiWildcard;
+    const isPattern =
+      this.pattern ||
+      newSegment.kind === PathSegmentType.SingleWildcard ||
+      newSegment.kind === PathSegmentType.MultiWildcard;
     const hasTemplates = this.hasTemplatesValue || newSegment.kind === PathSegmentType.Template;
     let bitmap = this.segmentTypeBitmap;
     bitmap = TopicPath.setSegmentType(bitmap, this.segmentCount, newSegment.kind);
@@ -207,14 +230,15 @@ export class TopicPath {
       this.servicePathValue,
       newPath,
       this.segmentCount + 1,
-      bitmap,
+      bitmap
     );
   }
 
   parent(): TopicPath {
-    if (this.segments.length <= 1) throw new Error("Cannot get parent of root or service-only path");
+    if (this.segments.length <= 1)
+      throw new Error('Cannot get parent of root or service-only path');
     const parentSegments = this.segments.slice(0, this.segments.length - 1);
-    const pathStr = parentSegments.map(TopicPath.segmentToString).join("/");
+    const pathStr = parentSegments.map(TopicPath.segmentToString).join('/');
     const full = `${this.networkIdValue}:${pathStr}`;
 
     let bitmap = this.segmentTypeBitmap;
@@ -223,7 +247,8 @@ export class TopicPath {
     let hasTemplates = false;
     for (let i = 0; i < parentSegments.length; i++) {
       const t = TopicPath.getSegmentType(bitmap, i);
-      if (t === PathSegmentType.SingleWildcard || t === PathSegmentType.MultiWildcard) isPattern = true;
+      if (t === PathSegmentType.SingleWildcard || t === PathSegmentType.MultiWildcard)
+        isPattern = true;
       if (t === PathSegmentType.Template) hasTemplates = true;
     }
 
@@ -236,20 +261,22 @@ export class TopicPath {
       this.servicePathValue,
       pathStr,
       this.segmentCount - 1,
-      bitmap,
+      bitmap
     );
   }
 
   extract_params(template: string): Map<string, string> {
     const params = new Map<string, string>();
     const pathSegments = this.get_segments();
-    const templateSegments = template.split("/").filter((s) => s.length > 0);
+    const templateSegments = template.split('/').filter(s => s.length > 0);
     if (pathSegments.length !== templateSegments.length) {
-      throw new Error(`Path segment count (${pathSegments.length}) doesn't match template segment count (${templateSegments.length})`);
+      throw new Error(
+        `Path segment count (${pathSegments.length}) doesn't match template segment count (${templateSegments.length})`
+      );
     }
     for (let i = 0; i < templateSegments.length; i++) {
       const t = templateSegments[i]!;
-      if (t.startsWith("{") && t.endsWith("}")) {
+      if (t.startsWith('{') && t.endsWith('}')) {
         const name = t.slice(1, -1);
         params.set(name, pathSegments[i]!);
       } else if (t !== pathSegments[i]) {
@@ -268,21 +295,28 @@ export class TopicPath {
     }
   }
 
-  static test_default(path: string): TopicPath { return TopicPath.new(path, "default"); }
+  static test_default(path: string): TopicPath {
+    return TopicPath.new(path, 'default');
+  }
 
   private static segmentFromString(segment: string): PathSegment {
-    if (segment === "*") return { kind: PathSegmentType.SingleWildcard };
-    if (segment === ">") return { kind: PathSegmentType.MultiWildcard };
-    if (segment.startsWith("{") && segment.endsWith("}")) return { kind: PathSegmentType.Template, value: segment.slice(1, -1) };
+    if (segment === '*') return { kind: PathSegmentType.SingleWildcard };
+    if (segment === '>') return { kind: PathSegmentType.MultiWildcard };
+    if (segment.startsWith('{') && segment.endsWith('}'))
+      return { kind: PathSegmentType.Template, value: segment.slice(1, -1) };
     return { kind: PathSegmentType.Literal, value: segment };
   }
 
   private static segmentToString(seg: PathSegment): string {
     switch (seg.kind) {
-      case PathSegmentType.Literal: return seg.value;
-      case PathSegmentType.Template: return `{${seg.value}}`;
-      case PathSegmentType.SingleWildcard: return "*";
-      case PathSegmentType.MultiWildcard: return ">";
+      case PathSegmentType.Literal:
+        return seg.value;
+      case PathSegmentType.Template:
+        return `{${seg.value}}`;
+      case PathSegmentType.SingleWildcard:
+        return '*';
+      case PathSegmentType.MultiWildcard:
+        return '>';
     }
   }
 
@@ -292,7 +326,6 @@ export class TopicPath {
   }
 
   static getSegmentType(bitmap: number, index: number): PathSegmentType {
-    return (((bitmap >> (index * 2)) & 0b11) as number) as PathSegmentType;
+    return ((bitmap >> (index * 2)) & 0b11) as number as PathSegmentType;
   }
 }
-

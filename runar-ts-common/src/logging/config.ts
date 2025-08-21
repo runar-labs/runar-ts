@@ -151,8 +151,7 @@ function getComponentLevel(component: Component): LogLevel {
 
 function isSameComponentKey(a: ComponentKey, b: ComponentKey): boolean {
   if (typeof a === 'string' && typeof b === 'string') return a === b;
-  if (typeof a === 'object' && typeof b === 'object') return (a as any).Custom === (b as any).Custom;
+  if (typeof a === 'object' && typeof b === 'object')
+    return (a as any).Custom === (b as any).Custom;
   return false;
 }
-
-

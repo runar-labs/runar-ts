@@ -9,7 +9,13 @@ describe('ServiceRegistry subscriptions', () => {
     const topic = TopicPath.new('net1:test/event', 'net1');
     const serviceTopic = TopicPath.newService('net1', 'svc');
     const subscriber = () => {};
-    const id = registry.subscribe(topic, serviceTopic, subscriber, { path: topic.asString?.() ?? 'net1:test/event' }, 'Local');
+    const id = registry.subscribe(
+      topic,
+      serviceTopic,
+      subscriber,
+      { path: topic.asString?.() ?? 'net1:test/event' },
+      'Local'
+    );
     const handlers = registry.getSubscribers(topic);
     assert.equal(handlers.length, 1);
     assert.equal(handlers[0]?.id, id);
@@ -25,8 +31,20 @@ describe('ServiceRegistry subscriptions', () => {
     const wc2 = TopicPath.new('net1:test/events/>', 'net1');
     const serviceTopic = TopicPath.newService('net1', 'svc');
     const cb = () => {};
-    const id1 = registry.subscribe(wc1, serviceTopic, cb, { path: wc1.asString?.() ?? '' }, 'Local');
-    const id2 = registry.subscribe(wc2, serviceTopic, cb, { path: wc2.asString?.() ?? '' }, 'Local');
+    const id1 = registry.subscribe(
+      wc1,
+      serviceTopic,
+      cb,
+      { path: wc1.asString?.() ?? '' },
+      'Local'
+    );
+    const id2 = registry.subscribe(
+      wc2,
+      serviceTopic,
+      cb,
+      { path: wc2.asString?.() ?? '' },
+      'Local'
+    );
     const h1 = registry.getSubscribers(wc1);
     const h2 = registry.getSubscribers(wc2);
     assert.equal(h1.length, 1);
@@ -39,5 +57,3 @@ describe('ServiceRegistry subscriptions', () => {
     registry.unsubscribe(id1);
   });
 });
-
-

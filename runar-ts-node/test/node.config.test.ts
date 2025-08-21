@@ -18,9 +18,10 @@ describe('NodeConfig', () => {
 
   it('instantiates Node from config without keys', () => {
     const cfg = NodeConfig.new('net-2').withTransportOptions({});
-    const n = Node.fromConfig({ defaultNetworkId: cfg.defaultNetworkId, transportOptions: cfg.transportOptions });
+    const n = Node.fromConfig({
+      defaultNetworkId: cfg.defaultNetworkId,
+      transportOptions: cfg.transportOptions,
+    });
     assert.ok(n);
   });
 });
-
-

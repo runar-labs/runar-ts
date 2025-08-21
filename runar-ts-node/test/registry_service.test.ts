@@ -6,12 +6,24 @@ import { AnyValue } from 'runar-ts-serializer';
 
 class DummyService implements AbstractService {
   private _network?: string;
-  name(): string { return 'Dummy'; }
-  version(): string { return '1.0.0'; }
-  path(): string { return 'dummy'; }
-  description(): string { return 'Dummy'; }
-  networkId(): string | undefined { return this._network; }
-  setNetworkId(n: string): void { this._network = n; }
+  name(): string {
+    return 'Dummy';
+  }
+  version(): string {
+    return '1.0.0';
+  }
+  path(): string {
+    return 'dummy';
+  }
+  description(): string {
+    return 'Dummy';
+  }
+  networkId(): string | undefined {
+    return this._network;
+  }
+  setNetworkId(n: string): void {
+    this._network = n;
+  }
   async init(_c: LifecycleContext): Promise<void> {}
   async start(_c: LifecycleContext): Promise<void> {}
   async stop(_c: LifecycleContext): Promise<void> {}
@@ -40,7 +52,11 @@ describe('RegistryService', () => {
     const node = new Node('net');
     node.addService(new DummyService());
     await node.start();
-    const res = await node.request<undefined, any>('$registry', 'services/dummy/state', undefined as any);
+    const res = await node.request<undefined, any>(
+      '$registry',
+      'services/dummy/state',
+      undefined as any
+    );
     assert.equal(res.service_path, 'dummy');
     assert.notEqual(res.state, undefined);
   });
@@ -49,15 +65,29 @@ describe('RegistryService', () => {
     const node = new Node('net');
     node.addService(new DummyService());
     await node.start();
-    const paused = await node.request<undefined, any>('$registry', 'services/dummy/pause', undefined as any);
+    const paused = await node.request<undefined, any>(
+      '$registry',
+      'services/dummy/pause',
+      undefined as any
+    );
     assert.equal(paused, 'Paused');
-    const state1 = await node.request<undefined, any>('$registry', 'services/dummy/state', undefined as any);
+    const state1 = await node.request<undefined, any>(
+      '$registry',
+      'services/dummy/state',
+      undefined as any
+    );
     assert.equal(state1.state, 'Paused');
-    const resumed = await node.request<undefined, any>('$registry', 'services/dummy/resume', undefined as any);
+    const resumed = await node.request<undefined, any>(
+      '$registry',
+      'services/dummy/resume',
+      undefined as any
+    );
     assert.equal(resumed, 'Running');
-    const state2 = await node.request<undefined, any>('$registry', 'services/dummy/state', undefined as any);
+    const state2 = await node.request<undefined, any>(
+      '$registry',
+      'services/dummy/state',
+      undefined as any
+    );
     assert.equal(state2.state, 'Running');
   });
 });
-
-

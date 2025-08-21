@@ -86,38 +86,38 @@ Scope: Achieve feature parity with the local (non-networked, non-crypto) behavio
 
 ### Gaps and Next Steps (Local Parity)
 
-1) Node/Registry parity refinements
+1. Node/Registry parity refinements
    - [x] Track local services in `ServiceRegistry` (mirror Rust) instead of only in `Node`
    - [x] Service state tracking in registry maps; timestamps for registration/start
    - [ ] Expand event subscription storage to support multiple lists per topic leaf (merged list semantics already in place)
    - [x] Add one-shot wait API parity (Rust `on()` returns a future/JoinHandle). TS: `onOnce(topic, opts?)` that resolves on first event or timeout
 
-2) Routing utilities and performance
+2. Routing utilities and performance
    - [ ] Validate `findWildcardMatches` coverage equivalence vs Rust for deep wildcard scans
    - [ ] Add tests for `starts_with`, `child`, `parent`, `from_full_path`
    - [ ] Add negative tests (invalid multi-wildcard position; empty network; empty path)
 
-3) Serializer alignment (local scope)
+3. Serializer alignment (local scope)
    - [ ] Canonical CBOR parity tests against known vectors (later, once FFI lands). For now: mark as non-canonical
    - [x] ArcValue: add `toJSON()` shape for diagnostics and logging
    - [ ] Implement `AnyValue` union aligned to Rust; add tests
 
-4) Decorators (metadata only for now)
+4. Decorators (metadata only for now)
    - [ ] Define metadata registry accessors and types across packages
    - [ ] Add tests to verify decorator metadata capture and retrieval
 
-5) Node tests (local E2E)
+5. Node tests (local E2E)
    - [ ] Sample `AbstractService` that registers an action in `init`, returns response
    - [ ] Verify `request` resolves; `publish` emits events
    - [ ] Verify `retain` + `includePast` replays in order; wildcard topic replay
    - [ ] Verify `unsubscribe` stops delivery; `stop()` calls service `stop`
    - [ ] Edge cases: unknown service/action → error; node not started → error
 
-6) API ergonomics
+6. API ergonomics
    - [ ] Type-safe request/response helpers atop CBOR (typed codecs later)
    - [x] Logger façade matching Rust logging calls
 
-7) Schemas
+7. Schemas
    - [ ] Mirror types and add schema-level tests for required fields/defaults
    - [ ] Consider versioning tags if present in Rust models
 
@@ -146,5 +146,3 @@ Scope: Achieve feature parity with the local (non-networked, non-crypto) behavio
 - Add decorator tests and registry exports
 - Expand routing tests (parent/child/from_full_path/invalid cases)
 - Add a sample service and end-to-end tests under `runar-ts-node`
-
-

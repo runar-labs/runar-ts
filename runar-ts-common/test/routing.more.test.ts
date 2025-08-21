@@ -17,5 +17,3 @@ describe('TopicPath extras', () => {
     expect(() => TopicPath.new('', 'default')).toThrow();
   });
 });
-
-

@@ -63,9 +63,19 @@ export class Logger {
     return l;
   }
 
-  node_id(): string { return this.nodeId ? (this.nodeId.length > 8 ? this.nodeId.slice(0, 8) : this.nodeId) : 'unknown'; }
-  action_path(): string | undefined { return this.actionPath; }
-  event_path(): string | undefined { return this.eventPath; }
+  node_id(): string {
+    return this.nodeId
+      ? this.nodeId.length > 8
+        ? this.nodeId.slice(0, 8)
+        : this.nodeId
+      : 'unknown';
+  }
+  action_path(): string | undefined {
+    return this.actionPath;
+  }
+  event_path(): string | undefined {
+    return this.eventPath;
+  }
 
   private componentPrefix(): string {
     if (this.parentComponent && this.parentComponent !== Component.Node) {
@@ -122,5 +132,3 @@ export interface LoggingContext {
   log_warn(message: string): void;
   log_error(message: string): void;
 }
-
-

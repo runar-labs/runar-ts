@@ -6,7 +6,10 @@ import { registerType, resolveType, clearRegistry } from '../src/registry';
 
 @EncryptedClass({ network: 'default', typeName: 'com.runar.TestProfile' })
 class TestProfile {
-  constructor(public id: string, public name: string) {}
+  constructor(
+    public id: string,
+    public name: string
+  ) {}
 }
 
 describe('Decorator/Registry integration', () => {
@@ -19,5 +22,3 @@ describe('Decorator/Registry integration', () => {
     assert.equal(entry?.ctor, TestProfile);
   });
 });
-
-
