@@ -72,7 +72,9 @@ export function getFieldMetadata(target: new (...args: any[]) => any): FieldMeta
   return Array.from(metadata.fields.values());
 }
 
-export function getEncryptedClassOptions(target: new (...args: any[]) => any): EncryptedClassOptions | undefined {
+export function getEncryptedClassOptions(
+  target: new (...args: any[]) => any
+): EncryptedClassOptions | undefined {
   const className = target.name;
   const metadata = metadataRegistry.get(className);
   if (!metadata) return undefined;

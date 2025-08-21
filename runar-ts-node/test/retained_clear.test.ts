@@ -1,8 +1,5 @@
 import { describe, it, expect } from 'bun:test';
 import { Node } from '../src';
-import { ServiceRegistry } from '../src/index';
-import { TopicPath } from 'runar-ts-common';
-import { SubscriptionMetadata } from 'runar-ts-schemas';
 
 describe('Retained events clearing', () => {
   it('clears retained by wildcard pattern and respects includePast ordering', async () => {

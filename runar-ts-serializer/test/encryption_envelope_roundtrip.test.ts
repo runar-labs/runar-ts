@@ -19,7 +19,7 @@ describe('Encryption envelope roundtrip', () => {
 
     const obj = { a: 1, b: 'x' };
     const body = encode(obj);
-    const header = writeHeader({ category: ValueCategory.Encrypted, isEncrypted: true });
+    const header = writeHeader({ category: ValueCategory.Json, isEncrypted: true });
     const eed = keys.encryptLocalData(Buffer.from(body));
     const wire = new Uint8Array(header.length + eed.length);
     wire.set(header, 0);

@@ -1,15 +1,14 @@
 import { Result, ok, err } from './result';
 
-// Value categories mirrored from Rust
+// Value categories exactly matching Rust runar-serializer
 export enum ValueCategory {
   Null = 0,
   Primitive = 1,
-  Bytes = 2,
-  List = 3,
-  Map = 4,
-  Struct = 5,
+  List = 2,
+  Map = 3,
+  Struct = 4,
+  Bytes = 5,
   Json = 6,
-  Encrypted = 7,
 }
 
 export interface DeserializationContext {
@@ -34,7 +33,7 @@ export function readHeader(bytes: Uint8Array): Result<WireHeader> {
   const category = bytes[0] as ValueCategory;
   const encFlag = bytes[1];
   const typeLen = bytes[2];
-  if (category > ValueCategory.Encrypted) {
+  if (category > ValueCategory.Json) {
     return err(new Error('Invalid category'));
   }
   if (typeLen > 0) {

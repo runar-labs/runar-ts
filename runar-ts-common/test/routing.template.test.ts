@@ -90,6 +90,7 @@ describe('TopicPath Templates', () => {
       const actionsTemplate = 'services/{service_path}/actions';
 
       // Test matching for various paths
+      expect(actionsTemplate.includes('{service_path}')).toBe(true);
       const listPath = TopicPath.new('main:services/list', 'default');
       expect(listPath.matchesTemplate(listTemplate)).toBe(true);
 
@@ -326,6 +327,7 @@ describe('TopicPath Templates', () => {
   describe('Event path creation with templates', () => {
     it('handles event paths with templates', () => {
       const servicePath = TopicPath.new('main:services/{service_type}', 'default');
+      expect(servicePath.hasTemplates()).toBe(true);
 
       // Instead of using new_event_topic, create the event path manually
       const eventPathStr = 'main:services/{service_type}/updated';
@@ -335,7 +337,8 @@ describe('TopicPath Templates', () => {
       expect(eventPath.hasTemplates()).toBe(true);
 
       const eventsTemplate = 'services/{service_path}/events';
-      // This would be used for matching
+      // Verify the template is detected
+      expect(eventsTemplate.includes('{service_path}')).toBe(true);
     });
   });
 

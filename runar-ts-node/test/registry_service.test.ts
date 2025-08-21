@@ -1,8 +1,5 @@
 import { describe, it, expect } from 'bun:test';
 import { Node } from '../src';
-import { RegistryService } from '../src/registry_service';
-import { TopicPath } from 'runar-ts-common';
-import { ServiceState } from 'runar-ts-schemas';
 import { AbstractService, LifecycleContext } from '../src/core';
 
 class DummyService implements AbstractService {

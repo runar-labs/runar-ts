@@ -5,6 +5,7 @@ export interface TypeEntry {
   decoder?: (bytes: Uint8Array) => any;
 }
 
+// Registry for type resolution (matches Rust functionality)
 const typeNameToEntry = new Map<string, TypeEntry>();
 
 export function registerType(typeName: string, entry: TypeEntry): void {
@@ -19,27 +20,43 @@ export function clearRegistry(): void {
   typeNameToEntry.clear();
 }
 
-// Primitive registry (wire name -> post-decode transformer)
-const primitiveDecoders = new Map<string, (v: any) => any>();
+// Wire name registry (Rust type name -> wire name)
+const rustTypeToWireName = new Map<string, string>();
 
-export function registerPrimitive(name: string, transformer: (v: any) => any): void {
-  primitiveDecoders.set(name, transformer);
+export function registerWireName(rustTypeName: string, wireName: string): void {
+  rustTypeToWireName.set(rustTypeName, wireName);
 }
 
-export function resolvePrimitive(name: string): ((v: any) => any) | undefined {
-  return primitiveDecoders.get(name);
+export function lookupWireName(rustTypeName: string): string | undefined {
+  return rustTypeToWireName.get(rustTypeName);
 }
 
+// Initialize wire names to match Rust exactly
 export function initWirePrimitives(): void {
-  registerPrimitive('string', v => String(v));
-  registerPrimitive('bool', v => Boolean(v));
-  registerPrimitive('bytes', v => (v instanceof Uint8Array ? v : new Uint8Array()));
-  registerPrimitive('f64', v => Number(v));
-  // Integers default to JS number; future: bigint mapping as needed (i64/u64 etc.)
-  ['i8', 'i16', 'i32', 'i64', 'u8', 'u16', 'u32', 'u64'].forEach(n =>
-    registerPrimitive(n, v => Number(v))
-  );
-  registerPrimitive('list', v => (Array.isArray(v) ? v : []));
-  registerPrimitive('map', v => (v && typeof v === 'object' ? v : {}));
-  registerPrimitive('json', v => v);
+  // Primitive types with exact wire names from Rust
+  registerWireName('alloc::string::String', 'string');
+  registerWireName('std::string::String', 'string');
+  registerWireName('&str', 'string');
+  registerWireName('bool', 'bool');
+  registerWireName('i8', 'i8');
+  registerWireName('i16', 'i16');
+  registerWireName('i32', 'i32');
+  registerWireName('i64', 'i64');
+  registerWireName('i128', 'i128');
+  registerWireName('u8', 'u8');
+  registerWireName('u16', 'u16');
+  registerWireName('u32', 'u32');
+  registerWireName('u64', 'u64');
+  registerWireName('u128', 'u128');
+  registerWireName('f32', 'f32');
+  registerWireName('f64', 'f64');
+  registerWireName('char', 'char');
+  
+  // Container types
+  registerWireName('alloc::vec::Vec<T>', 'list<T>');
+  registerWireName('std::collections::HashMap<K, V>', 'map<K,V>');
+  
+  // Special types
+  registerWireName('serde_json::value::Value', 'json');
+  registerWireName('alloc::vec::Vec<u8>', 'bytes');
 }
