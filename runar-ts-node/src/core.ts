@@ -20,11 +20,22 @@ export interface LifecycleContext {
 
   // Event publishing
   publish(topic: string, data?: AnyValue): Promise<Result<void, string>>;
-  publishWithOptions(topic: string, data: AnyValue | undefined, options: any): Promise<Result<void, string>>;
+  publishWithOptions(
+    topic: string,
+    data: AnyValue | undefined,
+    options: any
+  ): Promise<Result<void, string>>;
 
   // Event subscription
-  on(topic: string, options?: { timeout?: number; includePast?: boolean }): Promise<Result<AnyValue | undefined, string>>;
-  subscribe(topic: string, callback: EventSubscriber, options?: { includePast?: boolean }): Promise<Result<string, string>>;
+  on(
+    topic: string,
+    options?: { timeout?: number; includePast?: boolean }
+  ): Promise<Result<AnyValue | undefined, string>>;
+  subscribe(
+    topic: string,
+    callback: EventSubscriber,
+    options?: { includePast?: boolean }
+  ): Promise<Result<string, string>>;
   unsubscribe(subscriptionId: string): Promise<Result<void, string>>;
 }
 
@@ -35,12 +46,7 @@ export class LifecycleContextImpl implements LifecycleContext {
   config?: AnyValue;
   logger: any;
 
-  constructor(
-    networkId: string,
-    servicePath: string,
-    logger: any,
-    config?: AnyValue
-  ) {
+  constructor(networkId: string, servicePath: string, logger: any, config?: AnyValue) {
     this.networkId = networkId;
     this.servicePath = servicePath;
     this.logger = logger;
@@ -74,7 +80,11 @@ export class LifecycleContextImpl implements LifecycleContext {
     }
   }
 
-  async publishWithOptions(topic: string, data: AnyValue | undefined, options: any): Promise<Result<void, string>> {
+  async publishWithOptions(
+    topic: string,
+    data: AnyValue | undefined,
+    options: any
+  ): Promise<Result<void, string>> {
     try {
       // This will be implemented by the Node
       throw new Error('Not implemented - should be overridden by Node');
@@ -83,7 +93,10 @@ export class LifecycleContextImpl implements LifecycleContext {
     }
   }
 
-  async on(topic: string, options?: { timeout?: number; includePast?: boolean }): Promise<Result<AnyValue | undefined, string>> {
+  async on(
+    topic: string,
+    options?: { timeout?: number; includePast?: boolean }
+  ): Promise<Result<AnyValue | undefined, string>> {
     try {
       // This will be implemented by the Node
       throw new Error('Not implemented - should be overridden by Node');
@@ -92,7 +105,11 @@ export class LifecycleContextImpl implements LifecycleContext {
     }
   }
 
-  async subscribe(topic: string, callback: EventSubscriber, options?: { includePast?: boolean }): Promise<Result<string, string>> {
+  async subscribe(
+    topic: string,
+    callback: EventSubscriber,
+    options?: { includePast?: boolean }
+  ): Promise<Result<string, string>> {
     try {
       // This will be implemented by the Node
       throw new Error('Not implemented - should be overridden by Node');
@@ -123,7 +140,9 @@ export class NodeLifecycleContext extends LifecycleContextImpl {
   async registerAction(actionName: string, handler: ActionHandler): Promise<Result<void, string>> {
     try {
       const { TopicPath, isOk, unwrap, unwrapErr, err } = await import('runar-ts-common');
-      const topicResult = TopicPath.newService(this.networkId, this.servicePath).newActionTopic(actionName);
+      const topicResult = TopicPath.newService(this.networkId, this.servicePath).newActionTopic(
+        actionName
+      );
       if (!isOk(topicResult)) {
         return err(unwrapErr(topicResult));
       }
@@ -142,15 +161,26 @@ export class NodeLifecycleContext extends LifecycleContextImpl {
     return this.node.publish(topic, data);
   }
 
-  async publishWithOptions(topic: string, data: AnyValue | undefined, options: any): Promise<Result<void, string>> {
+  async publishWithOptions(
+    topic: string,
+    data: AnyValue | undefined,
+    options: any
+  ): Promise<Result<void, string>> {
     return this.node.publish_with_options(topic, data, options);
   }
 
-  async on(topic: string, options?: { timeout?: number; includePast?: boolean }): Promise<Result<AnyValue | undefined, string>> {
+  async on(
+    topic: string,
+    options?: { timeout?: number; includePast?: boolean }
+  ): Promise<Result<AnyValue | undefined, string>> {
     return this.node.on(topic, options);
   }
 
-  async subscribe(topic: string, callback: EventSubscriber, options?: { includePast?: boolean }): Promise<Result<string, string>> {
+  async subscribe(
+    topic: string,
+    callback: EventSubscriber,
+    options?: { includePast?: boolean }
+  ): Promise<Result<string, string>> {
     return this.node.subscribe(topic, callback, options);
   }
 
@@ -213,7 +243,10 @@ export interface RequestContext {
   requestId: string; // Internal - handlers don't use this
 }
 
-export type ActionHandler = (payload: AnyValue, context: RequestContext) => Promise<Result<AnyValue, string>>;
+export type ActionHandler = (
+  payload: AnyValue,
+  context: RequestContext
+) => Promise<Result<AnyValue, string>>;
 export type EventSubscriber = (evt: EventMessage) => void | Promise<void>;
 
 export interface ServiceRegistration {

@@ -5,6 +5,7 @@ This document outlines the correct patterns and best practices for using the Run
 ## 🚀 Core Principles
 
 ### 1. No Fallbacks - Single Path Execution
+
 - **❌ WRONG**: Try one type, fallback to another
 - **✅ CORRECT**: Expect exact type, fail if mismatch
 
@@ -31,7 +32,9 @@ const label = stringResult.value;
 ```
 
 ### 2. Action Handlers - Clean & Simple
+
 Action handlers should be pure functions that:
+
 - Receive `AnyValue` payload directly
 - Return `Result<AnyValue, string>` only
 - Never deal with serialization, request IDs, or internal concerns
@@ -42,7 +45,7 @@ async (req: ActionRequest) => {
   // Don't deal with requestId
   // Don't do fallbacks
   return { ok: true, requestId: req.requestId, payload: AnyValue.from(result) };
-}
+};
 
 // ✅ GOOD - Clean handler matching Rust API
 async (payload: AnyValue, context: RequestContext): Promise<Result<AnyValue, string>> => {
@@ -53,10 +56,11 @@ async (payload: AnyValue, context: RequestContext): Promise<Result<AnyValue, str
 
   const result = await processData(stringResult.value);
   return ok(AnyValue.from(result));
-}
+};
 ```
 
 ### 3. Type Safety - No `unknown`
+
 Always use specific types, never `as<unknown>()`:
 
 ```typescript
@@ -72,18 +76,25 @@ const result = payload.as<MyStruct>();
 ## 📋 API Alignment with Rust
 
 ### Action Handler Signature (Must Match Exactly)
+
 ```typescript
-type ActionHandler = (payload: AnyValue, context: RequestContext) => Promise<Result<AnyValue, string>>;
+type ActionHandler = (
+  payload: AnyValue,
+  context: RequestContext
+) => Promise<Result<AnyValue, string>>;
 ```
 
 **Parameters**:
+
 - `payload: AnyValue` - The input data (already deserialized by framework)
 - `context: RequestContext` - Request context (not ActionRequest)
 
 **Returns**:
+
 - `Promise<Result<AnyValue, string>>` - Either success with AnyValue or error message
 
 ### LifecycleContext Methods (Must Match Rust)
+
 ```typescript
 interface LifecycleContext {
   // Action registration
@@ -97,7 +108,11 @@ interface LifecycleContext {
 
   // Event subscription
   on(topic: string, options?: OnOptions): Promise<Result<AnyValue | undefined, string>>;
-  subscribe(topic: string, callback: EventHandler, options?: SubscribeOptions): Promise<Result<string, string>>;
+  subscribe(
+    topic: string,
+    callback: EventHandler,
+    options?: SubscribeOptions
+  ): Promise<Result<string, string>>;
   unsubscribe(subscriptionId: string): Promise<Result<void, string>>;
 }
 ```
@@ -105,6 +120,7 @@ interface LifecycleContext {
 ## 🔧 Framework Responsibilities
 
 ### What the Framework Does:
+
 - **Serialization/Deserialization**: Automatically handles CBOR conversion at wire boundaries
 - **Encryption/Decryption**: Automatically handles encryption for remote calls
 - **Network Transport**: Handles local vs remote routing
@@ -112,6 +128,7 @@ interface LifecycleContext {
 - **Type Safety**: Ensures type correctness at runtime
 
 ### What Action Handlers Should Do:
+
 - **Business Logic Only**: Pure functions implementing business rules
 - **Type Checking**: Use `AnyValue.as<T>()` to extract expected types
 - **Error Handling**: Return `Result` with descriptive error messages
@@ -120,6 +137,7 @@ interface LifecycleContext {
 ## 📝 Common Patterns
 
 ### 1. String Input Handler
+
 ```typescript
 const myAction: ActionHandler = async (payload, context) => {
   const stringResult = payload.as<string>();
@@ -133,6 +151,7 @@ const myAction: ActionHandler = async (payload, context) => {
 ```
 
 ### 2. JSON Object Input Handler
+
 ```typescript
 interface MyInput {
   name: string;
@@ -152,6 +171,7 @@ const myAction: ActionHandler = async (payload, context) => {
 ```
 
 ### 3. Error Handling Pattern
+
 ```typescript
 const myAction: ActionHandler = async (payload, context) => {
   // Validate input
@@ -173,6 +193,7 @@ const myAction: ActionHandler = async (payload, context) => {
 ## 🚫 Anti-Patterns to Avoid
 
 ### 1. Fallback Logic
+
 ```typescript
 // ❌ NEVER DO THIS
 const stringResult = payload.as<string>();
@@ -187,9 +208,10 @@ if (stringResult.ok) {
 ```
 
 ### 2. Manual Serialization
+
 ```typescript
 // ❌ NEVER DO THIS
-const myAction = async (req) => {
+const myAction = async req => {
   const input = AnyValue.fromBytes(req.payload); // Framework handles this
   // ... process
   return { ok: true, payload: result.serialize() }; // Framework handles this
@@ -197,26 +219,28 @@ const myAction = async (req) => {
 ```
 
 ### 3. Request ID Handling
+
 ```typescript
 // ❌ NEVER DO THIS
-const myAction = async (req) => {
+const myAction = async req => {
   return {
     ok: true,
     requestId: req.requestId, // Internal concern
-    payload: AnyValue.from(result)
+    payload: AnyValue.from(result),
   };
 };
 ```
 
 ### 4. Complex Return Types
+
 ```typescript
 // ❌ NEVER DO THIS
-const myAction = async (req) => {
+const myAction = async req => {
   return {
     status: 'success',
     data: result,
     timestamp: Date.now(),
-    requestId: req.requestId
+    requestId: req.requestId,
   };
 };
 ```
@@ -236,6 +260,7 @@ be our recomended approach.. so keep this as an example of a putre unite test of
 and show our recomended approach.. like we do all our tests in rust.
 
 ### Test Action Handlers Like This:
+
 ```typescript
 describe('myAction', () => {
   it('should process string input correctly', async () => {
@@ -285,4 +310,4 @@ describe('myAction', () => {
 
 ---
 
-*This document should be updated as new patterns emerge or requirements change.*
+_This document should be updated as new patterns emerge or requirements change._

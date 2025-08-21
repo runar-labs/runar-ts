@@ -109,5 +109,3 @@ export function makeNapiRemoteAdapter(
 ): NapiRemoteAdapter {
   return new NapiRemoteAdapter(keys, opts);
 }
-
-

@@ -289,7 +289,7 @@ export class Node {
     const requestContext: RequestContext = {
       networkId: this.networkId,
       servicePath: service,
-      requestId: requestId
+      requestId: requestId,
     };
 
     // Call handler with new signature
@@ -303,7 +303,10 @@ export class Node {
   }
 
   // Rust-compatible path-based request API
-  async requestPathLegacy<TReq = unknown, TRes = unknown>(path: string, payload: TReq): Promise<TRes> {
+  async requestPathLegacy<TReq = unknown, TRes = unknown>(
+    path: string,
+    payload: TReq
+  ): Promise<TRes> {
     if (!this.running) throw new Error('Node not started');
     const topicPath = TopicPath.new(path, this.networkId);
     const segments = topicPath.getSegments();
@@ -343,7 +346,7 @@ export class Node {
     const requestContext: RequestContext = {
       networkId: this.networkId,
       servicePath: topicPath.servicePath(),
-      requestId: requestId
+      requestId: requestId,
     };
 
     // Call handler with new signature
@@ -545,8 +548,6 @@ export class Node {
     return removed;
   }
 
-
-
   // Helper method to get retained events for a topic
   private getRetainedEvents(topicPath: TopicPath): EventMessage[] {
     const key = `${this.networkId}:${topicPath.servicePath()}/${topicPath.actionPath()}`;
@@ -590,7 +591,12 @@ export class Node {
       }
 
       // In-memory AnyValue path
-      const payloadAv = payload !== undefined ? (payload instanceof AnyValue ? payload : AnyValue.from(payload)) : AnyValue.null();
+      const payloadAv =
+        payload !== undefined
+          ? payload instanceof AnyValue
+            ? payload
+            : AnyValue.from(payload)
+          : AnyValue.null();
       const service = topicPath.servicePath();
       const action = path.split('/').pop() || '';
       const requestId = uuidv4();
@@ -599,7 +605,7 @@ export class Node {
       const requestContext: RequestContext = {
         networkId: this.networkId,
         servicePath: service,
-        requestId: requestId
+        requestId: requestId,
       };
 
       // Call handler with new signature
@@ -614,7 +620,11 @@ export class Node {
   }
 
   // Helper method for publish with options (used by LifecycleContext)
-  async publish_with_options(topic: string, data?: AnyValue, options?: any): Promise<Result<void, string>> {
+  async publish_with_options(
+    topic: string,
+    data?: AnyValue,
+    options?: any
+  ): Promise<Result<void, string>> {
     try {
       if (!this.running) return err('Node not started');
 
@@ -709,7 +719,13 @@ export class Node {
         path: topic,
       };
 
-      const subscriptionId = this.registry.subscribe(topicPath, topicPath, callback, metadata, 'Local');
+      const subscriptionId = this.registry.subscribe(
+        topicPath,
+        topicPath,
+        callback,
+        metadata,
+        'Local'
+      );
 
       // Deliver past events if requested
       if (options?.includePast) {
@@ -744,12 +760,15 @@ export class Node {
    * Rust-compatible on method - matches Rust API exactly
    * Waits for a single event and returns it
    */
-  async on(topic: string, options?: { timeout?: number; includePast?: boolean }): Promise<Result<AnyValue | undefined, string>> {
+  async on(
+    topic: string,
+    options?: { timeout?: number; includePast?: boolean }
+  ): Promise<Result<AnyValue | undefined, string>> {
     if (!this.running) {
       return err('Node not started');
     }
 
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
       let resolved = false;
       let timeoutId: NodeJS.Timeout | undefined;
 
@@ -781,7 +800,9 @@ export class Node {
 
       // Subscribe (this is the only await in the Promise constructor)
       (async () => {
-        const subscribeResult = await this.subscribe(topic, callback, { includePast: options?.includePast });
+        const subscribeResult = await this.subscribe(topic, callback, {
+          includePast: options?.includePast,
+        });
         if (!isOk(subscribeResult)) {
           resolve(err(unwrapErr(subscribeResult)));
           return;

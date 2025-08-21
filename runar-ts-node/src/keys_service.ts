@@ -27,17 +27,20 @@ export class KeysService implements AbstractService {
   }
 
   async init(context: LifecycleContext): Promise<void> {
-    const result = await context.registerAction('ensure_symmetric_key', async (payload: AnyValue, context: RequestContext) => {
-      // Expect string input only - no fallbacks
-      const stringResult = payload.as<string>();
-      if (!stringResult.ok) {
-        return err('Expected string payload for symmetric key label');
-      }
+    const result = await context.registerAction(
+      'ensure_symmetric_key',
+      async (payload: AnyValue, context: RequestContext) => {
+        // Expect string input only - no fallbacks
+        const stringResult = payload.as<string>();
+        if (!stringResult.ok) {
+          return err('Expected string payload for symmetric key label');
+        }
 
-      const label = stringResult.value;
-      const outBytes = await this.delegate.ensureSymmetricKey(label);
-      return ok(AnyValue.from(outBytes));
-    });
+        const label = stringResult.value;
+        const outBytes = await this.delegate.ensureSymmetricKey(label);
+        return ok(AnyValue.from(outBytes));
+      }
+    );
 
     if (!result.ok) {
       throw new Error(`Failed to register action: ${result.error}`);

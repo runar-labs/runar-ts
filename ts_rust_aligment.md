@@ -18,6 +18,7 @@ This document captures discrepancies between the current TypeScript node impleme
 ## 🚫 Critical Rules - No Exceptions
 
 ### 1. NO FALLBACKS - Single Path Execution
+
 **This is a critical rule with no exceptions.**
 
 - **❌ FORBIDDEN**: Try one type, fallback to another
@@ -45,12 +46,18 @@ return ok(AnyValue.from(stringResult.value));
 ```
 
 ### 2. Action Handlers - Clean API Compliance
+
 Action handlers **MUST** follow this exact signature:
+
 ```typescript
-type ActionHandler = (payload: AnyValue, context: RequestContext) => Promise<Result<AnyValue, string>>;
+type ActionHandler = (
+  payload: AnyValue,
+  context: RequestContext
+) => Promise<Result<AnyValue, string>>;
 ```
 
 **❌ FORBIDDEN**:
+
 - Dealing with `requestId`
 - Manual serialization (`AnyValue.fromBytes()`, `.serialize()`)
 - Complex return objects
@@ -58,13 +65,16 @@ type ActionHandler = (payload: AnyValue, context: RequestContext) => Promise<Res
 - Type `unknown`
 
 **✅ REQUIRED**:
+
 - Pure business logic only
 - Simple `Result<AnyValue, string>` returns
 - Trust framework for serialization/networking
 - Exact type checking with `AnyValue.as<T>()`
 
 ### 3. Framework Trust - Don't Reimplement
+
 **Trust the framework to handle**:
+
 - Serialization/deserialization (CBOR at wire boundaries)
 - Encryption/decryption (for remote calls)
 - Network transport (local vs remote routing)
@@ -76,6 +86,7 @@ type ActionHandler = (payload: AnyValue, context: RequestContext) => Promise<Res
 ### Comprehensive Rust API Analysis
 
 #### Core Types (Rust)
+
 - **TopicPath**: Hierarchical routing with `network:service/action` format
 - **ArcValue**: Type-safe serialization (equivalent to TS AnyValue)
 - **AbstractService**: Trait for service lifecycle (`init`, `start`, `stop`)
@@ -85,6 +96,7 @@ type ActionHandler = (payload: AnyValue, context: RequestContext) => Promise<Res
 - **ActionHandler**: Async function type `(Option<ArcValue>, RequestContext) -> Result<ArcValue>`
 
 #### Public Node API (Rust)
+
 ```rust
 pub async fn request<P>(&self, path: &str, payload: Option<P>) -> Result<ArcValue>
 pub async fn publish(&self, topic: &str, data: Option<ArcValue>) -> Result<()>
@@ -95,6 +107,7 @@ pub async fn unsubscribe(&self, subscription_id: &str) -> Result<()>
 ```
 
 #### LifecycleContext API (Rust)
+
 ```rust
 pub async fn request<P>(&self, topic: impl AsRef<str>, payload: Option<P>) -> Result<ArcValue>
 pub async fn publish(&self, topic: &str, data: Option<ArcValue>) -> Result<()>
@@ -109,52 +122,62 @@ pub async fn subscribe(&self, topic: &str, callback: EventHandler, options: Opti
 ### Critical Misalignments (TS current vs Rust parity)
 
 #### 1. AnyValue vs Bytes Throughout System
+
 - **Rust**: All in-memory operations use `ArcValue`, serialization only at wire boundaries
 - **TS Current**: Action handlers receive `ActionRequest.payload: Uint8Array`, must decode with `AnyValue.fromBytes()`
 - **TS Required**: `ActionRequest.payload: AnyValue`, handlers work directly with AnyValue
 
 #### 2. Event System Type Mismatch
+
 - **Rust**: `EventMessage.payload: ArcValue`, subscribers receive `ArcValue`
 - **TS Current**: `EventMessage.payload: Uint8Array`, subscribers call `AnyValue.fromBytes()`
 - **TS Required**: `EventMessage.payload: AnyValue`, local delivery preserves AnyValue
 
 #### 3. Action Handler Signatures (CRITICAL)
+
 - **Rust**: `ActionHandler = (ArcValue, RequestContext) -> Result<ArcValue>`
 - **TS Current**: Handlers receive `ActionRequest<Uint8Array>` and return complex objects with `requestId`
 - **TS Required**: `ActionHandler = (payload: AnyValue, context: RequestContext) => Promise<Result<AnyValue, string>>`
 - **Key Rule**: Handlers NEVER deal with requestId, serialization, or complex return objects
 
 #### 4. LifecycleContext Method Signatures
+
 - **Rust**: `publish(topic: &str, data: Option<ArcValue>)`
 - **TS Current**: `publish(eventName: string, payload: Uint8Array)`
 - **TS Required**: `publish(eventName: string, payload: AnyValue)`
 
 #### 5. Node Request/Response Flow
+
 - **Rust**: Local requests pass `ArcValue` directly to handlers
 - **TS Current**: Always serializes to bytes even for local calls
 - **TS Required**: Local calls preserve `AnyValue`, only remote calls use bytes
 
 #### 6. Result Type Usage
+
 - **Rust**: All operations return `Result<T, E>` for error handling
 - **TS Current**: Mix of direct returns and custom error handling
 - **TS Required**: Consistent `Result<T, E>` pattern throughout
 
 #### 7. Service Lifecycle Interface
+
 - **Rust**: `AbstractService` trait with `init()`, `start()`, `stop()` async methods
 - **TS Current**: No equivalent interface
 - **TS Required**: `AbstractService` interface matching Rust trait
 
 #### 8. Path-based Routing Semantics
+
 - **Rust**: Actions use `service/action_name` format (slashes allowed)
 - **TS Current**: Validation incorrectly rejects slashes in action names
 - **TS Required**: Allow slashes in action names, match Rust path semantics
 
 #### 9. Remote Adapter Architecture
+
 - **Rust**: No "LinkedNodesRemoteAdapter" concept - remote adapters work at wire level
 - **TS Current**: Has non-existent `LinkedNodesRemoteAdapter` and `requestPathWire`/`publishPathWire`
 - **TS Required**: Remove fabricated APIs, align with Rust's remote adapter model
 
 #### 10. Retention and include_past Semantics
+
 - **Rust**: Retention preserves original event names, include_past uses Duration
 - **TS Current**: Retention loses event names, include_past uses count
 - **TS Required**: Match Rust's retention and replay behavior exactly
@@ -166,6 +189,7 @@ pub async fn subscribe(&self, topic: &str, callback: EventHandler, options: Opti
 All changes are breaking and required for 100% Rust API parity.
 
 #### 1. Core Type Changes (runar-ts-common/src/index.ts)
+
 - **ActionRequest.payload**: `AnyValue` (from `Uint8Array`)
 - **ActionResponseOk.payload**: `AnyValue` (from `Uint8Array`)
 - **EventMessage.payload**: `AnyValue` (from `Uint8Array`)
@@ -175,6 +199,7 @@ All changes are breaking and required for 100% Rust API parity.
 - **Add Result<T, E> utility**: For consistent error handling
 
 #### 2. Node Public API Changes (runar-ts-node/src/index.ts)
+
 - **request<TReq, TRes>(service, action, payload)**: Local calls use AnyValue directly, remote calls serialize
 - **requestPath<TReq, TRes>(path, payload)**: Same as request but with path-based routing
 - **publish<T>(service, event, payload, options?)**: Local delivery uses AnyValue, remote serializes
@@ -184,6 +209,7 @@ All changes are breaking and required for 100% Rust API parity.
 - **unsubscribe(subscriptionId)**: Match Rust signature
 
 #### 3. Action Handler Changes (CRITICAL)
+
 - **Current**: `(req: ActionRequest<Uint8Array>, ctx) => Promise<{ok: boolean, requestId: string, payload?: Uint8Array, error?: string}>`
 - **Required**: `(payload: AnyValue, context: RequestContext) => Promise<Result<AnyValue, string>>`
 - **Key Changes**:
@@ -194,6 +220,7 @@ All changes are breaking and required for 100% Rust API parity.
   - No fallback logic - single path execution
 
 #### 3.1 RequestContext Interface (NEW)
+
 ```typescript
 interface RequestContext {
   networkId: string;
@@ -204,12 +231,14 @@ interface RequestContext {
 ```
 
 #### 4. Event System Changes
+
 - **EventMessage.payload**: `AnyValue` (from `Uint8Array`)
 - **Subscriber callbacks**: Receive `AnyValue` directly
 - **Local publish**: Deliver `AnyValue` to subscribers without serialization
 - **Remote publish**: Serialize `AnyValue` to bytes for wire transport
 
 #### 5. Service Lifecycle Changes
+
 - **Add AbstractService interface**:
   ```typescript
   interface AbstractService {
@@ -226,17 +255,20 @@ interface RequestContext {
   ```
 
 #### 6. Path-based Routing Changes
+
 - **Remove colon validation** in `TopicPath.newActionTopic()` - allow slashes in action names
 - **Match Rust behavior**: Action names like `"services/list"` are valid
 - **Fix TopicPath error handling**: Use Result types consistently
 
 #### 7. Remote Adapter Changes
+
 - **REMOVE LinkedNodesRemoteAdapter**: Non-existent in Rust
 - **REMOVE requestPathWire/publishPathWire**: Non-existent in Rust
 - **Keep RemoteAdapter interface**: Wire-level bytes only
 - **Align with Rust**: Remote adapters work at byte level only
 
 #### 8. Registry Service Changes
+
 - **Handler signatures**: Return `AnyValue` directly, no `serialize()`
 - **Node handles serialization**: Only for remote calls
 - **Match Rust behavior**: Local calls preserve AnyValue semantics
@@ -246,6 +278,7 @@ interface RequestContext {
 ### Concrete Implementation Plan (Files and Key Edits)
 
 #### Phase 1: Core Type Changes (runar-ts-common)
+
 1. **runar-ts-common/src/index.ts**
    - Change `ActionRequest.payload: Uint8Array` → `AnyValue`
    - Change `ActionResponseOk.payload: Uint8Array` → `AnyValue`
@@ -261,6 +294,7 @@ interface RequestContext {
    - Match Rust path semantics exactly
 
 #### Phase 2: Node API Changes (runar-ts-node)
+
 3. **runar-ts-node/src/index.ts (Node class)**
    - Modify `request()`/`requestPath()`: Local calls use AnyValue, remote calls serialize
    - Modify `publish()`/`publishPath()`: Local delivery preserves AnyValue, remote serializes
@@ -275,6 +309,7 @@ interface RequestContext {
    - Align remote adapter behavior with Rust wire-level semantics
 
 #### Phase 3: Service Implementation Changes
+
 5. **runar-ts-node/src/registry_service.ts**
    - Update action handlers to return `AnyValue` directly (no `serialize()`)
    - Trust Node to handle serialization for remote calls only
@@ -285,6 +320,7 @@ interface RequestContext {
    - Ensure all context methods match Rust signatures exactly
 
 #### Phase 4: Test Updates
+
 7. **Test files under runar-ts-node/test/**
    - Update action handlers to receive `AnyValue` and return `AnyValue`
    - Update event subscribers to work with `AnyValue` payloads
@@ -383,21 +419,15 @@ interface RequestContext {
 ### Implementation Priority
 
 **High Priority (Core Functionality)**
+
 1. ✅ Remove LinkedNodesRemoteAdapter and wire methods
 2. ✅ Fix AnyValue vs bytes throughout system
 3. ✅ Update action handler signatures
 4. ✅ Update event system to use AnyValue
 5. ✅ Fix path-based routing validation
 
-**Medium Priority (API Alignment)**
-6. 🔄 Add AbstractService interface
-7. 🔄 Update Node public API signatures
-8. 🔄 Fix Result type usage throughout
-9. 🔄 Update LifecycleContext methods
+**Medium Priority (API Alignment)** 6. 🔄 Add AbstractService interface 7. 🔄 Update Node public API signatures 8. 🔄 Fix Result type usage throughout 9. 🔄 Update LifecycleContext methods
 
-**Low Priority (Advanced Features)**
-10. 🔄 Fix retention and include_past semantics
-11. 🔄 Update all tests
-12. 🔄 Cross-language roundtrip testing
+**Low Priority (Advanced Features)** 10. 🔄 Fix retention and include_past semantics 11. 🔄 Update all tests 12. 🔄 Cross-language roundtrip testing
 
 **Status**: High priority items completed. Ready to proceed with medium priority items for complete alignment.

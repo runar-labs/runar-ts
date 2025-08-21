@@ -62,7 +62,7 @@ export enum ServiceState {
   Stopped = 'Stopped',
   Paused = 'Paused',
   Error = 'Error',
-  Unknown = 'Unknown'
+  Unknown = 'Unknown',
 }
 
 // Abstract service interface (matching Rust AbstractService trait)

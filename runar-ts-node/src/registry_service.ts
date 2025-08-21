@@ -44,66 +44,82 @@ export class RegistryService implements AbstractService {
     });
 
     // services/{service_path} -> ServiceMetadata
-    const result2 = await context.registerAction('services/{service_path}', async (payload, context) => {
-      const services = this.getLocalServices();
-      // Extract service_path parameter from context or payload
-      // In the new API, parameters are extracted from the request context
-      const servicePath = context.servicePath;
-      const match = this.findServiceByPath(servicePath, services);
-      const meta = match
-        ? await this.delegate.getServiceMetadata(
-            TopicPath.newService(this._networkId ?? 'default', match.service.path())
-          )
-        : null;
-      return ok(AnyValue.from(meta));
-    });
+    const result2 = await context.registerAction(
+      'services/{service_path}',
+      async (payload, context) => {
+        const services = this.getLocalServices();
+        // Extract service_path parameter from context or payload
+        // In the new API, parameters are extracted from the request context
+        const servicePath = context.servicePath;
+        const match = this.findServiceByPath(servicePath, services);
+        const meta = match
+          ? await this.delegate.getServiceMetadata(
+              TopicPath.newService(this._networkId ?? 'default', match.service.path())
+            )
+          : null;
+        return ok(AnyValue.from(meta));
+      }
+    );
 
     // services/{service_path}/state -> minimal metadata with state
-    const result3 = await context.registerAction('services/{service_path}/state', async (payload, context) => {
-      const services = this.getLocalServices();
-      const servicePath = context.servicePath;
-      const match = this.findServiceByPath(servicePath, services);
-      const state = match?.serviceState ?? ServiceState.Unknown;
-      return ok(AnyValue.from({ service_path: match?.service.path() ?? '', state }));
-    });
+    const result3 = await context.registerAction(
+      'services/{service_path}/state',
+      async (payload, context) => {
+        const services = this.getLocalServices();
+        const servicePath = context.servicePath;
+        const match = this.findServiceByPath(servicePath, services);
+        const state = match?.serviceState ?? ServiceState.Unknown;
+        return ok(AnyValue.from({ service_path: match?.service.path() ?? '', state }));
+      }
+    );
 
     // services/{service_path}/pause -> transition to Paused if valid
-    const result4 = await context.registerAction('services/{service_path}/pause', async (payload, context) => {
-      const services = this.getLocalServices();
-      const servicePath = context.servicePath;
-      const match = this.findServiceByPath(servicePath, services);
-      if (match) {
-        // validate via delegate
-        await this.delegate.validatePauseTransition(
-          TopicPath.newService(this._networkId ?? 'default', match.service.path())
-        );
-        match.serviceState = ServiceState.Paused;
-        return ok(AnyValue.from(ServiceState.Paused));
+    const result4 = await context.registerAction(
+      'services/{service_path}/pause',
+      async (payload, context) => {
+        const services = this.getLocalServices();
+        const servicePath = context.servicePath;
+        const match = this.findServiceByPath(servicePath, services);
+        if (match) {
+          // validate via delegate
+          await this.delegate.validatePauseTransition(
+            TopicPath.newService(this._networkId ?? 'default', match.service.path())
+          );
+          match.serviceState = ServiceState.Paused;
+          return ok(AnyValue.from(ServiceState.Paused));
+        }
+        return err('Service not found');
       }
-      return err('Service not found');
-    });
+    );
 
     // services/{service_path}/resume -> transition to Running if valid
-    const result5 = await context.registerAction('services/{service_path}/resume', async (payload, context) => {
-      const services = this.getLocalServices();
-      const servicePath = context.servicePath;
-      const match = this.findServiceByPath(servicePath, services);
-      if (match) {
-        await this.delegate.validateResumeTransition(
-          TopicPath.newService(this._networkId ?? 'default', match.service.path())
-        );
-        match.serviceState = ServiceState.Running;
-        return ok(AnyValue.from(ServiceState.Running));
+    const result5 = await context.registerAction(
+      'services/{service_path}/resume',
+      async (payload, context) => {
+        const services = this.getLocalServices();
+        const servicePath = context.servicePath;
+        const match = this.findServiceByPath(servicePath, services);
+        if (match) {
+          await this.delegate.validateResumeTransition(
+            TopicPath.newService(this._networkId ?? 'default', match.service.path())
+          );
+          match.serviceState = ServiceState.Running;
+          return ok(AnyValue.from(ServiceState.Running));
+        }
+        return err('Service not found');
       }
-      return err('Service not found');
-    });
+    );
 
     // Check all registration results
     if (!result1.ok) throw new Error(`Failed to register services/list: ${result1.error}`);
-    if (!result2.ok) throw new Error(`Failed to register services/{service_path}: ${result2.error}`);
-    if (!result3.ok) throw new Error(`Failed to register services/{service_path}/state: ${result3.error}`);
-    if (!result4.ok) throw new Error(`Failed to register services/{service_path}/pause: ${result4.error}`);
-    if (!result5.ok) throw new Error(`Failed to register services/{service_path}/resume: ${result5.error}`);
+    if (!result2.ok)
+      throw new Error(`Failed to register services/{service_path}: ${result2.error}`);
+    if (!result3.ok)
+      throw new Error(`Failed to register services/{service_path}/state: ${result3.error}`);
+    if (!result4.ok)
+      throw new Error(`Failed to register services/{service_path}/pause: ${result4.error}`);
+    if (!result5.ok)
+      throw new Error(`Failed to register services/{service_path}/resume: ${result5.error}`);
   }
 
   async start(_context: LifecycleContext): Promise<void> {}
