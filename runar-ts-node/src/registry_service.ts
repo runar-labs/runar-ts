@@ -38,8 +38,7 @@ export class RegistryService implements AbstractService {
     context.addActionHandler('services/list', async req => {
       const all = await this.delegate.getAllServiceMetadata(true);
       const list = Array.from(all.values());
-      const out = AnyValue.from(list).serialize();
-      return { ok: true, requestId: req.requestId, payload: out.ok ? out.value : new Uint8Array() };
+      return { ok: true, requestId: req.requestId, payload: AnyValue.from(list) };
     });
 
     // services/{service_path} -> ServiceMetadata
@@ -47,14 +46,12 @@ export class RegistryService implements AbstractService {
       const services = this.getLocalServices();
       // Extract parameters best-effort by scanning segments
       const match = this.findServiceByParam(req.service, req.action, services);
-      const out = AnyValue.from(
-        match
-          ? await this.delegate.getServiceMetadata(
-              TopicPath.newService(this._networkId ?? 'default', match.service.path())
-            )
-          : null
-      ).serialize();
-      return { ok: true, requestId: req.requestId, payload: out.ok ? out.value : new Uint8Array() };
+      const meta = match
+        ? await this.delegate.getServiceMetadata(
+            TopicPath.newService(this._networkId ?? 'default', match.service.path())
+          )
+        : null;
+      return { ok: true, requestId: req.requestId, payload: AnyValue.from(meta) };
     });
 
     // services/{service_path}/state -> minimal metadata with state
@@ -62,8 +59,11 @@ export class RegistryService implements AbstractService {
       const services = this.getLocalServices();
       const match = this.findServiceByParam(req.service, req.action, services);
       const state = match?.serviceState ?? ServiceState.Unknown;
-      const out = AnyValue.from({ service_path: match?.service.path() ?? '', state }).serialize();
-      return { ok: true, requestId: req.requestId, payload: out.ok ? out.value : new Uint8Array() };
+      return {
+        ok: true,
+        requestId: req.requestId,
+        payload: AnyValue.from({ service_path: match?.service.path() ?? '', state }),
+      };
     });
 
     // services/{service_path}/pause -> transition to Paused if valid
@@ -76,12 +76,7 @@ export class RegistryService implements AbstractService {
           TopicPath.newService(this._networkId ?? 'default', match.service.path())
         );
         match.serviceState = ServiceState.Paused;
-        const out = AnyValue.from(ServiceState.Paused).serialize();
-        return {
-          ok: true,
-          requestId: req.requestId,
-          payload: out.ok ? out.value : new Uint8Array(),
-        };
+        return { ok: true, requestId: req.requestId, payload: AnyValue.from(ServiceState.Paused) };
       }
       return { ok: false, requestId: req.requestId, error: 'Service not found' } as const;
     });
@@ -95,12 +90,7 @@ export class RegistryService implements AbstractService {
           TopicPath.newService(this._networkId ?? 'default', match.service.path())
         );
         match.serviceState = ServiceState.Running;
-        const out = AnyValue.from(ServiceState.Running).serialize();
-        return {
-          ok: true,
-          requestId: req.requestId,
-          payload: out.ok ? out.value : new Uint8Array(),
-        };
+        return { ok: true, requestId: req.requestId, payload: AnyValue.from(ServiceState.Running) };
       }
       return { ok: false, requestId: req.requestId, error: 'Service not found' } as const;
     });

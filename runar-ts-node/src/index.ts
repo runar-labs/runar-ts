@@ -149,7 +149,10 @@ export class Node {
   private readonly networkId: string;
   private readonly registry = new ServiceRegistry();
   private running = false;
-  private retainedEvents = new Map<string, Array<{ ts: number; data: Uint8Array | null }>>();
+  private retainedEvents = new Map<
+    string,
+    Array<{ ts: number; event: string; payload: AnyValue }>
+  >();
   private retainedIndex = new PathTrie<string>();
   private retainedKeyToTopic = new Map<string, TopicPath>();
   private readonly maxRetainedPerTopic = 100;
@@ -214,7 +217,7 @@ export class Node {
         const topic = TopicPath.newService(this.networkId, reg.path()).newActionTopic(actionName);
         this.registry.addLocalActionHandler(topic, handler);
       },
-      publish: async (eventName: string, payload: Uint8Array) => {
+      publish: async (eventName: string, payload: AnyValue) => {
         await this.publish(reg.path(), eventName, payload);
       },
     };
@@ -231,7 +234,7 @@ export class Node {
           const topic = TopicPath.newService(this.networkId, svc.path()).newActionTopic(actionName);
           this.registry.addLocalActionHandler(topic, handler);
         },
-        publish: async (eventName: string, payload: Uint8Array) => {
+        publish: async (eventName: string, payload: AnyValue) => {
           await this.publish(svc.path(), eventName, payload);
         },
       };
@@ -246,7 +249,7 @@ export class Node {
           const topic = TopicPath.newService(this.networkId, svc.path()).newActionTopic(actionName);
           this.registry.addLocalActionHandler(topic, handler);
         },
-        publish: async (eventName: string, payload: Uint8Array) => {
+        publish: async (eventName: string, payload: AnyValue) => {
           await this.publish(svc.path(), eventName, payload);
         },
       };
@@ -302,15 +305,12 @@ export class Node {
         `No handler for ${actionTopic.asString?.() ?? `${this.networkId}:${service}/${action}`}`
       );
     }
-    // Use ArcValue in-memory for local call; serialize only to satisfy ActionRequest shape
-    const inArc = AnyValue.from(payload);
-    const ser = inArc.serialize();
-    if (!ser.ok) throw ser.error;
-    const req: ActionRequest = { service, action, payload: ser.value, requestId: uuidv4() };
+    // In-memory AnyValue path
+    const payloadAv = payload instanceof AnyValue ? (payload as AnyValue) : AnyValue.from(payload);
+    const req: ActionRequest = { service, action, payload: payloadAv, requestId: uuidv4() };
     const res = await handlers[0]!(req);
     if (res.ok) {
-      const outArc = AnyValue.fromBytes<TRes>(res.payload);
-      const out = outArc.as<TRes>();
+      const out = res.payload.as<TRes>();
       if (!out.ok) throw out.error;
       return out.value;
     }
@@ -347,19 +347,16 @@ export class Node {
       }
       throw new Error(`No handler for ${path}`);
     }
-    const inArc = AnyValue.from(payload);
-    const ser = inArc.serialize();
-    if (!ser.ok) throw ser.error;
+    const payloadAv = payload instanceof AnyValue ? (payload as AnyValue) : AnyValue.from(payload);
     const req = {
       service: topicPath.servicePath(),
       action: topicPath.actionPath(),
-      payload: ser.value,
+      payload: payloadAv,
       requestId: uuidv4(),
     } as ActionRequest;
     const res = await handlers[0]!(req);
     if (res.ok) {
-      const outArc = AnyValue.fromBytes<TRes>(res.payload);
-      const out = outArc.as<TRes>();
+      const out = res.payload.as<TRes>();
       if (!out.ok) throw out.error;
       return out.value;
     }
@@ -376,18 +373,16 @@ export class Node {
     const evtTopic = TopicPath.newService(this.networkId, service).newEventTopic(event);
     const subs = this.registry.getSubscribers(evtTopic);
     const inArc = AnyValue.from(payload);
-    const bytesRes = inArc.serialize();
-    if (!bytesRes.ok) throw bytesRes.error;
     const message: EventMessage = {
       service,
       event,
-      payload: bytesRes.value,
+      payload: inArc,
       timestampMs: Date.now(),
     };
     if (options?.retain) {
       const key = `${this.networkId}:${service}/${event}`;
       const list = this.retainedEvents.get(key) ?? [];
-      list.push({ ts: message.timestampMs, data: message.payload });
+      list.push({ ts: message.timestampMs, event, payload: inArc });
       if (list.length > this.maxRetainedPerTopic) {
         list.splice(0, list.length - this.maxRetainedPerTopic);
       }
@@ -399,7 +394,9 @@ export class Node {
     // If no locals and remote is configured, forward publish
     if (subs.length === 0 && this.remoteAdapter) {
       const path = evtTopic.asString?.() ?? `${this.networkId}:${service}/${event}`;
-      await this.remoteAdapter.publish(path, message.payload);
+      const ser = inArc.serialize();
+      if (!ser.ok) throw ser.error;
+      await this.remoteAdapter.publish(path, ser.value);
     }
   }
 
@@ -421,18 +418,16 @@ export class Node {
     );
     const subs = this.registry.getSubscribers(evtTopic);
     const inArc = AnyValue.from(payload);
-    const bytesRes = inArc.serialize();
-    if (!bytesRes.ok) throw bytesRes.error;
     const message: EventMessage = {
       service: topicPath.servicePath(),
       event: actionPath,
-      payload: bytesRes.value,
+      payload: inArc,
       timestampMs: Date.now(),
     };
     if (options?.retain) {
       const key = `${this.networkId}:${topicPath.servicePath()}/${actionPath}`;
       const list = this.retainedEvents.get(key) ?? [];
-      list.push({ ts: message.timestampMs, data: message.payload });
+      list.push({ ts: message.timestampMs, event: actionPath, payload: inArc });
       if (list.length > this.maxRetainedPerTopic) {
         list.splice(0, list.length - this.maxRetainedPerTopic);
       }
@@ -442,9 +437,11 @@ export class Node {
     }
     await Promise.allSettled(subs.map(s => s.subscriber(message)));
     if (subs.length === 0 && this.remoteAdapter) {
+      const ser = inArc.serialize();
+      if (!ser.ok) throw ser.error;
       await this.remoteAdapter.publish(
         path.includes(':') ? path : `${this.networkId}:${path}`,
-        message.payload
+        ser.value
       );
     }
   }
@@ -463,7 +460,7 @@ export class Node {
     const id = this.registry.subscribe(topic, serviceTopic, subscriber, metadata, 'Local');
     if (options?.includePast && options.includePast > 0) {
       const matched = this.retainedIndex.findWildcardMatches(topic).map(m => m.content);
-      const history: Array<{ ts: number; data: Uint8Array | null }> = [];
+      const history: Array<{ ts: number; event: string; payload: AnyValue }> = [];
       for (const key of matched) {
         const list = this.retainedEvents.get(key) ?? [];
         history.push(...list);
@@ -474,8 +471,8 @@ export class Node {
         deliver.map(e =>
           subscriber({
             service,
-            event: eventOrPattern,
-            payload: e.data ?? new Uint8Array(),
+            event: e.event,
+            payload: e.payload,
             timestampMs: e.ts,
           })
         )
@@ -536,5 +533,19 @@ export class Node {
       if (this.retainedEvents.delete(key)) removed++;
     }
     return removed;
+  }
+
+  // Wire entrypoints for remote adapters
+  async requestPathWire(path: string, payload: Uint8Array): Promise<Uint8Array> {
+    const av = AnyValue.fromBytes(payload);
+    const res = await this.requestPath(path, av);
+    const out = AnyValue.from(res).serialize();
+    if (!out.ok) throw out.error;
+    return out.value;
+  }
+
+  async publishPathWire(path: string, payload: Uint8Array): Promise<void> {
+    const av = AnyValue.fromBytes(payload);
+    await this.publishPath(path, av);
   }
 }

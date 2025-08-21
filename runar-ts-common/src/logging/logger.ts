@@ -1,4 +1,4 @@
-import { getLogSink, isLevelEnabled, LogLevel } from './config';
+import { getLogSink, isLevelEnabled, LogLevel } from './config.js';
 
 export enum Component {
   Node = 'Node',

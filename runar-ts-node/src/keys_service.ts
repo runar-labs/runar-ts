@@ -27,8 +27,7 @@ export class KeysService implements AbstractService {
 
   async init(context: LifecycleContext): Promise<void> {
     context.addActionHandler('ensure_symmetric_key', async req => {
-      const av = AnyValue.fromBytes(req.payload);
-      const r = av.as<any>();
+      const r = req.payload.as<any>();
       let label = '';
       if (r.ok) {
         const v = r.value;
@@ -39,8 +38,7 @@ export class KeysService implements AbstractService {
         }
       }
       const outBytes = await this.delegate.ensureSymmetricKey(label);
-      const out = AnyValue.from(outBytes).serialize();
-      return { ok: true, requestId: req.requestId, payload: out.ok ? out.value : new Uint8Array() };
+      return { ok: true, requestId: req.requestId, payload: AnyValue.from(outBytes) };
     });
   }
 

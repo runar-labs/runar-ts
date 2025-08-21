@@ -1,4 +1,4 @@
-import { TopicPath, PathSegmentType } from './TopicPath';
+import { TopicPath, PathSegmentType } from './TopicPath.js';
 
 export type PathTrieMatch<T> = { content: T; params: Map<string, string> };
 

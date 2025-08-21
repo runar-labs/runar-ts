@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rimraf dist",
-    "test": "tsx --test test/*.ts"
+    "test": "NODE_OPTIONS=--experimental-specifier-resolution=node tsx --test test/*.ts"
   },
   "dependencies": {
     "runar-ts-serializer": "workspace:*",

@@ -30,6 +30,9 @@
     "runar-ts-common": {
       "name": "runar-ts-common",
       "version": "0.0.1",
+      "dependencies": {
+        "runar-ts-serializer": "workspace:*",
+      },
       "devDependencies": {
         "rimraf": "^6.0.1",
         "typescript": "^5.5.4",

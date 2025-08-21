@@ -1,4 +1,5 @@
 export type CborBytes = Uint8Array;
+import type { AnyValue } from 'runar-ts-serializer';
 
 export interface PeerInfo {
   peerId: string;
@@ -17,10 +18,10 @@ export class RunarError extends Error {
   }
 }
 
-export * from './routing/TopicPath';
-export * from './routing/PathTrie';
-export * from './logging/logger';
-export * from './logging/config';
+export * from './routing/TopicPath.js';
+export * from './routing/PathTrie.js';
+export * from './logging/logger.js';
+export * from './logging/config.js';
 
 // Service lifecycle and interface mirroring Rust AbstractService
 export enum ServiceState {
@@ -36,7 +37,8 @@ export enum ServiceState {
 export interface LifecycleContext {
   networkId: string;
   addActionHandler: (actionName: string, handler: ActionHandler) => void;
-  publish: (eventName: string, payload: CborBytes) => Promise<void>;
+  // In-memory publish, no serialization
+  publish: (eventName: string, payload: AnyValue) => Promise<void>;
 }
 
 export interface AbstractService {
@@ -59,14 +61,16 @@ export type EventName = string;
 export interface ActionRequest {
   service: ServiceName;
   action: ActionName;
-  payload: CborBytes;
+  // In-memory payload, no serialization
+  payload: AnyValue;
   requestId: string;
 }
 
 export interface ActionResponseOk {
   ok: true;
   requestId: string;
-  payload: CborBytes;
+  // In-memory payload, no serialization
+  payload: AnyValue;
 }
 
 export interface ActionResponseErr {
@@ -80,7 +84,8 @@ export type ActionResponse = ActionResponseOk | ActionResponseErr;
 export interface EventMessage {
   service: ServiceName;
   event: EventName;
-  payload: CborBytes;
+  // In-memory payload, no serialization
+  payload: AnyValue;
   timestampMs: number;
 }
 

@@ -16,8 +16,7 @@ describe('Retained events clearing', () => {
       'svc',
       '>',
       evt => {
-        const av = AnyValue.fromBytes<{ n: number }>(evt.payload);
-        const r = av.as<{ n: number }>();
+        const r = evt.payload.as<{ n: number }>();
         if (r.ok) seen.push(r.value.n);
       },
       { includePast: 10 }
@@ -33,8 +32,7 @@ describe('Retained events clearing', () => {
       'svc',
       '>',
       evt => {
-        const av = AnyValue.fromBytes<{ n: number }>(evt.payload);
-        const r = av.as<{ n: number }>();
+        const r = evt.payload.as<{ n: number }>();
         if (r.ok) seen2.push(r.value.n);
       },
       { includePast: 10 }

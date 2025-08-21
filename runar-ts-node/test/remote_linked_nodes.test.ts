@@ -27,13 +27,13 @@ class MulService implements AbstractService {
   }
   async init(ctx: LifecycleContext): Promise<void> {
     ctx.addActionHandler('times', async req => {
-      const r = AnyValue.fromBytes<{ a: number; b: number }>(req.payload).as<{
-        a: number;
-        b: number;
-      }>();
+      const r = req.payload.as<{ a: number; b: number }>();
       const { a, b } = r.ok ? r.value : { a: 0, b: 0 };
-      const out = AnyValue.from({ p: a * b }).serialize();
-      return { ok: true, requestId: req.requestId, payload: out.ok ? out.value : new Uint8Array() };
+      return {
+        ok: true,
+        requestId: req.requestId,
+        payload: AnyValue.from({ p: a * b }),
+      };
     });
   }
   async start(): Promise<void> {}
@@ -48,8 +48,8 @@ describe('LinkedNodesRemoteAdapter', () => {
 
     a.setRemoteAdapter(
       new LinkedNodesRemoteAdapter({
-        requestPath: (path: string, payload: any) => b.requestPath(path, payload),
-        publishPath: (path: string, payload: any) => b.publishPath(path, payload),
+        requestPathWire: (path: string, payload: Uint8Array) => b.requestPathWire(path, payload),
+        publishPathWire: (path: string, payload: Uint8Array) => b.publishPathWire(path, payload),
       })
     );
 

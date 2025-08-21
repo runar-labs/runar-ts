@@ -27,10 +27,12 @@ class EchoService implements AbstractService {
   }
   async init(ctx: LifecycleContext): Promise<void> {
     ctx.addActionHandler('ping', async req => {
-      const av = AnyValue.fromBytes<{ msg: string }>(req.payload);
-      const r = av.as<{ msg: string }>();
-      const out = AnyValue.from({ pong: r.ok ? r.value.msg : '' }).serialize();
-      return { ok: true, requestId: req.requestId, payload: out.ok ? out.value : new Uint8Array() };
+      const r = req.payload.as<{ msg: string }>();
+      return {
+        ok: true,
+        requestId: req.requestId,
+        payload: AnyValue.from({ pong: r.ok ? r.value.msg : '' }),
+      };
     });
   }
   async start(): Promise<void> {}

@@ -1,4 +1,4 @@
-import { Component } from './logger';
+import { Component } from './logger.js';
 
 export enum LogLevel {
   Error = 'Error',

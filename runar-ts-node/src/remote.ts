@@ -110,20 +110,16 @@ export function makeNapiRemoteAdapter(
 export class LinkedNodesRemoteAdapter implements RemoteAdapter {
   constructor(
     private readonly destNode: {
-      requestPath: (path: string, payload: any) => Promise<any>;
-      publishPath: (path: string, payload: any) => Promise<void>;
+      requestPathWire: (path: string, payload: Uint8Array) => Promise<Uint8Array>;
+      publishPathWire: (path: string, payload: Uint8Array) => Promise<void>;
     }
   ) {}
 
   async request(path: string, payload: Uint8Array): Promise<Uint8Array> {
-    const req = AnyValue.fromBytes<any>(payload).as<any>();
-    const res = await this.destNode.requestPath(path, req.ok ? req.value : undefined);
-    const out = AnyValue.from(res).serialize();
-    return out.ok ? out.value : new Uint8Array();
+    return await this.destNode.requestPathWire(path, payload);
   }
 
   async publish(path: string, payload: Uint8Array): Promise<void> {
-    const req = AnyValue.fromBytes<any>(payload).as<any>();
-    await this.destNode.publishPath(path, req.ok ? req.value : undefined);
+    await this.destNode.publishPathWire(path, payload);
   }
 }
