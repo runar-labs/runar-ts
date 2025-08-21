@@ -1,9 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { Node, NapiKeysDelegate, KeysService } from '../src';
+import { Node, KeysService } from '../src';
+import type { KeysDelegate } from '../src/keys_delegate';
 
-class MockKeysDelegate extends NapiKeysDelegate {
-  constructor() { super({ mobileDeriveUserProfileKey: (l: string) => Buffer.from(`pk:${l}`) }); }
+class MockKeysDelegate implements KeysDelegate {
+  async ensureSymmetricKey(keyName: string): Promise<Uint8Array> {
+    return new TextEncoder().encode(`pk:${keyName}`);
+  }
 }
 
 describe('KeysService', () => {

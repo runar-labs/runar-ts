@@ -1,5 +1,6 @@
 import { encode } from 'cbor-x';
 import type runar from 'runar-nodejs-api';
+import { AnyValue } from 'runar-ts-serializer';
 
 export interface RemoteAdapter {
   start?(): Promise<void>;
@@ -21,6 +22,7 @@ export class NapiRemoteAdapter implements RemoteAdapter {
   private discovery?: any;
   private destPeerId?: string;
   private profilePk?: Uint8Array;
+  private discoveryOptsCbor?: Uint8Array;
 
   constructor(keys: any, opts?: NapiRemoteAdapterOptions) {
     const api = (require('runar-nodejs-api') as typeof runar) as any;
@@ -30,6 +32,7 @@ export class NapiRemoteAdapter implements RemoteAdapter {
     if (opts?.discoveryOptions) {
       const discCbor = encode(opts.discoveryOptions);
       this.discovery = new api.Discovery(keys, Buffer.from(discCbor));
+      this.discoveryOptsCbor = discCbor;
     }
     this.destPeerId = opts?.destPeerId;
     this.profilePk = opts?.profilePublicKey;
@@ -38,7 +41,7 @@ export class NapiRemoteAdapter implements RemoteAdapter {
   async start(): Promise<void> {
     await this.transport.start();
     if (this.discovery) {
-      await this.discovery.init(encode({}));
+      await this.discovery.init(Buffer.from(this.discoveryOptsCbor ?? encode({})));
       await this.discovery.bindEventsToTransport(this.transport);
       await this.discovery.startAnnouncing();
     }
@@ -99,6 +102,22 @@ export class LoopbackRemoteAdapter implements RemoteAdapter {
 
 export function makeNapiRemoteAdapter(keys: any, opts?: NapiRemoteAdapterOptions): NapiRemoteAdapter {
   return new NapiRemoteAdapter(keys, opts);
+}
+
+export class LinkedNodesRemoteAdapter implements RemoteAdapter {
+  constructor(private readonly destNode: { requestPath: (path: string, payload: any) => Promise<any>; publishPath: (path: string, payload: any) => Promise<void> }) {}
+
+  async request(path: string, payload: Uint8Array): Promise<Uint8Array> {
+    const req = AnyValue.fromBytes<any>(payload).as<any>();
+    const res = await this.destNode.requestPath(path, req.ok ? req.value : undefined);
+    const out = AnyValue.from(res).serialize();
+    return out.ok ? out.value : new Uint8Array();
+  }
+
+  async publish(path: string, payload: Uint8Array): Promise<void> {
+    const req = AnyValue.fromBytes<any>(payload).as<any>();
+    await this.destNode.publishPath(path, req.ok ? req.value : undefined);
+  }
 }
 
 

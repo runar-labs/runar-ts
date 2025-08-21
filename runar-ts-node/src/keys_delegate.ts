@@ -7,8 +7,7 @@ export class NapiKeysDelegate implements KeysDelegate {
   constructor(keys: any) { this.keys = keys; }
 
   async ensureSymmetricKey(keyName: string): Promise<Uint8Array> {
-    // Derive a user profile key deterministically by label
-    const out: Buffer = this.keys.mobileDeriveUserProfileKey(keyName);
+    const out: Buffer = this.keys.ensureSymmetricKey(keyName);
     return new Uint8Array(out);
   }
 }
