@@ -1,18 +1,16 @@
 import { v4 as uuidv4 } from 'uuid';
 import { AnyValue } from 'runar-ts-serializer';
+import { PathTrie, TopicPath } from 'runar-ts-common';
 import {
   ActionHandler,
   ActionRequest,
-  ActionResponse,
   EventMessage,
   EventSubscriber,
   ServiceName,
-  PathTrie,
-  TopicPath,
   AbstractService,
   LifecycleContext,
   ServiceState,
-} from 'runar-ts-common';
+} from './core';
 import { SubscriptionMetadata } from 'runar-ts-schemas';
 import type { RemoteAdapter } from './remote';
 export { NodeConfig } from './config';
@@ -23,6 +21,7 @@ export { NodeRegistryDelegate } from './registry_delegate';
 export type { RegistryDelegate } from './registry_delegate';
 export { NapiRemoteAdapter, LoopbackRemoteAdapter, makeNapiRemoteAdapter } from './remote';
 import { NapiRemoteAdapter as NapiRemoteAdapterValue } from './remote';
+import { KeysService } from './keys_service';
 export { KeysService } from './keys_service';
 export { NapiKeysDelegate } from './keys_delegate';
 
@@ -201,7 +200,6 @@ export class Node {
   }
 
   addKeysService(delegate: { ensureSymmetricKey(name: string): Promise<Uint8Array> }): void {
-    const { KeysService } = require('./keys_service');
     this.addService(new KeysService(delegate));
   }
 

@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rimraf dist",
-    "test": "tsx --test test/*.ts"
+    "test": "bun test"
   },
   "dependencies": {
     "cbor-x": "^1.5.7",

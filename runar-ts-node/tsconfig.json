@@ -5,7 +5,7 @@
     "rootDir": "src",
     "baseUrl": ".",
     "paths": {
-      "runar-ts-common": ["../runar-ts-common/dist/index.js"]
+      "runar-ts-common": ["../runar-ts-common/dist/index.d.ts"]
     }
   },
   "include": ["src/**/*"]

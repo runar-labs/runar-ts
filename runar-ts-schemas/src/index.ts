@@ -13,6 +13,17 @@ export type SchemaDataType =
   | { Union: SchemaDataType[] }
   | 'Any';
 
+// Service lifecycle states
+export enum ServiceState {
+  Created = 'Created',
+  Initialized = 'Initialized',
+  Running = 'Running',
+  Stopped = 'Stopped',
+  Paused = 'Paused',
+  Error = 'Error',
+  Unknown = 'Unknown',
+}
+
 export interface FieldSchema {
   name: string;
   data_type: SchemaDataType;

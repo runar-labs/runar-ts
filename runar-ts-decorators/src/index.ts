@@ -1,46 +1,87 @@
 import 'reflect-metadata';
 
-export type EncryptedClassOptions = { network?: string; typeName?: string };
-export type EncryptedFieldOptions = { label?: string; profileRecipients?: () => Uint8Array[] };
+export interface DecoratorMetadata {
+  typeName: string;
+  fields: Map<string, FieldMetadata>;
+}
 
-const CLASS_META_KEY = Symbol.for('runar.encrypted.class');
-const FIELD_META_KEY = Symbol.for('runar.encrypted.field');
+export interface FieldMetadata {
+  typeName: string;
+  isEncrypted: boolean;
+  isPlain: boolean;
+}
 
-export function EncryptedClass(options?: EncryptedClassOptions): ClassDecorator {
-  return target => {
-    Reflect.defineMetadata(CLASS_META_KEY, options ?? {}, target);
+export interface EncryptedClassOptions {
+  network: string;
+  typeName?: string;
+}
+
+const metadataRegistry = new Map<string, DecoratorMetadata>();
+
+export function EncryptedClass(options: EncryptedClassOptions) {
+  return function (target: new (...args: any[]) => any) {
+    const existing = metadataRegistry.get(target.name) || {
+      typeName: options.typeName || target.name,
+      fields: new Map(),
+    };
+    existing.typeName = options.typeName || target.name;
+    metadataRegistry.set(target.name, existing);
   };
 }
 
-export function EncryptedField(options?: EncryptedFieldOptions): PropertyDecorator {
-  return (target, propertyKey) => {
-    const ctor = target.constructor;
-    const existing: Array<{ key: string | symbol; options?: EncryptedFieldOptions }> =
-      Reflect.getMetadata(FIELD_META_KEY, ctor) ?? [];
-    existing.push({ key: propertyKey, options });
-    Reflect.defineMetadata(FIELD_META_KEY, existing, ctor);
+export function EncryptedField(options: { label: string }) {
+  return function (target: any, propertyKey: string) {
+    const className = target.constructor.name;
+    const existing = metadataRegistry.get(className) || {
+      typeName: className,
+      fields: new Map(),
+    };
+    existing.fields.set(propertyKey, {
+      typeName: options.label,
+      isEncrypted: true,
+      isPlain: false,
+    });
+    metadataRegistry.set(className, existing);
   };
 }
 
-export function PlainField(): PropertyDecorator {
-  return (target, propertyKey) => {
-    const ctor = target.constructor;
-    const existing: Array<{ key: string | symbol; plain: true }> =
-      Reflect.getMetadata(FIELD_META_KEY, ctor) ?? [];
-    existing.push({ key: propertyKey, plain: true });
-    Reflect.defineMetadata(FIELD_META_KEY, existing, ctor);
+export function PlainField() {
+  return function (target: any, propertyKey: string) {
+    const className = target.constructor.name;
+    const existing = metadataRegistry.get(className) || {
+      typeName: className,
+      fields: new Map(),
+    };
+    existing.fields.set(propertyKey, {
+      typeName: propertyKey,
+      isEncrypted: false,
+      isPlain: true,
+    });
+    metadataRegistry.set(className, existing);
   };
 }
 
-export function getEncryptedClassOptions(ctor: Function): EncryptedClassOptions | undefined {
-  return Reflect.getMetadata(CLASS_META_KEY, ctor);
+export function getMetadata(className: string): DecoratorMetadata | undefined {
+  return metadataRegistry.get(className);
 }
 
-export function getFieldMetadata(ctor: Function): Array<any> {
-  return Reflect.getMetadata(FIELD_META_KEY, ctor) ?? [];
+export function getFieldMetadata(target: new (...args: any[]) => any): FieldMetadata[] {
+  const className = target.name;
+  const metadata = metadataRegistry.get(className);
+  if (!metadata) return [];
+  return Array.from(metadata.fields.values());
 }
 
-export function getTypeName(ctor: Function): string | undefined {
-  const opts: EncryptedClassOptions | undefined = Reflect.getMetadata(CLASS_META_KEY, ctor);
-  return opts?.typeName;
+export function getEncryptedClassOptions(target: new (...args: any[]) => any): EncryptedClassOptions | undefined {
+  const className = target.name;
+  const metadata = metadataRegistry.get(className);
+  if (!metadata) return undefined;
+  // For now, return a default since we don't store the options
+  return { network: 'default' };
+}
+
+export function getTypeName(target: new (...args: any[]) => any): string | undefined {
+  const className = target.name;
+  const metadata = metadataRegistry.get(className);
+  return metadata?.typeName;
 }

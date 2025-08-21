@@ -1,7 +1,8 @@
-import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
+import { describe, it, expect } from 'bun:test';
 import { Node } from '../src';
-import { AnyValue } from 'runar-ts-serializer';
+import { ServiceRegistry } from '../src/index';
+import { TopicPath } from 'runar-ts-common';
+import { SubscriptionMetadata } from 'runar-ts-schemas';
 
 describe('Retained events clearing', () => {
   it('clears retained by wildcard pattern and respects includePast ordering', async () => {
@@ -22,10 +23,10 @@ describe('Retained events clearing', () => {
       { includePast: 10 }
     );
     await new Promise(r => setTimeout(r, 10));
-    assert.deepEqual(seen, [1, 2]);
+    expect(seen).toEqual([1, 2]);
 
     const removed = node.clearRetainedEventsMatching('svc/>');
-    assert.equal(removed, 2);
+    expect(removed).toBe(2);
 
     const seen2: number[] = [];
     node.on(
@@ -38,6 +39,6 @@ describe('Retained events clearing', () => {
       { includePast: 10 }
     );
     await new Promise(r => setTimeout(r, 10));
-    assert.deepEqual(seen2, []);
+    expect(seen2).toEqual([]);
   });
 });

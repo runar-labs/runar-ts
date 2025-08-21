@@ -1,8 +1,9 @@
-import { AbstractService, LifecycleContext, ServiceState, TopicPath } from 'runar-ts-common';
+import { AbstractService, LifecycleContext, ServiceState } from './core';
+import { TopicPath } from 'runar-ts-common';
 import { ServiceEntry } from './index';
 import { NodeRegistryDelegate, RegistryDelegate } from './registry_delegate';
 import { AnyValue } from 'runar-ts-serializer';
-import { ServiceMetadata, ActionMetadata, NodeMetadata } from 'runar-ts-schemas';
+import { ServiceMetadata, ActionMetadata } from 'runar-ts-schemas';
 
 export class RegistryService implements AbstractService {
   private _networkId?: string;
@@ -120,7 +121,6 @@ export class RegistryService implements AbstractService {
   ): ServiceEntry | undefined {
     // The action string may look like services/{service_path} or services/{service_path}/state
     const parts = action.split('/');
-    const idx = parts.findIndex(p => p !== 'services');
     const svcPath = parts.length >= 2 ? parts[1] : '';
     return list.find(e => e.service.path() === svcPath);
   }

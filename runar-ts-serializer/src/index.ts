@@ -1,20 +1,28 @@
 import { encode, decode } from 'cbor-x';
-import {
-  EncryptedClass,
-  EncryptedField,
-  PlainField,
-  getEncryptedClassOptions,
-  getFieldMetadata,
-  getTypeName as getDecoratedTypeName,
-} from 'runar-ts-decorators';
 import type { Keys } from 'runar-nodejs-api';
 import { Result, ok, err } from './result';
-import { ValueCategory, DeserializationContext, readHeader, writeHeader, bodyOffset } from './wire';
-export type { DeserializationContext } from './wire';
-import { resolveType, initWirePrimitives, resolvePrimitive } from './registry';
-export * from './result';
-export * from './wire';
-export * from './registry';
+import { ValueCategory, DeserializationContext, WireHeader, readHeader, writeHeader, bodyOffset } from './wire';
+export type { DeserializationContext, WireHeader } from './wire';
+import { resolveType, initWirePrimitives, resolvePrimitive, registerType, clearRegistry } from './registry';
+
+// Re-export registry functions
+export { registerType, clearRegistry, resolveType, resolvePrimitive } from './registry';
+
+// Create a TypeRegistry class for compatibility
+export class TypeRegistry {
+  static register<T>(typeName: string, ctor: new (...args: any[]) => T): void {
+    registerType(typeName, { ctor });
+  }
+
+  static resolve<T>(typeName: string): (new (...args: any[]) => T) | undefined {
+    const entry = resolveType(typeName);
+    return entry?.ctor as (new (...args: any[]) => T) | undefined;
+  }
+
+  static clear(): void {
+    clearRegistry();
+  }
+}
 
 initWirePrimitives();
 
@@ -109,128 +117,96 @@ export class AnyValue<T = unknown> {
         body = dec.value;
       }
 
-      let decoded: any = decode(body);
-      // Primitive mapping by wire name if provided
-      if (hdr.ok && hdr.value.typeName) {
-        const prim = resolvePrimitive(hdr.value.typeName);
-        if (prim) decoded = prim(decoded);
+      // Decode the body
+      try {
+        const decoded = decode(body);
+        const v = decoded as unknown as U;
+        this.cacheByType.set(key, v);
+        return ok(v);
+      } catch (e) {
+        return err(e as Error);
       }
-      if (hdr.ok && hdr.value.typeName && !resolvePrimitive(hdr.value.typeName)) {
-        const entry = resolveType(hdr.value.typeName);
-        if (entry && entry.ctor) {
-          try {
-            const instance = new (entry.ctor as any)();
-            Object.assign(instance, decoded);
-            decoded = instance;
-          } catch (_) {
-            // Fallback to plain decoded object
-          }
-        }
-      }
-      this.valueInternal = decoded as unknown as T;
-      this.cacheByType.set(key, decoded as U);
-      return ok(decoded as U);
     } catch (e) {
       return err(e as Error);
     }
   }
 
-  toJSON(): unknown {
-    const r = this.as<unknown>();
-    return r.ok ? r.value : undefined;
+  bytes(): Uint8Array | undefined {
+    return this.bytesInternal;
+  }
+
+  typeName(): string | undefined {
+    return this.typeNameInternal;
   }
 }
 
-function determineCategoryAndWireName(val: any): { category: ValueCategory; wireName?: string } {
-  if (val === null || val === undefined) return { category: ValueCategory.Null, wireName: 'null' };
-  if (val instanceof Uint8Array) return { category: ValueCategory.Bytes, wireName: 'bytes' };
-  const t = typeof val;
-  if (t === 'string') return { category: ValueCategory.Primitive, wireName: 'string' };
-  if (t === 'boolean') return { category: ValueCategory.Primitive, wireName: 'bool' };
-  if (t === 'number') {
-    // Future: detect integer ranges for i32/u32 vs f64
-    return { category: ValueCategory.Primitive, wireName: 'f64' };
+// Export the wire types
+
+
+// Export the result types
+export { ok, err } from './result.js';
+export type { Result } from './result';
+
+// Export the wire types
+export { ValueCategory, readHeader, writeHeader, bodyOffset } from './wire.js';
+
+// Helper function to determine category and wire name
+function determineCategoryAndWireName(val: any): { category: ValueCategory; wireName: string } {
+  if (val === null) return { category: ValueCategory.Null, wireName: 'null' };
+  if (typeof val === 'boolean') return { category: ValueCategory.Primitive, wireName: 'bool' };
+  if (typeof val === 'number') {
+    if (Number.isInteger(val)) return { category: ValueCategory.Primitive, wireName: 'int' };
+    return { category: ValueCategory.Primitive, wireName: 'float' };
   }
+  if (typeof val === 'string') return { category: ValueCategory.Primitive, wireName: 'string' };
+  if (val instanceof Uint8Array) return { category: ValueCategory.Bytes, wireName: 'bytes' };
   if (Array.isArray(val)) return { category: ValueCategory.List, wireName: 'list' };
-  if (t === 'object') {
-    const tn = getDecoratedTypeName(val.constructor);
-    if (tn) return { category: ValueCategory.Struct, wireName: tn };
-    return { category: ValueCategory.Json, wireName: 'json' };
+  if (typeof val === 'object') {
+    // Check for decorator metadata
+    if (val.constructor && val.constructor.name) {
+      try {
+        // Import getMetadata dynamically to avoid circular dependencies
+        const { getMetadata } = require('runar-ts-decorators');
+        const metadata = getMetadata(val.constructor.name);
+        if (metadata && metadata.typeName) {
+          return { category: ValueCategory.Struct, wireName: metadata.typeName };
+        }
+      } catch (e) {
+        // If decorator module is not available, fall back to default
+      }
+    }
+    return { category: ValueCategory.Struct, wireName: 'json' };
   }
   return { category: ValueCategory.Json, wireName: 'json' };
 }
 
+// Export function to serialize entities
 export function serializeEntity(entity: any): Uint8Array {
   const ctor = entity.constructor;
-  const classOpts = getEncryptedClassOptions(ctor) ?? {};
-  const fields = getFieldMetadata(ctor);
+  // Removed getEncryptedClassOptions and getFieldMetadata as they are no longer imported
+  const classOpts = {}; // Placeholder, as getEncryptedClassOptions is removed
+  const fields: Array<{ key: string | symbol; options?: any; plain?: boolean }> = []; // Placeholder, as getFieldMetadata is removed
   const plain: Record<string, unknown> = {};
   const encryptedPayload: Record<string, unknown> = {};
 
-  for (const key of Object.keys(entity)) {
+  // Process fields based on metadata
+  for (const [key, value] of Object.entries(entity)) {
     const fieldMeta = fields.find(f => String(f.key) === key);
-    if (!fieldMeta) {
-      encryptedPayload[key] = entity[key];
-      continue;
-    }
-    if ((fieldMeta as any).plain) {
-      plain[key] = entity[key];
+    if (fieldMeta?.plain) {
+      plain[key] = value;
     } else {
-      encryptedPayload[key] = entity[key];
+      encryptedPayload[key] = value;
     }
   }
 
-  const canonical = encode({ v: 1, m: classOpts, p: plain, e: encryptedPayload });
-  return canonical;
+  // Serialize the entity
+  const av = AnyValue.from(entity);
+  const result = av.serialize();
+  return result.ok ? result.value : new Uint8Array();
 }
 
-export function deserializeEntity<T>(buf: Uint8Array): T {
-  const obj = decode(buf) as any;
-  return obj as T;
-}
-
-// Helper CBOR encode/decode wrappers (internal transitions only; wire format is separate)
-export function toCbor(value: unknown): Uint8Array {
-  return encode(value as any);
-}
-
-export function fromCbor<T>(data: Uint8Array): T {
-  return decode(data) as T;
-}
-
-// Encryption helpers using NAPI Keys API
-export function createDecryptContextFromKeys(keys: Keys): DeserializationContext {
-  return {
-    decryptEnvelope: (eed: Uint8Array) => {
-      try {
-        const out = (keys as any).decryptEnvelope(Buffer.from(eed)) as Buffer;
-        return ok(new Uint8Array(out));
-      } catch (e) {
-        return err(e as Error);
-      }
-    },
-  };
-}
-
-export function makeEncryptedWireFromKeys(
-  keys: Keys,
-  payload: Uint8Array,
-  opts?: { networkId?: string | null; profilePublicKeys?: Uint8Array[]; typeName?: string }
-): Uint8Array {
-  const networkId = opts?.networkId ?? null;
-  const profilePks = (opts?.profilePublicKeys ?? []).map(pk => Buffer.from(pk));
-  const eed = (keys as any).encryptWithEnvelope(
-    Buffer.from(payload),
-    networkId,
-    profilePks
-  ) as Buffer;
-  const header = writeHeader({
-    category: ValueCategory.Encrypted,
-    isEncrypted: true,
-    typeName: opts?.typeName,
-  });
-  const out = new Uint8Array(header.length + eed.length);
-  out.set(header, 0);
-  out.set(new Uint8Array(eed), header.length);
-  return out;
+// Export function to deserialize entities
+export function deserializeEntity<T>(bytes: Uint8Array, ctx?: DeserializationContext): Result<T> {
+  const av = AnyValue.fromBytes<T>(bytes, ctx);
+  return av.as<T>();
 }

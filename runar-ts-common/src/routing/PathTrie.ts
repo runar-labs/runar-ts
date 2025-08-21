@@ -1,4 +1,4 @@
-import { TopicPath, PathSegmentType } from './TopicPath.js';
+import { TopicPath } from './TopicPath.js';
 
 export type PathTrieMatch<T> = { content: T; params: Map<string, string> };
 
@@ -12,7 +12,7 @@ class TrieNode<T> {
   count = 0;
 }
 
-export class PathTrie<T extends unknown> {
+export class PathTrie<T> {
   private networks: Map<string, TrieNode<T>> = new Map();
   private totalCount = 0;
 
@@ -95,6 +95,38 @@ export class PathTrie<T extends unknown> {
     const results: Array<PathTrieMatch<T>> = [];
     if (!root) return results;
     this.collectWildcardMatches(root, pattern.getSegments(), 0, results);
+    return results;
+  }
+
+  // For backward compatibility - get just the handlers without parameters
+  find(topic: TopicPath): T[] {
+    return this.findMatches(topic).map(m => m.content);
+  }
+
+  // Remove handlers that match a predicate for a specific topic path
+  removeHandler<F extends (value: T) => boolean>(topic: TopicPath, predicate: F): boolean {
+    const networkId = topic.networkId();
+    const networkTrie = this.networks.get(networkId);
+    if (!networkTrie) return false;
+    return this.removeHandlerInternal(networkTrie, topic.getSegments(), 0, predicate);
+  }
+
+  // Check if this trie is empty (has no handlers or children)
+  isEmpty(): boolean {
+    return this.totalCount === 0;
+  }
+
+  // Get the total number of handlers in the trie
+  handlerCount(): number {
+    return this.totalCount;
+  }
+
+  // Get all values from the trie
+  getAllValues(): T[] {
+    const results: T[] = [];
+    for (const networkTrie of this.networks.values()) {
+      this.collectAllValuesInternal(networkTrie, results);
+    }
     return results;
   }
 
@@ -240,5 +272,71 @@ export class PathTrie<T extends unknown> {
     if (node.wildcardChild) this.collectAllHandlers(node.wildcardChild, results);
     if (node.templateChild) this.collectAllHandlers(node.templateChild, results);
     for (const [, child] of node.children) this.collectAllHandlers(child, results);
+  }
+
+  private removeHandlerInternal<F extends (value: T) => boolean>(
+    node: TrieNode<T>,
+    segments: string[],
+    index: number,
+    predicate: F
+  ): boolean {
+    if (index >= segments.length) {
+      // We've reached the end of the path
+      const initialLen = node.content.length;
+      node.content = node.content.filter(h => !predicate(h));
+      const removed = initialLen - node.content.length;
+      node.count -= removed;
+      return removed > 0;
+    }
+
+    const segment = segments[index]!;
+    let removed = false;
+
+    if (segment === '>') {
+      // Multi-wildcard - remove from multi_wildcard_handlers
+      const initialLen = node.multiWildcard.length;
+      node.multiWildcard = node.multiWildcard.filter(h => !predicate(h));
+      const removedCount = initialLen - node.multiWildcard.length;
+      node.count -= removedCount;
+      removed = removedCount > 0;
+    } else if (segment === '*') {
+      // Single wildcard - delegate to wildcard child if it exists
+      if (node.wildcardChild) {
+        removed = this.removeHandlerInternal(node.wildcardChild, segments, index + 1, predicate);
+      }
+    } else if (segment.startsWith('{') && segment.endsWith('}')) {
+      // Template parameter - delegate to template child if it exists
+      if (node.templateChild) {
+        removed = this.removeHandlerInternal(node.templateChild, segments, index + 1, predicate);
+      }
+    } else {
+      // Literal segment - delegate to the appropriate child if it exists
+      const child = node.children.get(segment);
+      if (child) {
+        removed = this.removeHandlerInternal(child, segments, index + 1, predicate);
+      }
+    }
+
+    return removed;
+  }
+
+  // Internal method to collect all values from this trie and its children
+  private collectAllValuesInternal(node: TrieNode<T>, results: T[]): void {
+    // Add content from this node
+    results.push(...node.content);
+    results.push(...node.multiWildcard);
+
+    // Recursively collect from children
+    for (const child of node.children.values()) {
+      this.collectAllValuesInternal(child, results);
+    }
+
+    if (node.wildcardChild) {
+      this.collectAllValuesInternal(node.wildcardChild, results);
+    }
+
+    if (node.templateChild) {
+      this.collectAllValuesInternal(node.templateChild, results);
+    }
   }
 }

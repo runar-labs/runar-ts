@@ -1,6 +1,5 @@
 import { encode } from 'cbor-x';
-import type runar from 'runar-nodejs-api';
-import { AnyValue } from 'runar-ts-serializer';
+import runarApi from 'runar-nodejs-api';
 
 export interface RemoteAdapter {
   start?(): Promise<void>;
@@ -25,13 +24,12 @@ export class NapiRemoteAdapter implements RemoteAdapter {
   private discoveryOptsCbor?: Uint8Array;
 
   constructor(keys: any, opts?: NapiRemoteAdapterOptions) {
-    const api = require('runar-nodejs-api') as typeof runar as any;
     this.keys = keys;
     const optionsCbor = encode(opts?.transportOptions ?? {});
-    this.transport = new api.Transport(keys, Buffer.from(optionsCbor));
+    this.transport = new runarApi.Transport(keys, Buffer.from(optionsCbor));
     if (opts?.discoveryOptions) {
       const discCbor = encode(opts.discoveryOptions);
-      this.discovery = new api.Discovery(keys, Buffer.from(discCbor));
+      this.discovery = new runarApi.Discovery(keys, Buffer.from(discCbor));
       this.discoveryOptsCbor = discCbor;
     }
     this.destPeerId = opts?.destPeerId;

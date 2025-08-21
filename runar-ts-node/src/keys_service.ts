@@ -1,4 +1,4 @@
-import { AbstractService, LifecycleContext } from 'runar-ts-common';
+import { AbstractService, LifecycleContext } from './core';
 import { AnyValue } from 'runar-ts-serializer';
 import type { KeysDelegate } from './keys_delegate';
 

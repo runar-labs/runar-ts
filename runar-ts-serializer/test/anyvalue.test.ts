@@ -1,18 +1,17 @@
-import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
-import { AnyValue } from '../src';
+import { describe, it, expect } from 'bun:test';
+import { AnyValue } from '../src/index.js';
 
 describe('AnyValue', () => {
   it('wraps values and provides lazy serialization/deserialization', () => {
     const val = AnyValue.from({ a: 1, b: 'x' });
     const bytesRes = val.serialize();
-    assert.equal(bytesRes.ok, true);
+    expect(bytesRes.ok).toBe(true);
     const back = AnyValue.fromBytes(bytesRes.ok ? bytesRes.value : new Uint8Array());
     const objRes = back.as<{ a: number; b: string }>();
-    assert.equal(objRes.ok, true);
+    expect(objRes.ok).toBe(true);
     if (objRes.ok) {
-      assert.equal(objRes.value.a, 1);
-      assert.equal(objRes.value.b, 'x');
+      expect(objRes.value.a).toBe(1);
+      expect(objRes.value.b).toBe('x');
     }
   });
 });

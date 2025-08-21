@@ -1,4 +1,5 @@
-import { TopicPath, ServiceState } from 'runar-ts-common';
+import { TopicPath } from 'runar-ts-common';
+import { ServiceState } from './core';
 import { ServiceMetadata } from 'runar-ts-schemas';
 import type { ServiceEntry } from './index';
 

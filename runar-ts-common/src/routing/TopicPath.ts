@@ -1,3 +1,5 @@
+import { Result, ok, err } from './Result';
+
 export enum PathSegmentType {
   Literal = 0,
   Template = 3,
@@ -139,17 +141,23 @@ export class TopicPath {
     );
   }
 
-  newActionTopic(actionName: string): TopicPath {
+  newActionTopic(actionName: string): Result<TopicPath, string> {
     if (this.segments.length > 1) {
-      throw new Error(
+      return err(
         'Invalid action path - cannot create an action path on top of another action path'
       );
     }
+
+    // Check if action name contains invalid characters
+    if (actionName.includes('/') || actionName.includes(':')) {
+      return err('Invalid action name - cannot contain slashes or colons');
+    }
+
     const full = `${this.networkIdValue}:${this.servicePathValue}/${actionName}`;
-    return TopicPath.new(full, this.networkIdValue);
+    return ok(TopicPath.new(full, this.networkIdValue));
   }
 
-  newEventTopic(eventName: string): TopicPath {
+  newEventTopic(eventName: string): Result<TopicPath, string> {
     return this.newActionTopic(eventName);
   }
 
@@ -201,6 +209,11 @@ export class TopicPath {
       this.networkIdValue === other.networkIdValue &&
       this.servicePathValue.startsWith(other.servicePathValue)
     );
+  }
+
+  // Alias for starts_with to match test expectations
+  startsWith(other: TopicPath): boolean {
+    return this.starts_with(other);
   }
 
   child(segment: string): TopicPath {
@@ -286,6 +299,11 @@ export class TopicPath {
     return params;
   }
 
+  // Alias for extract_params to match test expectations
+  extractParams(template: string): Map<string, string> {
+    return this.extract_params(template);
+  }
+
   matches_template(template: string): boolean {
     try {
       this.extract_params(template);
@@ -293,6 +311,202 @@ export class TopicPath {
     } catch {
       return false;
     }
+  }
+
+  // Alias for matches_template to match test expectations
+  matchesTemplate(template: string): boolean {
+    return this.matches_template(template);
+  }
+
+  // Check if this path contains template parameters
+  hasTemplates(): boolean {
+    return this.hasTemplatesValue;
+  }
+
+  // Static method to create a TopicPath from a template and parameter values
+  static fromTemplate(
+    templateString: string,
+    params: Map<string, string>,
+    networkIdString: string
+  ): TopicPath {
+    // Get segments from the template
+    const templateSegments = templateString.split('/').filter(s => s.length > 0);
+    const pathSegments: string[] = [];
+
+    // Process each template segment
+    for (const templateSegment of templateSegments) {
+      if (templateSegment.startsWith('{') && templateSegment.endsWith('}')) {
+        // This is a parameter segment - extract the parameter name
+        const paramName = templateSegment.slice(1, -1);
+
+        // Look up the parameter value
+        const value = params.get(paramName);
+        if (value === undefined) {
+          throw new Error(`Missing parameter value for '${paramName}'`);
+        }
+        pathSegments.push(value);
+      } else {
+        // This is a literal segment
+        pathSegments.push(templateSegment);
+      }
+    }
+
+    // Construct the final path
+    const pathStr = pathSegments.join('/');
+    return TopicPath.new(pathStr, networkIdString);
+  }
+
+  // Implement pattern matching against another path
+  matches(topic: TopicPath): boolean {
+    // Network ID must match
+    if (this.networkIdValue !== topic.networkIdValue) {
+      return false;
+    }
+
+    // Fast path 1: if paths are identical strings, they're equal
+    if (this.path === topic.path) {
+      return true;
+    }
+
+    // Fast path 2: if segment counts don't match and there's no multi-wildcard,
+    // the paths can't match
+    if (this.segmentCount !== topic.segmentCount && !this.hasMultiWildcard()) {
+      return false;
+    }
+
+    // Fast path 3: If neither path is a pattern, and they're not identical strings,
+    // they can't match
+    if (!this.pattern && !topic.pattern && !this.hasTemplatesValue && !topic.hasTemplatesValue) {
+      return false;
+    }
+
+    // Check for template path matching concrete path special case
+    if (this.hasTemplatesValue && !topic.hasTemplatesValue) {
+      // A template path doesn't match a concrete path in this direction
+      // For example: "services/{service_path}" doesn't match "services/math"
+      // But "services/math" does match "services/{service_path}"
+      return false;
+    }
+
+    // Check for reverse template matching - concrete path matching template path
+    if (!this.hasTemplatesValue && topic.hasTemplatesValue) {
+      // A concrete path can match a template path
+      // For example: "services/math" matches "services/{service_path}"
+      // Verify by checking if the concrete path would extract valid parameters from the template
+      return topic.matches_template(this.actionPath());
+    }
+
+    // Otherwise, perform segment-by-segment matching
+    return this.segmentsMatch(this.segments, topic.segments);
+  }
+
+  // Optimized segment matching with improved template handling
+  private segmentsMatch(patternSegments: PathSegment[], topicSegments: PathSegment[]): boolean {
+    // Special case: multi-wildcard at the end
+    if (
+      patternSegments.length > 0 &&
+      patternSegments[patternSegments.length - 1]?.kind === PathSegmentType.MultiWildcard
+    ) {
+      // If pattern ends with >, topic must have at least as many segments as pattern minus 1
+      if (topicSegments.length < patternSegments.length - 1) {
+        return false;
+      }
+
+      // Check all segments before the multi-wildcard
+      for (let i = 0; i < patternSegments.length - 1; i++) {
+        const patternSeg = patternSegments[i]!;
+        const topicSeg = topicSegments[i]!;
+
+        switch (patternSeg.kind) {
+          case PathSegmentType.Literal:
+            // For literals, the segments must match exactly
+            if (topicSeg.kind === PathSegmentType.Literal && patternSeg.value === topicSeg.value) {
+              continue;
+            }
+            return false;
+          case PathSegmentType.Template:
+            // Template parameters match any literal segment
+            if (topicSeg.kind === PathSegmentType.Literal) {
+              continue;
+            }
+            return false;
+          case PathSegmentType.SingleWildcard:
+            // For single wildcards, any segment matches
+            continue;
+          case PathSegmentType.MultiWildcard:
+            // Should not happen, as we're iterating up to len-1
+            return false;
+        }
+      }
+
+      // If we get here, all segments matched
+      return true;
+    }
+
+    // If pattern doesn't end with multi-wildcard, segment counts must match
+    if (patternSegments.length !== topicSegments.length) {
+      return false;
+    }
+
+    // Check each segment - fast path for literal matches
+    for (let i = 0; i < patternSegments.length; i++) {
+      const patternSeg = patternSegments[i]!;
+      const topicSeg = topicSegments[i]!;
+
+      // Fast path for identical segments
+      if (patternSeg.kind === topicSeg.kind) {
+        if (
+          patternSeg.kind === PathSegmentType.Literal &&
+          topicSeg.kind === PathSegmentType.Literal
+        ) {
+          if (patternSeg.value === topicSeg.value) {
+            continue;
+          }
+        } else if (
+          patternSeg.kind === PathSegmentType.Template &&
+          topicSeg.kind === PathSegmentType.Template
+        ) {
+          if (patternSeg.value === topicSeg.value) {
+            continue;
+          }
+        } else if (
+          patternSeg.kind === PathSegmentType.SingleWildcard &&
+          topicSeg.kind === PathSegmentType.SingleWildcard
+        ) {
+          continue;
+        } else if (
+          patternSeg.kind === PathSegmentType.MultiWildcard &&
+          topicSeg.kind === PathSegmentType.MultiWildcard
+        ) {
+          continue;
+        }
+      }
+
+      switch (patternSeg.kind) {
+        case PathSegmentType.Literal:
+          // Literals must match exactly
+          if (topicSeg.kind === PathSegmentType.Literal && patternSeg.value === topicSeg.value) {
+            continue;
+          }
+          return false;
+        case PathSegmentType.Template:
+          // Template parameters match any literal segment
+          if (topicSeg.kind === PathSegmentType.Literal) {
+            continue;
+          }
+          return false;
+        case PathSegmentType.SingleWildcard:
+          // Single wildcards match any segment
+          continue;
+        case PathSegmentType.MultiWildcard:
+          // Multi-wildcards should only appear at the end
+          // This is a defensive check - should never happen due to parsing
+          return false;
+      }
+    }
+
+    // If we get here, all segments matched
+    return true;
   }
 
   static test_default(path: string): TopicPath {
