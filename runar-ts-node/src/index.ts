@@ -23,6 +23,8 @@ export { NodeRegistryDelegate } from './registry_delegate';
 export type { RegistryDelegate } from './registry_delegate';
 export { NapiRemoteAdapter, LoopbackRemoteAdapter, makeNapiRemoteAdapter } from './remote';
 import { NapiRemoteAdapter as NapiRemoteAdapterValue } from './remote';
+export { KeysService } from './keys_service';
+export { NapiKeysDelegate } from './keys_delegate';
 
 type SubscriberKind = 'Local' | 'Remote';
 type FullSubscriptionEntry = {
@@ -182,6 +184,11 @@ export class Node {
       lastStartTime: undefined,
     };
     this.registry.addLocalService(entry);
+  }
+
+  addKeysService(delegate: { ensureSymmetricKey(name: string): Promise<Uint8Array> }): void {
+    const { KeysService } = require('./keys_service');
+    this.addService(new KeysService(delegate));
   }
 
   async start(): Promise<void> {
