@@ -2,7 +2,13 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { Node } from '../src';
 import { AnyValue } from 'runar-ts-serializer';
-import { AbstractService, LifecycleContext, RequestContext, EventContext, EventContextImpl } from '../src/core';
+import {
+  AbstractService,
+  LifecycleContext,
+  RequestContext,
+  EventContext,
+  EventContextImpl,
+} from '../src/core';
 import { ok, err } from 'runar-ts-common';
 
 class MathService implements AbstractService {
@@ -26,14 +32,17 @@ class MathService implements AbstractService {
     this._networkId = networkId;
   }
   async init(context: LifecycleContext): Promise<void> {
-    const result = await context.registerAction('add', async (payload: AnyValue, context: RequestContext) => {
-      const inRes = payload.as<{ a: number; b: number }>();
-      if (!inRes.ok) {
-        return err('Expected object with a and b properties');
+    const result = await context.registerAction(
+      'add',
+      async (payload: AnyValue, context: RequestContext) => {
+        const inRes = payload.as<{ a: number; b: number }>();
+        if (!inRes.ok) {
+          return err('Expected object with a and b properties');
+        }
+        const { a, b } = inRes.value;
+        return ok(AnyValue.from({ sum: a + b }));
       }
-      const { a, b } = inRes.value;
-      return ok(AnyValue.from({ sum: a + b }));
-    });
+    );
 
     if (!result.ok) {
       throw new Error(`Failed to register action: ${result.error}`);
@@ -56,7 +65,9 @@ describe('Node local E2E', () => {
     assert.equal(res.value.sum, 5);
 
     // publish retained event before subscribe
-    const publishResult = await node.publish_with_options('math/added', AnyValue.from({ sum: 5 }), { retain: true });
+    const publishResult = await node.publish_with_options('math/added', AnyValue.from({ sum: 5 }), {
+      retain: true,
+    });
     assert.ok(publishResult.ok, `Publish failed: ${publishResult.error}`);
 
     const seen: number[] = [];

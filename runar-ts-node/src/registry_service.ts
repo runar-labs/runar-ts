@@ -35,23 +35,32 @@ export class RegistryService implements AbstractService {
     this._networkId = networkId;
   }
 
-  async init(context: LifecycleContext): Promise<void> {
+  async init(context: LifecycleContext): Promise<Result<void, string>> {
+    context.logger.info('Initializing RegistryService');
+
     // services/list -> Vec<ServiceMetadata>
     const result1 = await context.registerAction('services/list', async (payload, context) => {
+      context.logger.debug('Handling services/list request');
       const all = await this.delegate.getAllServiceMetadata(true);
       const list = Array.from(all.values());
+      context.logger.debug(`Returning ${list.length} services`);
       return ok(AnyValue.from(list));
     });
+
+    if (!result1.ok) {
+      context.logger.error(`Failed to register services/list: ${result1.error}`);
+      return err(`Failed to register services/list: ${result1.error}`);
+    }
 
     // services/{service_path} -> ServiceMetadata
     const result2 = await context.registerAction(
       'services/{service_path}',
       async (payload, context) => {
         const services = this.getLocalServices();
-        // Extract service_path parameter from context or payload
-        // In the new API, parameters are extracted from the request context
-        const servicePath = context.servicePath;
-        const match = this.findServiceByPath(servicePath, services);
+        // Extract service_path parameter from pathParams (framework extracts this)
+        const servicePath = context.pathParams.get('service_path');
+        context.logger.debug(`services/{service_path} called with pathParams: ${Array.from(context.pathParams.entries()).map(([k, v]) => `${k}=${v}`).join(', ')}, extracted servicePath: ${servicePath}`);
+        const match = this.findServiceByPath(servicePath || null, services);
         const meta = match
           ? await this.delegate.getServiceMetadata(
               TopicPath.newService(this._networkId ?? 'default', match.service.path())
@@ -66,8 +75,8 @@ export class RegistryService implements AbstractService {
       'services/{service_path}/state',
       async (payload, context) => {
         const services = this.getLocalServices();
-        const servicePath = context.servicePath;
-        const match = this.findServiceByPath(servicePath, services);
+        const servicePath = context.pathParams.get('service_path');
+        const match = this.findServiceByPath(servicePath || null, services);
         const state = match?.serviceState ?? ServiceState.Unknown;
         return ok(AnyValue.from({ service_path: match?.service.path() ?? '', state }));
       }
@@ -78,8 +87,8 @@ export class RegistryService implements AbstractService {
       'services/{service_path}/pause',
       async (payload, context) => {
         const services = this.getLocalServices();
-        const servicePath = context.servicePath;
-        const match = this.findServiceByPath(servicePath, services);
+        const servicePath = context.pathParams.get('service_path');
+        const match = this.findServiceByPath(servicePath || null, services);
         if (match) {
           // validate via delegate
           await this.delegate.validatePauseTransition(
@@ -97,8 +106,8 @@ export class RegistryService implements AbstractService {
       'services/{service_path}/resume',
       async (payload, context) => {
         const services = this.getLocalServices();
-        const servicePath = context.servicePath;
-        const match = this.findServiceByPath(servicePath, services);
+        const servicePath = context.pathParams.get('service_path');
+        const match = this.findServiceByPath(servicePath || null, services);
         if (match) {
           await this.delegate.validateResumeTransition(
             TopicPath.newService(this._networkId ?? 'default', match.service.path())
@@ -110,20 +119,34 @@ export class RegistryService implements AbstractService {
       }
     );
 
-    // Check all registration results
-    if (!result1.ok) throw new Error(`Failed to register services/list: ${result1.error}`);
-    if (!result2.ok)
-      throw new Error(`Failed to register services/{service_path}: ${result2.error}`);
-    if (!result3.ok)
-      throw new Error(`Failed to register services/{service_path}/state: ${result3.error}`);
-    if (!result4.ok)
-      throw new Error(`Failed to register services/{service_path}/pause: ${result4.error}`);
-    if (!result5.ok)
-      throw new Error(`Failed to register services/{service_path}/resume: ${result5.error}`);
+    // Return early on any registration failure
+    if (!result2.ok) {
+      context.logger.error(`Failed to register services/{service_path}: ${result2.error}`);
+      return err(`Failed to register services/{service_path}: ${result2.error}`);
+    }
+    if (!result3.ok) {
+      context.logger.error(`Failed to register services/{service_path}/state: ${result3.error}`);
+      return err(`Failed to register services/{service_path}/state: ${result3.error}`);
+    }
+    if (!result4.ok) {
+      context.logger.error(`Failed to register services/{service_path}/pause: ${result4.error}`);
+      return err(`Failed to register services/{service_path}/pause: ${result4.error}`);
+    }
+    if (!result5.ok) {
+      context.logger.error(`Failed to register services/{service_path}/resume: ${result5.error}`);
+      return err(`Failed to register services/{service_path}/resume: ${result5.error}`);
+    }
+
+    context.logger.info('RegistryService initialization complete');
+    return ok(undefined);
   }
 
-  async start(_context: LifecycleContext): Promise<void> {}
-  async stop(_context: LifecycleContext): Promise<void> {}
+  async start(_context: LifecycleContext): Promise<Result<void, string>> {
+    return ok(undefined);
+  }
+  async stop(_context: LifecycleContext): Promise<Result<void, string>> {
+    return ok(undefined);
+  }
 
   private toServiceMetadata(s: ServiceEntry): ServiceMetadata {
     const actions: ActionMetadata[] = []; // not tracking per-action metadata yet
@@ -150,7 +173,8 @@ export class RegistryService implements AbstractService {
     return list.find(e => e.service.path() === svcPath);
   }
 
-  private findServiceByPath(servicePath: string, list: ServiceEntry[]): ServiceEntry | undefined {
+  private findServiceByPath(servicePath: string | null, list: ServiceEntry[]): ServiceEntry | undefined {
+    if (!servicePath) return undefined;
     // Extract service path from full path like "services/my-service" -> "my-service"
     const parts = servicePath.split('/');
     const svcPath = parts.length >= 2 ? parts[1] : servicePath;

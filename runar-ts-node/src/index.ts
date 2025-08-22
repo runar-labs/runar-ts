@@ -16,17 +16,17 @@ import {
   EventContextImpl,
 } from './core';
 import { Logger, Component } from 'runar-ts-common';
+import { Logger as LoggerClass, Component as ComponentEnum } from 'runar-ts-common/src/logging/logger.js';
 import { SubscriptionMetadata } from 'runar-ts-schemas';
-import type { RemoteAdapter } from './remote';
+// REMOVED: RemoteAdapter - not in Rust API
 import { isOk, unwrap, unwrapErr, Result, ok, err } from 'runar-ts-common';
 export { NodeConfig } from './config';
-export type { RemoteAdapter } from './remote';
+// REMOVED: RemoteAdapter export - not in Rust API
 import { RegistryService } from './registry_service';
 export { RegistryService } from './registry_service';
 export { NodeRegistryDelegate } from './registry_delegate';
 export type { RegistryDelegate } from './registry_delegate';
-export { NapiRemoteAdapter, LoopbackRemoteAdapter, makeNapiRemoteAdapter } from './remote';
-import { NapiRemoteAdapter as NapiRemoteAdapterValue } from './remote';
+// REMOVED: RemoteAdapter exports - not in Rust API
 import { KeysService } from './keys_service';
 export { KeysService } from './keys_service';
 export { NapiKeysDelegate } from './keys_delegate';
@@ -162,11 +162,16 @@ export class Node {
   private retainedIndex = new PathTrie<string>();
   private retainedKeyToTopic = new Map<string, TopicPath>();
   private readonly maxRetainedPerTopic = 100;
-  private remoteAdapter?: RemoteAdapter;
+// REMOVED: remoteAdapter - not in Rust API
 
   constructor(networkId = 'default') {
     this.networkId = networkId;
-    this.logger = Logger.newRoot(Component.Node).setNodeId(networkId);
+    try {
+      this.logger = LoggerClass.newRoot(ComponentEnum.Node).setNodeId(networkId);
+    } catch (error) {
+      console.error('Failed to create logger:', error);
+      this.logger = console; // fallback
+    }
   }
 
   static fromConfig(cfg: {
@@ -176,19 +181,7 @@ export class Node {
     keys?: unknown;
   }): Node {
     const n = new Node(cfg.defaultNetworkId);
-    if (cfg.keys) {
-      n.setRemoteAdapter(
-        new NapiRemoteAdapterValue(cfg.keys, {
-          transportOptions: cfg.transportOptions,
-          discoveryOptions: cfg.discoveryOptions,
-        })
-      );
-    }
     return n;
-  }
-
-  setRemoteAdapter(remote: RemoteAdapter): void {
-    this.remoteAdapter = remote;
   }
 
   private getLocalServicesSnapshot = (): ServiceEntry[] => {
@@ -218,7 +211,14 @@ export class Node {
     const reg = new RegistryService(this.getLocalServicesSnapshot);
     reg.setNetworkId(this.networkId);
     const regCtx = new NodeLifecycleContext(this.networkId, reg.path(), this.logger, this);
+    try {
+      this.logger?.info?.('About to call RegistryService.init()');
     await reg.init(regCtx);
+      this.logger?.info?.('RegistryService.init() completed successfully');
+    } catch (error) {
+      this.logger?.error?.('RegistryService.init() failed:', error);
+      throw error;
+    }
     this.addService(reg);
 
     for (const entry of this.registry.getLocalServices()) {
@@ -235,17 +235,14 @@ export class Node {
       await svc.start(ctx);
       this.registry.updateServiceState(svc.path(), ServiceState.Running);
     }
-    if (this.remoteAdapter?.start) {
-      await this.remoteAdapter.start();
-    }
+
     this.running = true;
+    this.logger?.info?.(`Node.start() completed, node is now running: ${this.running}`);
   }
 
   async stop(): Promise<void> {
     if (!this.running) return;
-    if (this.remoteAdapter?.stop) {
-      await this.remoteAdapter.stop();
-    }
+
     for (const entry of this.registry.getLocalServices()) {
       const svc = entry.service;
       const ctx = new NodeLifecycleContext(this.networkId, svc.path(), this.logger, this);
@@ -255,306 +252,17 @@ export class Node {
     this.running = false;
   }
 
-  async requestLegacy<TReq = unknown, TRes = unknown>(
-    service: ServiceName,
-    action: string,
-    payload: TReq
-  ): Promise<TRes> {
-    if (!this.running) throw new Error('Node not started');
-    const actionTopicResult = TopicPath.newService(this.networkId, service).newActionTopic(action);
-    if (!isOk(actionTopicResult)) {
-      throw new Error(`Failed to create action topic: ${unwrapErr(actionTopicResult)}`);
-    }
-    const actionTopic = unwrap(actionTopicResult);
-    const handlers = this.registry.findLocalActionHandlers(actionTopic);
-    if (handlers.length === 0) {
-      // Remote fallback per Rust behavior
-      if (this.remoteAdapter) {
-        const path = actionTopic.asString?.() ?? `${this.networkId}:${service}/${action}`;
-        const inArc = AnyValue.from(payload);
-        const ser = inArc.serialize();
-        if (!ser.ok) throw ser.error;
-        const outBytes = await this.remoteAdapter.request(path, ser.value);
-        const outArc = AnyValue.fromBytes<TRes>(outBytes);
-        const out = outArc.as<TRes>();
-        if (!out.ok) throw out.error;
-        return out.value;
-      }
-      throw new Error(
-        `No handler for ${actionTopic.asString?.() ?? `${this.networkId}:${service}/${action}`}`
-      );
-    }
-    // In-memory AnyValue path
-    const payloadAv = payload instanceof AnyValue ? (payload as AnyValue) : AnyValue.from(payload);
-    const requestId = uuidv4();
 
-    // Create RequestContext for handler
-    const requestContext: RequestContext = {
-      networkId: this.networkId,
-      servicePath: service,
-      requestId: requestId,
-      logger: this.logger?.withActionPath?.(`${service}/${action}`) || this.logger,
-    };
 
-    // Call handler with new signature
-    const res = await handlers[0]!(payloadAv, requestContext);
-    if (res.ok && res.value) {
-      const out = res.value.as<TRes>();
-      if (!out.ok) throw out.error;
-      return out.value;
-    }
-    throw new Error(res.error || 'Unknown error');
-  }
 
-  // Rust-compatible path-based request API
-  async requestPathLegacy<TReq = unknown, TRes = unknown>(
-    path: string,
-    payload: TReq
-  ): Promise<TRes> {
-    if (!this.running) throw new Error('Node not started');
-    const topicPath = TopicPath.new(path, this.networkId);
-    const segments = topicPath.getSegments();
-    const actionPath = segments.slice(1).join('/');
-    if (!actionPath) {
-      throw new Error('Invalid path - missing action segment');
-    }
-    const actionTopicResult = TopicPath.newService(
-      this.networkId,
-      topicPath.servicePath()
-    ).newActionTopic(actionPath);
-    if (!isOk(actionTopicResult)) {
-      throw new Error(`Failed to create action topic: ${unwrapErr(actionTopicResult)}`);
-    }
-    const actionTopic = unwrap(actionTopicResult);
-    const handlers = this.registry.findLocalActionHandlers(actionTopic);
-    if (handlers.length === 0) {
-      if (this.remoteAdapter) {
-        const inArc = AnyValue.from(payload);
-        const ser = inArc.serialize();
-        if (!ser.ok) throw ser.error;
-        const outBytes = await this.remoteAdapter.request(
-          path.includes(':') ? path : `${this.networkId}:${path}`,
-          ser.value
-        );
-        const outArc = AnyValue.fromBytes<TRes>(outBytes);
-        const out = outArc.as<TRes>();
-        if (!out.ok) throw out.error;
-        return out.value;
-      }
-      throw new Error(`No handler for ${path}`);
-    }
-    const payloadAv = payload instanceof AnyValue ? (payload as AnyValue) : AnyValue.from(payload);
-    const requestId = uuidv4();
 
-    // Create RequestContext for handler
-    const requestContext: RequestContext = {
-      networkId: this.networkId,
-      servicePath: topicPath.servicePath(),
-      requestId: requestId,
-      logger: this.logger.withActionPath(topicPath.asString() || ''),
-    };
 
-    // Call handler with new signature
-    const res = await handlers[0]!(payloadAv, requestContext);
-    if (res.ok && res.value) {
-      const out = res.value.as<TRes>();
-      if (!out.ok) throw out.error;
-      return out.value;
-    }
-    throw new Error(res.error || 'Unknown error');
-  }
 
-  async publishLegacy<T = unknown>(
-    service: ServiceName,
-    event: string,
-    payload: T,
-    options?: PublishOptions
-  ): Promise<void> {
-    if (!this.running) throw new Error('Node not started');
-    const evtTopicResult = TopicPath.newService(this.networkId, service).newEventTopic(event);
-    if (!isOk(evtTopicResult)) {
-      throw new Error(`Failed to create event topic: ${unwrapErr(evtTopicResult)}`);
-    }
-    const evtTopic = unwrap(evtTopicResult);
-    const subs = this.registry.getSubscribers(evtTopic);
-    const inArc = AnyValue.from(payload);
-    const message: EventMessage = {
-      service,
-      event,
-      payload: inArc,
-      timestampMs: Date.now(),
-    };
-    if (options?.retain) {
-      const key = `${this.networkId}:${service}/${event}`;
-      const list = this.retainedEvents.get(key) ?? [];
-      list.push({ ts: message.timestampMs, event, payload: inArc });
-      if (list.length > this.maxRetainedPerTopic) {
-        list.splice(0, list.length - this.maxRetainedPerTopic);
-      }
-      this.retainedEvents.set(key, list);
-      this.retainedIndex.setValue(evtTopic, key);
-      this.retainedKeyToTopic.set(key, evtTopic);
-    }
-    await Promise.allSettled(subs.map(s => {
-      const eventContext = new EventContextImpl(
-        this.networkId,
-        message.service,
-        message.event,
-        true, // isLocal
-        this.logger?.withEventPath?.(`${evtTopic.servicePath()}/${actionPath}`) || this.logger,
-        this
-      );
-      return s.subscriber(message.payload, eventContext);
-    }));
-    // If no locals and remote is configured, forward publish
-    if (subs.length === 0 && this.remoteAdapter) {
-      const path = evtTopic.asString?.() ?? `${this.networkId}:${service}/${event}`;
-      const ser = inArc.serialize();
-      if (!ser.ok) throw ser.error;
-      await this.remoteAdapter.publish(path, ser.value);
-    }
-  }
 
-  // Rust-compatible path-based publish API
-  async publishPathLegacy<T = unknown>(
-    path: string,
-    payload: T,
-    options?: PublishOptions
-  ): Promise<void> {
-    if (!this.running) throw new Error('Node not started');
-    const topicPath = TopicPath.new(path, this.networkId);
-    const segments = topicPath.getSegments();
-    const actionPath = segments.slice(1).join('/');
-    if (!actionPath) {
-      throw new Error('Invalid path - missing event/action segment');
-    }
-    const evtTopicResult = TopicPath.newService(
-      this.networkId,
-      topicPath.servicePath()
-    ).newEventTopic(actionPath);
-    if (!isOk(evtTopicResult)) {
-      throw new Error(`Failed to create event topic: ${unwrapErr(evtTopicResult)}`);
-    }
-    const evtTopic = unwrap(evtTopicResult);
-    const subs = this.registry.getSubscribers(evtTopic);
-    const inArc = AnyValue.from(payload);
-    const message: EventMessage = {
-      service: topicPath.servicePath(),
-      event: actionPath,
-      payload: inArc,
-      timestampMs: Date.now(),
-    };
-    if (options?.retain) {
-      const key = `${this.networkId}:${topicPath.servicePath()}/${actionPath}`;
-      const list = this.retainedEvents.get(key) ?? [];
-      list.push({ ts: message.timestampMs, event: actionPath, payload: inArc });
-      if (list.length > this.maxRetainedPerTopic) {
-        list.splice(0, list.length - this.maxRetainedPerTopic);
-      }
-      this.retainedEvents.set(key, list);
-      this.retainedIndex.setValue(evtTopic, key);
-      this.retainedKeyToTopic.set(key, evtTopic);
-    }
-    await Promise.allSettled(subs.map(s => {
-      const eventContext = new EventContextImpl(
-        this.networkId,
-        message.service,
-        message.event,
-        true, // isLocal
-        this.logger?.withEventPath?.(`${evtTopic.servicePath()}/${actionPath}`) || this.logger,
-        this
-      );
-      return s.subscriber(message.payload, eventContext);
-    }));
-    if (subs.length === 0 && this.remoteAdapter) {
-      const ser = inArc.serialize();
-      if (!ser.ok) throw ser.error;
-      await this.remoteAdapter.publish(
-        path.includes(':') ? path : `${this.networkId}:${path}`,
-        ser.value
-      );
-    }
-  }
 
-  onLegacy(
-    service: ServiceName,
-    eventOrPattern: string,
-    subscriber: EventSubscriber,
-    options?: EventRegistrationOptions
-  ): string {
-    const topicResult = TopicPath.newService(this.networkId, service).newEventTopic(eventOrPattern);
-    if (!isOk(topicResult)) {
-      throw new Error(`Failed to create event topic: ${unwrapErr(topicResult)}`);
-    }
-    const topic = unwrap(topicResult);
-    const serviceTopic = TopicPath.newService(this.networkId, service);
-    const metadata: SubscriptionMetadata = {
-      path: topic.asString?.() ?? `${this.networkId}:${service}/${eventOrPattern}`,
-    };
-    const id = this.registry.subscribe(topic, serviceTopic, subscriber, metadata, 'Local');
-    if (options?.includePast && options.includePast > 0) {
-      const matched = this.retainedIndex.findWildcardMatches(topic).map(m => m.content);
-      const history: Array<{ ts: number; event: string; payload: AnyValue }> = [];
-      for (const key of matched) {
-        const list = this.retainedEvents.get(key) ?? [];
-        history.push(...list);
-      }
-      history.sort((a, b) => a.ts - b.ts);
-      const deliver = history.slice(-options.includePast);
-      void Promise.allSettled(
-        deliver.map(e =>
-          subscriber({
-            service,
-            event: e.event,
-            payload: e.payload,
-            timestampMs: e.ts,
-          })
-        )
-      );
-    }
-    return id;
-  }
 
-  unsubscribeLegacy(subscriptionId: string): boolean {
-    return this.registry.unsubscribe(subscriptionId);
-  }
 
-  onOnceLegacy(
-    service: ServiceName,
-    eventOrPattern: string,
-    timeoutMs = 5000
-  ): Promise<EventMessage | undefined> {
-    const topicResult = TopicPath.newService(this.networkId, service).newEventTopic(eventOrPattern);
-    if (!isOk(topicResult)) {
-      throw new Error(`Failed to create event topic: ${unwrapErr(topicResult)}`);
-    }
-    const topic = unwrap(topicResult);
-    return new Promise(resolve => {
-      let resolved = false;
-      const serviceTopic = TopicPath.newService(this.networkId, service);
-      const metadata: SubscriptionMetadata = {
-        path: topic.asString?.() ?? `${this.networkId}:${service}/${eventOrPattern}`,
-      };
-      const id = this.registry.subscribe(
-        topic,
-        serviceTopic,
-        async evt => {
-          if (resolved) return;
-          resolved = true;
-          this.registry.unsubscribe(id);
-          resolve(evt);
-        },
-        metadata,
-        'Local'
-      );
-      setTimeout(() => {
-        if (resolved) return;
-        resolved = true;
-        this.registry.unsubscribe(id);
-        resolve(undefined);
-      }, timeoutMs);
-    });
-  }
+
 
   clearRetainedEventsMatching(pattern: string): number {
     const fullPattern = pattern.includes(':') ? pattern : `${this.networkId}:${pattern}`;
@@ -575,17 +283,25 @@ export class Node {
 
   // Helper method to get retained events for a topic
   private getRetainedEvents(topicPath: TopicPath): EventMessage[] {
-    const key = `${this.networkId}:${topicPath.servicePath()}/${topicPath.actionPath()}`;
+    const matchedKeys = this.retainedIndex.findWildcardMatches(topicPath).map(m => m.content);
+    const events: EventMessage[] = [];
 
-    const list = this.retainedEvents.get(key);
-    if (!list) return [];
+    for (const key of matchedKeys) {
+      const list = this.retainedEvents.get(key);
+      if (list) {
+        const topic = this.retainedKeyToTopic.get(key);
+        if (topic) {
+          events.push(...list.map(event => ({
+            service: topic.servicePath(),
+            event: event.event,
+            payload: event.payload,
+            timestampMs: event.ts,
+          })));
+        }
+      }
+    }
 
-    return list.map(event => ({
-      service: topicPath.servicePath(),
-      event: event.event,
-      payload: event.payload,
-      timestampMs: event.ts,
-    }));
+    return events;
   }
 
   // === Rust-compatible API methods ===
@@ -594,6 +310,7 @@ export class Node {
    * Rust-compatible request method - matches Rust API exactly
    */
   async request<P = unknown>(path: string, payload?: P): Promise<Result<AnyValue, string>> {
+    this.logger?.debug?.(`request called with path: ${path}`);
     try {
       if (!this.running) return err('Node not started');
 
@@ -604,15 +321,7 @@ export class Node {
 
       const handlers = this.registry.findLocalActionHandlers(topicPath);
       if (handlers.length === 0) {
-        // Remote fallback per Rust behavior
-        if (this.remoteAdapter) {
-          const inArc = payload !== undefined ? AnyValue.from(payload) : AnyValue.null();
-          const ser = inArc.serialize();
-          if (!ser.ok) return err(String(ser.error));
-          const outBytes = await this.remoteAdapter.request(path, ser.value);
-          const outArc = AnyValue.fromBytes(outBytes);
-          return ok(outArc);
-        }
+        // REMOVED: Remote fallback - not in Rust API (only local services)
         return err(`No handler for ${path}`);
       }
 
@@ -627,12 +336,17 @@ export class Node {
       const action = path.split('/').pop() || '';
       const requestId = uuidv4();
 
+      // Extract path parameters from the action path (everything after service)
+      const actionPath = path.substring(path.indexOf('/') + 1);
+      const pathParams = this.extractPathParams(actionPath);
+
       // Create RequestContext for handler
       const requestContext: RequestContext = {
         networkId: this.networkId,
         servicePath: service,
         requestId: requestId,
         logger: this.logger?.withActionPath?.(`${service}/${action}`) || this.logger,
+        pathParams,
       };
 
       // Call handler with new signature
@@ -672,23 +386,29 @@ export class Node {
       };
 
       // Always deliver locally first
-      await Promise.allSettled(subs.map(s => {
-        const eventContext = new EventContextImpl(
-          this.networkId,
-          message.service,
-          message.event,
-          true, // isLocal
-          this.logger?.withEventPath?.(`${evtTopic.servicePath()}/${actionPath}`) || this.logger,
-          this
-        );
-        return s.subscriber(message.payload, eventContext);
-      }));
+      await Promise.allSettled(
+        subs.map(s => {
+          const eventContext = new EventContextImpl(
+            this.networkId,
+            message.service,
+            message.event,
+            true, // isLocal
+            this.logger?.withEventPath?.(`${topicPath.servicePath()}/${message.event}`) || this.logger,
+            this
+          );
+          return s.subscriber(message.payload, eventContext);
+        })
+      );
 
       // Handle retained events if requested
       if (options?.retain) {
         const key = `${this.networkId}:${topicPath.servicePath()}/${topicPath.actionPath()}`;
-        this.logger?.debug?.(`Storing retained event for key: ${key}, service: ${service}, event: ${event}`);
-        this.logger?.debug?.(`topicPath.servicePath(): ${topicPath.servicePath()}, topicPath.actionPath(): ${topicPath.actionPath()}`);
+        this.logger?.debug?.(
+          `Storing retained event for key: ${key}, service: ${service}, event: ${event}`
+        );
+        this.logger?.debug?.(
+          `topicPath.servicePath(): ${topicPath.servicePath()}, topicPath.actionPath(): ${topicPath.actionPath()}`
+        );
         const list = this.retainedEvents.get(key) ?? [];
         list.push({ ts: message.timestampMs, event, payload });
         if (list.length > this.maxRetainedPerTopic) {
@@ -700,12 +420,7 @@ export class Node {
         this.logger?.debug?.(`Retained events for key ${key}: ${list.length} events`);
       }
 
-      // Forward to remote if configured and there are remote subscribers
-      if (this.remoteAdapter) {
-        const ser = payload.serialize();
-        if (!ser.ok) return err(String(ser.error));
-        await this.remoteAdapter.publish(topic, ser.value);
-      }
+// REMOVED: Remote forwarding - not in Rust API (only local events)
 
       return ok(undefined);
     } catch (error) {
@@ -718,7 +433,6 @@ export class Node {
    */
   async publish(topic: string, data?: AnyValue): Promise<Result<void, string>> {
     try {
-
       if (!this.running) return err('Node not started');
 
       const topicPath = TopicPath.new(topic, this.networkId);
@@ -739,24 +453,21 @@ export class Node {
       };
 
       // Always deliver locally first
-      await Promise.allSettled(subs.map(s => {
-        const eventContext = new EventContextImpl(
-          this.networkId,
-          message.service,
-          message.event,
-          true, // isLocal
-          this.logger?.withEventPath?.(`${evtTopic.servicePath()}/${actionPath}`) || this.logger,
-          this
-        );
-        return s.subscriber(message.payload, eventContext);
-      }));
+      await Promise.allSettled(
+        subs.map(s => {
+          const eventContext = new EventContextImpl(
+            this.networkId,
+            message.service,
+            message.event,
+            true, // isLocal
+            this.logger?.withEventPath?.(`${topicPath.servicePath()}/${message.event}`) || this.logger,
+            this
+          );
+          return s.subscriber(message.payload, eventContext);
+        })
+      );
 
-      // Forward to remote if configured and there are remote subscribers
-      if (this.remoteAdapter) {
-        const ser = payload.serialize();
-        if (!ser.ok) return err(String(ser.error));
-        await this.remoteAdapter.publish(topic, ser.value);
-      }
+// REMOVED: Remote forwarding - not in Rust API (only local events)
 
       return ok(undefined);
     } catch (error) {
@@ -891,5 +602,32 @@ export class Node {
         });
       })();
     });
+  }
+
+  // Extract path parameters from action template
+  private extractPathParams(actionPath: string): Map<string, string> {
+    const pathParams = new Map<string, string>();
+    this.logger?.debug?.(`extractPathParams called with actionPath: ${actionPath}`);
+
+    // Match patterns like services/{service_path} or services/{service_path}/state
+    const servicePathMatch = actionPath.match(/^services\/([^\/]+)(?:\/(.+))?$/);
+    if (servicePathMatch) {
+      const servicePath = servicePathMatch[1];
+      if (servicePath) {
+        pathParams.set('service_path', servicePath);
+        this.logger?.debug?.(`extracted service_path: ${servicePath}`);
+      }
+
+      const actionType = servicePathMatch[2];
+      if (actionType) {
+        pathParams.set('action_type', actionType);
+        this.logger?.debug?.(`extracted action_type: ${actionType}`);
+      }
+    } else {
+      this.logger?.debug?.(`no match found for actionPath: ${actionPath}`);
+    }
+
+    this.logger?.debug?.(`final pathParams: ${Array.from(pathParams.entries()).map(([k, v]) => `${k}=${v}`).join(', ')}`);
+    return pathParams;
   }
 }

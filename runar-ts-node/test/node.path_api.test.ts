@@ -2,7 +2,8 @@ import { describe, it, expect } from 'bun:test';
 import { Node } from '../src';
 import { AnyValue } from 'runar-ts-serializer';
 import { AbstractService, LifecycleContext } from '../src/core';
-import { LoopbackRemoteAdapter } from '../src/remote';
+// REMOVED: LoopbackRemoteAdapter import - not in Rust API
+import { ok, err } from 'runar-ts-common';
 
 class EchoService implements AbstractService {
   private _net?: string;
@@ -24,18 +25,26 @@ class EchoService implements AbstractService {
   setNetworkId(n: string) {
     this._net = n;
   }
-  async init(ctx: LifecycleContext): Promise<void> {
-    ctx.addActionHandler('ping', async req => {
-      const r = req.payload.as<{ msg: string }>();
-      return {
-        ok: true,
-        requestId: req.requestId,
-        payload: AnyValue.from({ pong: r.ok ? r.value.msg : '' }),
-      };
+  async init(ctx: LifecycleContext): Promise<Result<void, string>> {
+    const result = await ctx.registerAction('ping', async (payload, context) => {
+      const r = payload.as<{ msg: string }>();
+      if (!r.ok) {
+        return err('Expected object with msg property');
+      }
+      return ok(AnyValue.from({ pong: r.value.msg }));
     });
+
+    if (!result.ok) {
+      throw new Error(`Failed to register action: ${result.error}`);
+    }
+    return ok(undefined);
   }
-  async start(): Promise<void> {}
-  async stop(): Promise<void> {}
+  async start(): Promise<Result<void, string>> {
+    return ok(undefined);
+  }
+  async stop(): Promise<Result<void, string>> {
+    return ok(undefined);
+  }
 }
 
 describe('Node path-based APIs', () => {
@@ -43,23 +52,13 @@ describe('Node path-based APIs', () => {
     const n = new Node('net');
     n.addService(new EchoService());
     await n.start();
-    const resp = await n.requestPath<{ msg: string }, { pong: string }>('echo/ping', { msg: 'hi' });
-    expect(resp.pong).toBe('hi');
+    const result = await n.request('echo/ping', { msg: 'hi' });
+    expect(result.ok).toBe(true);
+    const resp = result.value.as<{ pong: string }>();
+    expect(resp.ok).toBe(true);
+    expect(resp.value.pong).toBe('hi');
     await n.stop();
   });
 
-  it('handles requestPath via remote fallback', async () => {
-    const n = new Node('net');
-    n.setRemoteAdapter(
-      new LoopbackRemoteAdapter(async (_path, payload) => {
-        const r = AnyValue.fromBytes<{ msg: string }>(payload).as<{ msg: string }>();
-        const out = AnyValue.from({ pong: r.ok ? r.value.msg.toUpperCase() : '' }).serialize();
-        return out.ok ? out.value : new Uint8Array();
-      })
-    );
-    await n.start();
-    const resp = await n.requestPath<{ msg: string }, { pong: string }>('echo/ping', { msg: 'hi' });
-    expect(resp.pong).toBe('HI');
-    await n.stop();
-  });
+// REMOVED: Remote fallback test - not in Rust API (only local services)
 });

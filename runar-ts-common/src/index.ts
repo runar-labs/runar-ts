@@ -76,9 +76,9 @@ export interface AbstractService {
   description(): string;
   networkId(): string | undefined;
   setNetworkId(networkId: string): void;
-  init(context: any): Promise<void>; // LifecycleContext type to be imported
-  start(context: any): Promise<void>;
-  stop(context: any): Promise<void>;
+  init(context: any): Promise<Result<void, string>>; // LifecycleContext type to be imported
+  start(context: any): Promise<Result<void, string>>;
+  stop(context: any): Promise<Result<void, string>>;
 }
 
 export * from './routing/TopicPath.js';

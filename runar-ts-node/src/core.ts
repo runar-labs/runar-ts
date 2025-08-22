@@ -132,7 +132,13 @@ export class LifecycleContextImpl implements LifecycleContext {
 export class NodeLifecycleContext extends LifecycleContextImpl {
   private node: any; // Node instance
 
-  constructor(networkId: string, servicePath: string, logger: Logger, node: any, config?: AnyValue) {
+  constructor(
+    networkId: string,
+    servicePath: string,
+    logger: Logger,
+    node: any,
+    config?: AnyValue
+  ) {
     super(networkId, servicePath, logger, config);
     this.node = node;
   }
@@ -146,7 +152,9 @@ export class NodeLifecycleContext extends LifecycleContextImpl {
       if (!isOk(topicResult)) {
         return err(unwrapErr(topicResult));
       }
-      this.node.registry.addLocalActionHandler(unwrap(topicResult), handler);
+      const topicPath = unwrap(topicResult);
+      this.node.logger?.debug?.(`Registering action handler for topic: ${topicPath.asString?.() || 'unknown'}`);
+      this.node.registry.addLocalActionHandler(topicPath, handler);
       return { ok: true, value: undefined };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
@@ -242,6 +250,7 @@ export interface RequestContext {
   servicePath: string;
   requestId: string; // Internal - handlers don't use this
   logger: Logger;
+  pathParams: Map<string, string>; // Path parameters extracted by framework
 }
 
 export interface EventContext {
@@ -274,7 +283,14 @@ export class EventContextImpl implements EventContext {
 
   private node: any; // Node instance for making requests
 
-  constructor(networkId: string, servicePath: string, eventPath: string, isLocal: boolean, logger: any, node: any) {
+  constructor(
+    networkId: string,
+    servicePath: string,
+    eventPath: string,
+    isLocal: boolean,
+    logger: any,
+    node: any
+  ) {
     this.networkId = networkId;
     this.servicePath = servicePath;
     this.eventPath = eventPath;
@@ -312,7 +328,10 @@ export type ActionHandler = (
   payload: AnyValue,
   context: RequestContext
 ) => Promise<Result<AnyValue, string>>;
-export type EventSubscriber = (payload: AnyValue, context: EventContext) => Promise<Result<void, string>>;
+export type EventSubscriber = (
+  payload: AnyValue,
+  context: EventContext
+) => Promise<Result<void, string>>;
 
 export interface ServiceRegistration {
   service: ServiceName;

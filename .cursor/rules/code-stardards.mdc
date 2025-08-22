@@ -1,0 +1,33 @@
+---
+globs: *.ts,*.js
+alwaysApply: false
+---
+*Logging*
+When developing runar framework core code NEVER use console.log(). use our proper logger mechanism
+It shuold be available in most components, if not ou need to add.
+When deaing with actions and event handlers or lifecycle methods the logger is available in the context context.logger
+
+*Error handling*
+DO NOT throw.
+Any method that can return an error must return Result<> wich is either ok or an error
+return errors early, as soon as an error is detected return the error or new custom error with more details. The exception to this rule is sometimes the logic requires mode to be done after error like clean up and etc, This is the exception not the rule.
+Use try catch around code that we dont control, for example when we invoke an action handler we dont know what can happen, so that call must be enclosed with an try catch to get unhandled errrors, but the code foin thtat shuold nto throw.. should when capturing an error with catch handle it and if neede retuen an Err (result)
+
+*topic paths*
+never do string manipulation on topic paths directly
+BAD/AVOID
+const parts = servicePath.split('/');
+const servicePathMatch = context.actionPath.match(/^services\/(.+)$/);
+const servicePath = servicePathMatch ? servicePathMatch[1] : null;
+
+Instead use the TopicPath object which is bult to handle topicPath operations.
+
+Internal framework methods should use TopicPath and not string to receive a path as parameter.. only the public APIS
+sould receive a string, but then at the first step it shuold create a TopicPath and use that going forward in
+all internal methods.
+
+100% Aligment with RUST.
+When develoing RUnar features you shuold not add anytihg that is not in the rust IMPL.. and you shuold always match the full API. same method name (using proper TS stanards e.g. add_service in rust will ne addService in TS) same argumets and same argument names.
+same data flow.. for each features map the full dataflow and rules from the rust codebases (check tests also to help your understanding) and make sure the TS version has the exact same dataflow, and rules.
+
+
