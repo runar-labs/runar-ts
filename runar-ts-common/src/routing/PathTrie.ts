@@ -1,4 +1,5 @@
 import { TopicPath } from './TopicPath.js';
+import { Result, ok, err } from '../error';
 
 export type PathTrieMatch<T> = { content: T; params: Map<string, string> };
 
@@ -321,6 +322,151 @@ export class PathTrie<T> {
   }
 
   // Internal method to collect all values from this trie and its children
+  private collectAllValuesInternal(node: TrieNode<T>, results: T[]): void {
+    // Add content from this node
+    results.push(...node.content);
+    results.push(...node.multiWildcard);
+
+    // Recursively collect from children
+    for (const child of node.children.values()) {
+      this.collectAllValuesInternal(child, results);
+    }
+
+    if (node.wildcardChild) {
+      this.collectAllValuesInternal(node.wildcardChild, results);
+    }
+
+    if (node.templateChild) {
+      this.collectAllValuesInternal(node.templateChild, results);
+    }
+  }
+
+  /**
+   * For backward compatibility - get just the handlers without parameters
+   * Equivalent to Rust's find method
+   */
+  find(topic: TopicPath): T[] {
+    return this.findMatches(topic).map(match => match.content);
+  }
+
+  /**
+   * Remove handlers that match a predicate for a specific topic path
+   * Equivalent to Rust's remove_handler method
+   */
+  removeHandler(topic: TopicPath, predicate: (handler: T) => boolean): boolean {
+    const net = topic.networkId();
+    const root = this.networks.get(net);
+    if (!root) return false;
+
+    const segments = topic.getSegments();
+    return this.removeHandlerInternal(root, segments, 0, predicate);
+  }
+
+  /**
+   * Internal recursive implementation of remove_handler
+   */
+  private removeHandlerInternal(node: TrieNode<T>, segments: string[], index: number, predicate: (handler: T) => boolean): boolean {
+    if (index >= segments.length) {
+      // We've reached the end of the path
+      const initialLen = node.content.length;
+      node.content = node.content.filter(h => !predicate(h));
+      const removed = initialLen - node.content.length;
+      this.totalCount -= removed;
+      return removed > 0;
+    }
+
+    const segment = segments[index]!;
+    let removed = false;
+
+    if (segment === '>') {
+      // Multi-wildcard - remove from multi_wildcard_handlers
+      const initialLen = node.multiWildcard.length;
+      node.multiWildcard = node.multiWildcard.filter(h => !predicate(h));
+      const removedCount = initialLen - node.multiWildcard.length;
+      this.totalCount -= removedCount;
+      removed = removedCount > 0;
+    } else if (segment === '*') {
+      // Single wildcard - delegate to wildcard child if it exists
+      if (node.wildcardChild) {
+        removed = this.removeHandlerInternal(node.wildcardChild, segments, index + 1, predicate);
+      }
+    } else if (segment.startsWith('{') && segment.endsWith('}')) {
+      // Template parameter - delegate to template child if it exists
+      if (node.templateChild) {
+        removed = this.removeHandlerInternal(node.templateChild, segments, index + 1, predicate);
+      }
+    } else {
+      // Literal segment - delegate to the appropriate child if it exists
+      const child = node.children.get(segment);
+      if (child) {
+        removed = this.removeHandlerInternal(child, segments, index + 1, predicate);
+      }
+    }
+
+    return removed;
+  }
+
+  /**
+   * Check if this trie is empty (has no handlers or children)
+   * Equivalent to Rust's is_empty method
+   */
+  isEmpty(): boolean {
+    for (const root of this.networks.values()) {
+      if (!this.isNodeEmpty(root)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Check if a node and its children are empty
+   */
+  private isNodeEmpty(node: TrieNode<T>): boolean {
+    if (node.content.length > 0 || node.multiWildcard.length > 0) {
+      return false;
+    }
+
+    for (const child of node.children.values()) {
+      if (!this.isNodeEmpty(child)) {
+        return false;
+      }
+    }
+
+    if (node.wildcardChild && !this.isNodeEmpty(node.wildcardChild)) {
+      return false;
+    }
+
+    if (node.templateChild && !this.isNodeEmpty(node.templateChild)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Get the total number of handlers in the trie
+   * Equivalent to Rust's handler_count method
+   */
+  handlerCount(): number {
+    return this.totalCount;
+  }
+
+  /**
+   * Get all values from the trie
+   * Equivalent to Rust's get_all_values method
+   */
+  getAllValues(): T[] {
+    const results: T[] = [];
+    for (const root of this.networks.values()) {
+      this.collectAllValuesInternal(root, results);
+    }
+    return results;
+  }
+
+  /**
+   * Internal method to collect all values from this node and its children
+   */
   private collectAllValuesInternal(node: TrieNode<T>, results: T[]): void {
     // Add content from this node
     results.push(...node.content);
