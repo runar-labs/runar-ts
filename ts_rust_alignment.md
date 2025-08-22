@@ -61,7 +61,6 @@ This document provides a comprehensive analysis of the TypeScript runar framewor
 
 **Corrected Analysis**: The ServiceState enum DOES exist in Rust, but it's in the correct location (`runar-node/src/services/abstract_service.rs`), not in `runar-common`. TS should move service-related types to match this architecture.
 
-
 ### File: src/logging/logger.ts
 
 **Rust Equivalent**: `runar-rust/runar-common/src/logging/mod.rs`
@@ -138,8 +137,6 @@ This document provides a comprehensive analysis of the TypeScript runar framewor
    - **Rust**: Has `apply()` method that configures the global logger
    - **Issue**: TS should implement this method for global logger configuration
 
-
-
 ### File: src/routing/Result.ts
 
 **Location Issue**: Result is not routing-related and should not be in this folder. Should be moved to error handling location.
@@ -170,7 +167,6 @@ This document provides a comprehensive analysis of the TypeScript runar framewor
    - **Rust**: Clean trait-based extension methods
    - **Issue**: TS should avoid prototype pollution and use clean utility functions instead
 
-
 ### File: src/routing/TopicPath.ts
 
 **Rust Equivalent**: `runar-rust/runar-common/src/routing/mod.rs`
@@ -185,8 +181,6 @@ This document provides a comprehensive analysis of the TypeScript runar framewor
      - Rust: `PathSegment::Literal(String)`
      - TS requires manual type checking
      - Rust has compile-time safety
-
-
 
 2. **Error Handling Inconsistencies**:
    - **TS**: Mixes throwing and Result pattern
@@ -523,53 +517,67 @@ we need all the same features in TS
 ## Critical Issues Summary
 
 ### 1. Error Handling Architecture Violation (CRITICAL)
+
 **Severity**: CRITICAL
 **Impact**: Complete system instability and unpredictable behavior
+
 - TS implementation uses throwing in core areas
 - Violates explicit "DO NOT throw" requirement from code-standards.mdc
 - Should use Result<T, E> pattern consistently throughout
 - TS should implement simple Result type with ok() and err() methods
 
 ### 2. Missing Core Features (CRITICAL)
+
 **Severity**: CRITICAL
 **Impact**: Fundamental functionality gaps
+
 - TS missing entire modules and comprehensive APIs present in Rust
 - Incomplete API surface across all packages
 - Missing network isolation, encryption, and advanced serialization features
 - Architecture mismatches (e.g., AbstractService in wrong package)
 
 ### 3. Incomplete Serialization System (CRITICAL)
+
 **Severity**: CRITICAL
 **Impact**: Data integrity and security
+
 - TS lacks encryption support and key infrastructure
 - Missing `ErasedArc`, `KeyStore`, `LabelResolver`, `SerializationContext`
 - No decorator-based encryption equivalent to Rust macros
 - Incompatible wire format with Rust implementation
 
 ### 4. Node Implementation Incompleteness (CRITICAL)
+
 **Severity**: CRITICAL
 **Impact**: Core functionality missing
+
 - TS Node implementation lacks comprehensive API matching Rust
 - Missing proper lifecycle management and service state tracking
 - No integration with nodejs-api for network functionality
 - Missing key management integration
 
 ### 5. Prototype Pollution (HIGH)
+
 **Severity**: HIGH
 **Impact**: Runtime environment contamination
+
 - TS adds methods to Object.prototype (dangerous)
 - Should use clean utility functions instead
 
 ### 6. API Architecture Mismatches (HIGH)
+
 **Severity**: HIGH
 **Impact**: Code organization and maintainability
+
 - ServiceState and AbstractService in wrong packages
 - Result type in wrong location
 - Type organization doesn't match Rust architecture
 
 ### 7. Network Integration Issues (HIGH)
+
 **Severity**: HIGH
 **Impact**: Multi-tenancy and security
+
 - TS should use nodejs-api for actual network operations
 - Missing network-aware data structures
 - No proper network isolation support
@@ -638,10 +646,10 @@ we need all the same features in TS
 
 ---
 
-*This comprehensive analysis provides the authoritative source for all TypeScript vs Rust implementation discrepancies. Use this document to systematically align the TS implementation with the Rust specification.
+\*This comprehensive analysis provides the authoritative source for all TypeScript vs Rust implementation discrepancies. Use this document to systematically align the TS implementation with the Rust specification.
 
-**NOTE**: This document has been updated based on actual code analysis of the Rust implementation, correcting previous errors and providing accurate findings for alignment.*
+**NOTE**: This document has been updated based on actual code analysis of the Rust implementation, correcting previous errors and providing accurate findings for alignment.\*
 
 ---
 
-*Analysis completed: runar-common, runar-serializer, runar-schemas, runar-node packages analyzed. Document now reflects actual discrepancies found in the Rust codebase.*
+_Analysis completed: runar-common, runar-serializer, runar-schemas, runar-node packages analyzed. Document now reflects actual discrepancies found in the Rust codebase._

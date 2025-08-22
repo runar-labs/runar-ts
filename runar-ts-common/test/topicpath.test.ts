@@ -1,6 +1,7 @@
 /**
  * Comprehensive tests for TopicPath implementation
  * Based on Rust test patterns from runar-node-tests
+ * Covers: Basic functionality, wildcards, templates, and edge cases
  */
 
 import { describe, test, expect } from 'bun:test';
@@ -207,7 +208,13 @@ describe('TopicPath', () => {
       expect(differentNetworkResult.ok).toBe(true);
       expect(differentServiceResult.ok).toBe(true);
 
-      if (pathResult.ok && prefix1Result.ok && prefix2Result.ok && differentNetworkResult.ok && differentServiceResult.ok) {
+      if (
+        pathResult.ok &&
+        prefix1Result.ok &&
+        prefix2Result.ok &&
+        differentNetworkResult.ok &&
+        differentServiceResult.ok
+      ) {
         const path = pathResult.value;
 
         expect(path.startsWith(prefix1Result.value)).toBe(true);
@@ -273,7 +280,9 @@ describe('TopicPath', () => {
         const actionResult = path.newActionTopic('verify_token');
         expect(actionResult.ok).toBe(false);
         if (!actionResult.ok) {
-          expect(actionResult.error).toContain('cannot create an action path on top of another action path');
+          expect(actionResult.error).toContain(
+            'cannot create an action path on top of another action path'
+          );
         }
       }
     });

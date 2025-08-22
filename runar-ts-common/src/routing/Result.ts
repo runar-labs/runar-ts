@@ -8,4 +8,4 @@
  */
 
 // Re-export from the proper location for backward compatibility
-export * from '../../error/Result';
+export * from '../error/Result';

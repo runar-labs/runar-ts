@@ -56,7 +56,7 @@ export class TopicPath {
       return err(`Invalid path format - network ID cannot be empty received: ${path}`);
     }
     const rest = path.slice(idx + 1);
-    return ok(TopicPath.new(rest, networkId));
+    return TopicPath.new(rest, networkId);
   }
 
   static new(path: string, defaultNetwork: string): Result<TopicPath, string> {
@@ -65,7 +65,9 @@ export class TopicPath {
     if (path.includes(':')) {
       const parts = path.split(':');
       if (parts.length !== 2) {
-        return err(`Invalid path format - should be 'network_id:service_path' or 'service_path': ${path}`);
+        return err(
+          `Invalid path format - should be 'network_id:service_path' or 'service_path': ${path}`
+        );
       }
       if (!parts[0]) {
         return err(`Network ID cannot be empty: ${path}`);
@@ -117,17 +119,19 @@ export class TopicPath {
     const actionPath =
       segments.length <= 1 ? '' : segments.map(TopicPath.segmentToString).join('/');
 
-    return ok(new TopicPath(
-      fullPath,
-      networkId,
-      segments,
-      isPattern,
-      hasTemplates,
-      servicePath,
-      actionPath,
-      segments.length,
-      bitmap
-    ));
+    return ok(
+      new TopicPath(
+        fullPath,
+        networkId,
+        segments,
+        isPattern,
+        hasTemplates,
+        servicePath,
+        actionPath,
+        segments.length,
+        bitmap
+      )
+    );
   }
 
   static newService(networkId: string, serviceName: string): Result<TopicPath, string> {
@@ -235,17 +239,19 @@ export class TopicPath {
     bitmap = TopicPath.setSegmentType(bitmap, this.segmentCount, newSegment.kind);
     const segments = [...this.segments, newSegment];
 
-    return ok(new TopicPath(
-      full,
-      this.networkIdValue,
-      segments,
-      isPattern,
-      hasTemplates,
-      this.servicePathValue,
-      newPath,
-      this.segmentCount + 1,
-      bitmap
-    ));
+    return ok(
+      new TopicPath(
+        full,
+        this.networkIdValue,
+        segments,
+        isPattern,
+        hasTemplates,
+        this.servicePathValue,
+        newPath,
+        this.segmentCount + 1,
+        bitmap
+      )
+    );
   }
 
   parent(): Result<TopicPath, string> {
@@ -267,17 +273,19 @@ export class TopicPath {
       if (t === PathSegmentType.Template) hasTemplates = true;
     }
 
-    return ok(new TopicPath(
-      full,
-      this.networkIdValue,
-      parentSegments,
-      isPattern,
-      hasTemplates,
-      this.servicePathValue,
-      pathStr,
-      this.segmentCount - 1,
-      bitmap
-    ));
+    return ok(
+      new TopicPath(
+        full,
+        this.networkIdValue,
+        parentSegments,
+        isPattern,
+        hasTemplates,
+        this.servicePathValue,
+        pathStr,
+        this.segmentCount - 1,
+        bitmap
+      )
+    );
   }
 
   extract_params(template: string): Result<Map<string, string>, string> {
@@ -325,7 +333,11 @@ export class TopicPath {
    * Create a TopicPath from a template and parameter values
    * Equivalent to Rust's from_template method
    */
-  static fromTemplate(templateString: string, params: Map<string, string>, networkIdString: string): Result<TopicPath, string> {
+  static fromTemplate(
+    templateString: string,
+    params: Map<string, string>,
+    networkIdString: string
+  ): Result<TopicPath, string> {
     const templateSegments = templateString.split('/').filter(s => s.length > 0);
     const pathSegments: string[] = [];
 
@@ -360,7 +372,7 @@ export class TopicPath {
 
     // Fast path 2: if segment counts don't match and there's no multi-wildcard,
     // the paths can't match
-    if (this.segmentCount !== topic.segmentCount && !this.hasMultiWildcard()) {
+    if (this.segmentCount !== topic.segmentCount && !this.hasMultiWildcard() && !topic.hasMultiWildcard()) {
       return false;
     }
 
@@ -387,12 +399,25 @@ export class TopicPath {
     }
 
     // Otherwise, perform segment-by-segment matching
-    return this.segmentsMatch(this.segments, topic.segments);
+    // Determine which path is the pattern and which is the concrete path
+    const thisIsPattern = this.pattern || this.hasTemplatesValue;
+    const topicIsPattern = topic.pattern || topic.hasTemplatesValue;
+
+    if (thisIsPattern && !topicIsPattern) {
+      // This is a pattern, topic is concrete - normal case
+      return this.segmentsMatch(this.segments, topic.segments);
+    } else if (!thisIsPattern && topicIsPattern) {
+      // This is concrete, topic is pattern - reverse case
+      return this.segmentsMatch(topic.segments, this.segments);
+    } else {
+      // Both are patterns or both are concrete - compare directly
+      return this.segmentsMatch(this.segments, topic.segments);
+    }
   }
 
   // Optimized segment matching with improved template handling
   private segmentsMatch(patternSegments: PathSegment[], topicSegments: PathSegment[]): boolean {
-    // Special case: multi-wildcard at the end
+    // Special case: multi-wildcard at the end of pattern
     if (
       patternSegments.length > 0 &&
       patternSegments[patternSegments.length - 1]?.kind === PathSegmentType.MultiWildcard
@@ -417,6 +442,47 @@ export class TopicPath {
           case PathSegmentType.Template:
             // Template parameters match any literal segment
             if (topicSeg.kind === PathSegmentType.Literal) {
+              continue;
+            }
+            return false;
+          case PathSegmentType.SingleWildcard:
+            // For single wildcards, any segment matches
+            continue;
+          case PathSegmentType.MultiWildcard:
+            // Should not happen, as we're iterating up to len-1
+            return false;
+        }
+      }
+
+      // If we get here, all segments matched
+      return true;
+    }
+
+    // Special case: multi-wildcard at the end of topic (shouldn't happen for concrete paths, but handle it)
+    if (
+      topicSegments.length > 0 &&
+      topicSegments[topicSegments.length - 1]?.kind === PathSegmentType.MultiWildcard
+    ) {
+      // If topic ends with >, pattern must have at least as many segments as topic minus 1
+      if (patternSegments.length < topicSegments.length - 1) {
+        return false;
+      }
+
+      // Check all segments before the multi-wildcard
+      for (let i = 0; i < topicSegments.length - 1; i++) {
+        const patternSeg = patternSegments[i]!;
+        const topicSeg = topicSegments[i]!;
+
+        switch (topicSeg.kind) {
+          case PathSegmentType.Literal:
+            // For literals, the segments must match exactly
+            if (patternSeg.kind === PathSegmentType.Literal && topicSeg.value === patternSeg.value) {
+              continue;
+            }
+            return false;
+          case PathSegmentType.Template:
+            // Template parameters match any literal segment
+            if (patternSeg.kind === PathSegmentType.Literal) {
               continue;
             }
             return false;
@@ -499,44 +565,17 @@ export class TopicPath {
     return true;
   }
 
-  static test_default(path: string): TopicPath {
+  static test_default(path: string): Result<TopicPath, string> {
     return TopicPath.new(path, 'default');
   }
 
-  /**
-   * Create a TopicPath from a template and parameter values
-   * Equivalent to Rust's from_template method
-   */
-  static fromTemplate(templateString: string, params: Map<string, string>, networkIdString: string): Result<TopicPath, string> {
-    const templateSegments = templateString.split('/').filter(s => s.length > 0);
-    const pathSegments: string[] = [];
 
-    for (const templateSegment of templateSegments) {
-      if (templateSegment.startsWith('{') && templateSegment.endsWith('}')) {
-        const paramName = templateSegment.slice(1, -1);
-        const paramValue = params.get(paramName);
-        if (paramValue === undefined) {
-          return err(`Missing parameter value for '${paramName}'`);
-        }
-        pathSegments.push(paramValue);
-      } else {
-        pathSegments.push(templateSegment);
-      }
-    }
-
-    const pathStr = pathSegments.join('/');
-    return ok(TopicPath.new(pathStr, networkIdString));
-  }
 
   /**
    * Check if this path contains template parameters
    * Equivalent to Rust's has_templates method
    */
   has_templates(): boolean {
-    return this.hasTemplatesValue;
-  }
-
-  hasTemplates(): boolean {
     return this.hasTemplatesValue;
   }
 
@@ -548,125 +587,12 @@ export class TopicPath {
     return this.segmentCount;
   }
 
-  segmentCount(): number {
-    return this.segmentCount;
-  }
-
-  /**
-   * Check if this path matches a template pattern
-   * Equivalent to Rust's matches_template method
-   */
-  matches_template(template: string): boolean {
-    // Fast path: if neither has templates, do simple comparison
-    if (!this.hasTemplatesValue && !template.includes('{')) {
-      return this.path.includes(template);
-    }
-
-    const templateSegments = template.split('/').filter(s => s.length > 0);
-
-    // Quickly check segment counts to avoid unnecessary processing
-    if (templateSegments.length !== this.segmentCount) {
-      return false;
-    }
-
-    const pathSegments = this.get_segments();
-
-    for (let i = 0; i < templateSegments.length; i++) {
-      const templateSegment = templateSegments[i]!;
-      if (templateSegment.startsWith('{') && templateSegment.endsWith('}')) {
-        // Template parameter segment - matches any literal in corresponding position
-        continue;
-      } else if (templateSegment !== pathSegments[i]) {
-        // Literal segment must match exactly
-        return false;
-      }
-    }
-
-    return true;
-  }
-
-  matchesTemplate(template: string): boolean {
-    return this.matches_template(template);
-  }
-
-  /**
-   * Check if this path matches another path (supports wildcards and templates)
-   * Equivalent to Rust's matches method
-   */
-  matches(topic: TopicPath): boolean {
-    // Network ID must match
-    if (this.networkIdValue !== topic.networkIdValue) {
-      return false;
-    }
-
-    // Fast path 1: if paths are identical strings, they're equal
-    if (this.path === topic.path) {
-      return true;
-    }
-
-    // Fast path 2: if segment counts don't match and there's no multi-wildcard,
-    // the paths can't match
-    if (this.segmentCount !== topic.segmentCount && !this.hasMultiWildcard()) {
-      return false;
-    }
-
-    // Fast path 3: If neither path is a pattern, and they're not identical strings,
-    // they can't match
-    if (!this.pattern && !topic.pattern && !this.hasTemplatesValue && !topic.hasTemplatesValue) {
-      return false;
-    }
-
-    // Check for template path matching concrete path special case
-    if (this.hasTemplatesValue && !topic.hasTemplatesValue) {
-      // A template path doesn't match a concrete path in this direction
-      // For example: "services/{service_path}" doesn't match "services/math"
-      // But "services/math" does match "services/{service_path}"
-      return false;
-    }
-
-    // Check for reverse template matching - concrete path matching template path
-    if (!this.hasTemplatesValue && topic.hasTemplatesValue) {
-      // A concrete path can match a template path
-      // For example: "services/math" matches "services/{service_path}"
-      // Verify by checking if the concrete path would extract valid parameters from the template
-      return topic.matches_template(this.actionPath());
-    }
-
-    // Otherwise, perform segment-by-segment matching
-    return this.segmentsMatch(this.segments, topic.segments);
-  }
-
   /**
    * Get path segments as PathSegment objects instead of strings
    * This provides access to the structured segment information
    */
   getPathSegments(): PathSegment[] {
     return this.segments;
-  }
-
-  /**
-   * Extract parameters from template matching with Result-based error handling
-   */
-  extractParams(template: string): Result<Map<string, string>, string> {
-    const params = new Map<string, string>();
-    const pathSegments = this.get_segments();
-    const templateSegments = template.split('/').filter(s => s.length > 0);
-
-    if (pathSegments.length !== templateSegments.length) {
-      return err(`Path segment count (${pathSegments.length}) doesn't match template segment count (${templateSegments.length})`);
-    }
-
-    for (let i = 0; i < templateSegments.length; i++) {
-      const templateSegment = templateSegments[i]!;
-      if (templateSegment.startsWith('{') && templateSegment.endsWith('}')) {
-        const paramName = templateSegment.slice(1, -1);
-        params.set(paramName, pathSegments[i]!);
-      } else if (templateSegment !== pathSegments[i]) {
-        return err(`Path segment '${pathSegments[i]}' doesn't match template segment '${templateSegment}'`);
-      }
-    }
-
-    return ok(params);
   }
 
   /**
@@ -683,7 +609,7 @@ export class TopicPath {
         : `${this.cachedActionPath}/${segment}`;
     const full = `${this.networkIdValue}:${newPath}`;
 
-    return ok(TopicPath.new(full, this.networkIdValue));
+    return TopicPath.new(full, this.networkIdValue);
   }
 
   /**
@@ -712,17 +638,19 @@ export class TopicPath {
       }
     }
 
-    return ok(new TopicPath(
-      full,
-      this.networkIdValue,
-      parentSegments,
-      isPattern,
-      hasTemplates,
-      this.servicePathValue,
-      pathStr,
-      this.segmentCount - 1,
-      bitmap
-    ));
+    return ok(
+      new TopicPath(
+        full,
+        this.networkIdValue,
+        parentSegments,
+        isPattern,
+        hasTemplates,
+        this.servicePathValue,
+        pathStr,
+        this.segmentCount - 1,
+        bitmap
+      )
+    );
   }
 
   private static segmentFromString(segment: string): PathSegment {
@@ -755,44 +683,7 @@ export class TopicPath {
     return ((bitmap >> (index * 2)) & 0b11) as number as PathSegmentType;
   }
 
-  /**
-   * Internal method to match segments between two TopicPaths
-   * Supports wildcards and template parameter matching
-   */
-  private segmentsMatch(patternSegments: PathSegment[], topicSegments: PathSegment[]): boolean {
-    // Special case: multi-wildcard at the end
-    if (patternSegments.length > 0 && patternSegments[patternSegments.length - 1]?.kind === PathSegmentType.MultiWildcard) {
-      // If pattern ends with >, topic must have at least as many segments as pattern minus 1
-      if (topicSegments.length < patternSegments.length - 1) {
-        return false;
-      }
 
-      // Check all segments before the multi-wildcard
-      for (let i = 0; i < patternSegments.length - 1; i++) {
-        if (!this.segmentMatches(patternSegments[i]!, topicSegments[i]!)) {
-          return false;
-        }
-      }
-
-      // If we get here, all segments matched
-      return true;
-    }
-
-    // If pattern doesn't end with multi-wildcard, segment counts must match
-    if (patternSegments.length !== topicSegments.length) {
-      return false;
-    }
-
-    // Check each segment - fast path for literal matches
-    for (let i = 0; i < patternSegments.length; i++) {
-      if (!this.segmentMatches(patternSegments[i]!, topicSegments[i]!)) {
-        return false;
-      }
-    }
-
-    // If we get here, all segments matched
-    return true;
-  }
 
   /**
    * Check if two individual segments match
@@ -800,8 +691,10 @@ export class TopicPath {
   private segmentMatches(pattern: PathSegment, topic: PathSegment): boolean {
     // Fast path for identical segments
     if (pattern.kind === topic.kind) {
-      if (pattern.kind === PathSegmentType.Literal || pattern.kind === PathSegmentType.Template) {
-        return pattern.value === topic.value;
+      if (pattern.kind === PathSegmentType.Literal) {
+        return pattern.value === (topic as { kind: PathSegmentType.Literal; value: string }).value;
+      } else if (pattern.kind === PathSegmentType.Template) {
+        return pattern.value === (topic as { kind: PathSegmentType.Template; value: string }).value;
       }
       return true; // wildcards match
     }

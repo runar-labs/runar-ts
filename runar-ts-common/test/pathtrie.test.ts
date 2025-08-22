@@ -200,11 +200,7 @@ describe('PathTrie', () => {
         trie.setValue(pattern, 'MULTI_WILDCARD');
 
         // Test with different path lengths
-        const topics = [
-          'services/math/state',
-          'services/math/actions/add',
-          'services/a/b/c/d/e/f'
-        ];
+        const topics = ['services/math/state', 'services/math/actions/add', 'services/a/b/c/d/e/f'];
 
         for (const topicStr of topics) {
           const topicResult = TopicPath.new(topicStr, 'network1');
@@ -226,7 +222,7 @@ describe('PathTrie', () => {
       const services = [
         { path: 'serviceA/action1', handler: 'serviceA/action1' },
         { path: 'serviceA/action2', handler: 'serviceA/action2' },
-        { path: 'serviceA/action3', handler: 'serviceA/action3' }
+        { path: 'serviceA/action3', handler: 'serviceA/action3' },
       ];
 
       for (const service of services) {
@@ -317,7 +313,7 @@ describe('PathTrie', () => {
         expect(trie.handlerCount()).toBe(3);
 
         // Remove handlers containing '2'
-        const removed = trie.removeHandler(topic, (h) => h.includes('2'));
+        const removed = trie.removeHandler(topic, h => h.includes('2'));
         expect(removed).toBe(true);
         expect(trie.handlerCount()).toBe(2);
 
@@ -359,7 +355,7 @@ describe('PathTrie', () => {
         'main:services/math/add',
         'main:services/math/subtract',
         'main:services/auth/login',
-        'main:services/auth/logout'
+        'main:services/auth/logout',
       ];
 
       const handlers = ['handler1', 'handler2'];
@@ -414,11 +410,7 @@ describe('PathTrie', () => {
         trie.setValue(patternResult.value, 'TEMPLATE_THEN_MULTI');
 
         // Test with deep paths
-        const deepPaths = [
-          'services/math/a/b/c',
-          'services/math/x/y/z/w',
-          'services/auth/simple'
-        ];
+        const deepPaths = ['services/math/a/b/c', 'services/math/x/y/z/w', 'services/auth/simple'];
 
         for (const pathStr of deepPaths) {
           const topicResult = TopicPath.new(pathStr, 'network1');
@@ -484,7 +476,7 @@ describe('PathTrie', () => {
         trie.setValues(topic, ['handler1', 'handler2']);
 
         // Try to remove non-existent handler
-        const removed = trie.removeHandler(topic, (h) => h === 'nonexistent');
+        const removed = trie.removeHandler(topic, h => h === 'nonexistent');
         expect(removed).toBe(false);
 
         // Handlers should remain unchanged
@@ -523,7 +515,8 @@ describe('PathTrie', () => {
       const trie = PathTrie.default<string>();
 
       // Create a very deep path
-      const deepPath = 'main:' + 'level1/level2/level3/level4/level5/level6/level7/level8/level9/level10';
+      const deepPath =
+        'main:' + 'level1/level2/level3/level4/level5/level6/level7/level8/level9/level10';
       const topicResult = TopicPath.new(deepPath, 'default');
       expect(topicResult.ok).toBe(true);
 

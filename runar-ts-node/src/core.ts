@@ -128,7 +128,12 @@ export class RequestContextImpl implements RequestContext {
   logger: Logger;
   pathParams: Map<string, string>;
 
-  constructor(topicPath: TopicPath, node: NodeDelegate, logger: Logger, pathParams?: Map<string, string>) {
+  constructor(
+    topicPath: TopicPath,
+    node: NodeDelegate,
+    logger: Logger,
+    pathParams?: Map<string, string>
+  ) {
     this.topicPath = topicPath;
     this.node = node;
     this.logger = logger;

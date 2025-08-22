@@ -101,7 +101,10 @@ export function mapErr<V, E, F>(result: Result<V, E>, fn: (error: E) => F): Resu
 /**
  * Chain operations on Results - flatMap/binding operation
  */
-export function andThen<V, E, U>(result: Result<V, E>, fn: (value: V) => Result<U, E>): Result<U, E> {
+export function andThen<V, E, U>(
+  result: Result<V, E>,
+  fn: (value: V) => Result<U, E>
+): Result<U, E> {
   if (result.ok) {
     return fn(result.value);
   }
@@ -121,10 +124,15 @@ export function transpose<V, E>(result: Result<Promise<V>, E>): Promise<Result<V
 /**
  * Convert a Promise<V> to Promise<Result<V, E>> with error mapping
  */
-export function fromPromise<V, E = string>(promise: Promise<V>, errorMapper?: (error: unknown) => E): Promise<Result<V, E>> {
+export function fromPromise<V, E = string>(
+  promise: Promise<V>,
+  errorMapper?: (error: unknown) => E
+): Promise<Result<V, E>> {
   return promise
     .then(ok)
-    .catch(e => err(errorMapper ? errorMapper(e) : (e instanceof Error ? e.message : String(e)) as E));
+    .catch(e =>
+      err(errorMapper ? errorMapper(e) : ((e instanceof Error ? e.message : String(e)) as E))
+    );
 }
 
 /**
