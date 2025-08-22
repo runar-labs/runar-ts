@@ -34,7 +34,12 @@ describe('RegistryService', () => {
     await node.start();
     console.log('Node started, about to make request');
     console.log('About to call node.request');
-    console.log('Node methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(node)).filter(name => name.includes('request')));
+    console.log(
+      'Node methods:',
+      Object.getOwnPropertyNames(Object.getPrototypeOf(node)).filter(name =>
+        name.includes('request')
+      )
+    );
     const res = await node.request<undefined, any>('$registry/services/list', undefined as any);
     console.log('Request returned:', res);
     expect(res.ok).toBe(true);

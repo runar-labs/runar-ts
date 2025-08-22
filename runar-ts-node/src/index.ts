@@ -16,7 +16,10 @@ import {
   EventContextImpl,
 } from './core';
 import { Logger, Component } from 'runar-ts-common';
-import { Logger as LoggerClass, Component as ComponentEnum } from 'runar-ts-common/src/logging/logger.js';
+import {
+  Logger as LoggerClass,
+  Component as ComponentEnum,
+} from 'runar-ts-common/src/logging/logger.js';
 import { SubscriptionMetadata } from 'runar-ts-schemas';
 // REMOVED: RemoteAdapter - not in Rust API
 import { isOk, unwrap, unwrapErr, Result, ok, err } from 'runar-ts-common';
@@ -162,7 +165,7 @@ export class Node {
   private retainedIndex = new PathTrie<string>();
   private retainedKeyToTopic = new Map<string, TopicPath>();
   private readonly maxRetainedPerTopic = 100;
-// REMOVED: remoteAdapter - not in Rust API
+  // REMOVED: remoteAdapter - not in Rust API
 
   constructor(networkId = 'default') {
     this.networkId = networkId;
@@ -213,7 +216,7 @@ export class Node {
     const regCtx = new NodeLifecycleContext(this.networkId, reg.path(), this.logger, this);
     try {
       this.logger?.info?.('About to call RegistryService.init()');
-    await reg.init(regCtx);
+      await reg.init(regCtx);
       this.logger?.info?.('RegistryService.init() completed successfully');
     } catch (error) {
       this.logger?.error?.('RegistryService.init() failed:', error);
@@ -252,18 +255,6 @@ export class Node {
     this.running = false;
   }
 
-
-
-
-
-
-
-
-
-
-
-
-
   clearRetainedEventsMatching(pattern: string): number {
     const fullPattern = pattern.includes(':') ? pattern : `${this.networkId}:${pattern}`;
     const topicPattern = TopicPath.new(fullPattern, this.networkId);
@@ -291,12 +282,14 @@ export class Node {
       if (list) {
         const topic = this.retainedKeyToTopic.get(key);
         if (topic) {
-          events.push(...list.map(event => ({
-            service: topic.servicePath(),
-            event: event.event,
-            payload: event.payload,
-            timestampMs: event.ts,
-          })));
+          events.push(
+            ...list.map(event => ({
+              service: topic.servicePath(),
+              event: event.event,
+              payload: event.payload,
+              timestampMs: event.ts,
+            }))
+          );
         }
       }
     }
@@ -393,7 +386,8 @@ export class Node {
             message.service,
             message.event,
             true, // isLocal
-            this.logger?.withEventPath?.(`${topicPath.servicePath()}/${message.event}`) || this.logger,
+            this.logger?.withEventPath?.(`${topicPath.servicePath()}/${message.event}`) ||
+              this.logger,
             this
           );
           return s.subscriber(message.payload, eventContext);
@@ -420,7 +414,7 @@ export class Node {
         this.logger?.debug?.(`Retained events for key ${key}: ${list.length} events`);
       }
 
-// REMOVED: Remote forwarding - not in Rust API (only local events)
+      // REMOVED: Remote forwarding - not in Rust API (only local events)
 
       return ok(undefined);
     } catch (error) {
@@ -460,14 +454,15 @@ export class Node {
             message.service,
             message.event,
             true, // isLocal
-            this.logger?.withEventPath?.(`${topicPath.servicePath()}/${message.event}`) || this.logger,
+            this.logger?.withEventPath?.(`${topicPath.servicePath()}/${message.event}`) ||
+              this.logger,
             this
           );
           return s.subscriber(message.payload, eventContext);
         })
       );
 
-// REMOVED: Remote forwarding - not in Rust API (only local events)
+      // REMOVED: Remote forwarding - not in Rust API (only local events)
 
       return ok(undefined);
     } catch (error) {
@@ -627,7 +622,11 @@ export class Node {
       this.logger?.debug?.(`no match found for actionPath: ${actionPath}`);
     }
 
-    this.logger?.debug?.(`final pathParams: ${Array.from(pathParams.entries()).map(([k, v]) => `${k}=${v}`).join(', ')}`);
+    this.logger?.debug?.(
+      `final pathParams: ${Array.from(pathParams.entries())
+        .map(([k, v]) => `${k}=${v}`)
+        .join(', ')}`
+    );
     return pathParams;
   }
 }

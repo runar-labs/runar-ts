@@ -153,7 +153,9 @@ export class NodeLifecycleContext extends LifecycleContextImpl {
         return err(unwrapErr(topicResult));
       }
       const topicPath = unwrap(topicResult);
-      this.node.logger?.debug?.(`Registering action handler for topic: ${topicPath.asString?.() || 'unknown'}`);
+      this.node.logger?.debug?.(
+        `Registering action handler for topic: ${topicPath.asString?.() || 'unknown'}`
+      );
       this.node.registry.addLocalActionHandler(topicPath, handler);
       return { ok: true, value: undefined };
     } catch (error) {

@@ -60,5 +60,5 @@ describe('Node path-based APIs', () => {
     await n.stop();
   });
 
-// REMOVED: Remote fallback test - not in Rust API (only local services)
+  // REMOVED: Remote fallback test - not in Rust API (only local services)
 });

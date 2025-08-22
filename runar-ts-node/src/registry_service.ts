@@ -59,7 +59,13 @@ export class RegistryService implements AbstractService {
         const services = this.getLocalServices();
         // Extract service_path parameter from pathParams (framework extracts this)
         const servicePath = context.pathParams.get('service_path');
-        context.logger.debug(`services/{service_path} called with pathParams: ${Array.from(context.pathParams.entries()).map(([k, v]) => `${k}=${v}`).join(', ')}, extracted servicePath: ${servicePath}`);
+        context.logger.debug(
+          `services/{service_path} called with pathParams: ${Array.from(
+            context.pathParams.entries()
+          )
+            .map(([k, v]) => `${k}=${v}`)
+            .join(', ')}, extracted servicePath: ${servicePath}`
+        );
         const match = this.findServiceByPath(servicePath || null, services);
         const meta = match
           ? await this.delegate.getServiceMetadata(
@@ -173,7 +179,10 @@ export class RegistryService implements AbstractService {
     return list.find(e => e.service.path() === svcPath);
   }
 
-  private findServiceByPath(servicePath: string | null, list: ServiceEntry[]): ServiceEntry | undefined {
+  private findServiceByPath(
+    servicePath: string | null,
+    list: ServiceEntry[]
+  ): ServiceEntry | undefined {
     if (!servicePath) return undefined;
     // Extract service path from full path like "services/my-service" -> "my-service"
     const parts = servicePath.split('/');
