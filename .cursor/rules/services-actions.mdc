@@ -1,4 +1,7 @@
-
+---
+description: When creating or modifying services, actions or event handlers using the runar framework  in JS or TS. When writting tests for services, action and event using the runar framework in JS or TS
+alwaysApply: false
+---
 ## Core Rules
 ### 1. No Fallbacks - Single Path Execution
 - **❌ WRONG**: Try one type, fallback to another

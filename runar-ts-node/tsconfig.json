@@ -3,10 +3,7 @@
   "compilerOptions": {
     "outDir": "dist",
     "rootDir": "src",
-    "baseUrl": ".",
-    "paths": {
-      "runar-ts-common": ["../runar-ts-common/dist/index.d.ts"]
-    }
+    "baseUrl": "."
   },
   "include": ["src/**/*"]
 }
