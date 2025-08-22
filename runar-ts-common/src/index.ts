@@ -54,6 +54,9 @@ export function unwrapErr<T, E>(result: Result<T, E>): E {
   return result.error!;
 }
 
+// Export logging functionality
+export { Logger, Component } from './logging/logger.js';
+
 // Service lifecycle states (matching Rust ServiceState)
 export enum ServiceState {
   Created = 'Created',

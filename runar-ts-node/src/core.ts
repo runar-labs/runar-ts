@@ -1,6 +1,6 @@
 import { AnyValue } from 'runar-ts-serializer';
 import { ServiceState } from 'runar-ts-schemas';
-import { Result, err } from 'runar-ts-common';
+import { Result, err, Logger, Component } from 'runar-ts-common';
 
 // Re-export ServiceState for convenience
 export { ServiceState };
@@ -10,7 +10,7 @@ export interface LifecycleContext {
   networkId: string;
   servicePath: string;
   config?: AnyValue;
-  logger: any; // Logger type to be imported
+  logger: Logger;
 
   // Action handling
   registerAction(actionName: string, handler: ActionHandler): Promise<Result<void, string>>;
@@ -44,9 +44,9 @@ export class LifecycleContextImpl implements LifecycleContext {
   networkId: string;
   servicePath: string;
   config?: AnyValue;
-  logger: any;
+  logger: Logger;
 
-  constructor(networkId: string, servicePath: string, logger: any, config?: AnyValue) {
+  constructor(networkId: string, servicePath: string, logger: Logger, config?: AnyValue) {
     this.networkId = networkId;
     this.servicePath = servicePath;
     this.logger = logger;
@@ -132,7 +132,7 @@ export class LifecycleContextImpl implements LifecycleContext {
 export class NodeLifecycleContext extends LifecycleContextImpl {
   private node: any; // Node instance
 
-  constructor(networkId: string, servicePath: string, logger: any, node: any, config?: AnyValue) {
+  constructor(networkId: string, servicePath: string, logger: Logger, node: any, config?: AnyValue) {
     super(networkId, servicePath, logger, config);
     this.node = node;
   }
@@ -241,13 +241,78 @@ export interface RequestContext {
   networkId: string;
   servicePath: string;
   requestId: string; // Internal - handlers don't use this
+  logger: Logger;
+}
+
+export interface EventContext {
+  networkId: string;
+  servicePath: string;
+  eventPath: string;
+  isLocal: boolean;
+  logger: Logger;
+
+  // Publishing events
+  publish(topic: string, data?: AnyValue): Promise<Result<void, string>>;
+
+  // Making requests
+  request<P = unknown>(topic: string, payload?: P): Promise<Result<AnyValue, string>>;
+
+  // Logging helpers
+  debug(message: string): void;
+  info(message: string): void;
+  warn(message: string): void;
+  error(message: string): void;
+}
+
+// Concrete implementation of EventContext
+export class EventContextImpl implements EventContext {
+  networkId: string;
+  servicePath: string;
+  eventPath: string;
+  isLocal: boolean;
+  logger: any;
+
+  private node: any; // Node instance for making requests
+
+  constructor(networkId: string, servicePath: string, eventPath: string, isLocal: boolean, logger: any, node: any) {
+    this.networkId = networkId;
+    this.servicePath = servicePath;
+    this.eventPath = eventPath;
+    this.isLocal = isLocal;
+    this.logger = logger;
+    this.node = node;
+  }
+
+  async publish(topic: string, data?: AnyValue): Promise<Result<void, string>> {
+    return this.node.publish(topic, data);
+  }
+
+  async request<P = unknown>(topic: string, payload?: P): Promise<Result<AnyValue, string>> {
+    return this.node.request(topic, payload);
+  }
+
+  debug(message: string): void {
+    this.logger.debug(message);
+  }
+
+  info(message: string): void {
+    this.logger.info(message);
+  }
+
+  warn(message: string): void {
+    this.logger.warn(message);
+  }
+
+  error(message: string): void {
+    this.logger.error(message);
+  }
 }
 
 export type ActionHandler = (
   payload: AnyValue,
   context: RequestContext
 ) => Promise<Result<AnyValue, string>>;
-export type EventSubscriber = (evt: EventMessage) => void | Promise<void>;
+export type EventSubscriber = (payload: AnyValue, context: EventContext) => Promise<Result<void, string>>;
 
 export interface ServiceRegistration {
   service: ServiceName;

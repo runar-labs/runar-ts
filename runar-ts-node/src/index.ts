@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { AnyValue } from 'runar-ts-serializer';
 import { PathTrie, TopicPath } from 'runar-ts-common';
+
 import {
   ActionHandler,
   ActionRequest,
@@ -12,7 +13,9 @@ import {
   NodeLifecycleContext,
   ServiceState,
   RequestContext,
+  EventContextImpl,
 } from './core';
+import { Logger, Component } from 'runar-ts-common';
 import { SubscriptionMetadata } from 'runar-ts-schemas';
 import type { RemoteAdapter } from './remote';
 import { isOk, unwrap, unwrapErr, Result, ok, err } from 'runar-ts-common';
@@ -150,7 +153,7 @@ export interface ServiceEntry {
 export class Node {
   private readonly networkId: string;
   private readonly registry = new ServiceRegistry();
-  private readonly logger: any; // Logger instance
+  private readonly logger: Logger;
   private running = false;
   private retainedEvents = new Map<
     string,
@@ -163,7 +166,7 @@ export class Node {
 
   constructor(networkId = 'default') {
     this.networkId = networkId;
-    this.logger = console; // Simple logger for now - can be enhanced later
+    this.logger = Logger.newRoot(Component.Node).setNodeId(networkId);
   }
 
   static fromConfig(cfg: {
@@ -290,6 +293,7 @@ export class Node {
       networkId: this.networkId,
       servicePath: service,
       requestId: requestId,
+      logger: this.logger?.withActionPath?.(`${service}/${action}`) || this.logger,
     };
 
     // Call handler with new signature
@@ -347,6 +351,7 @@ export class Node {
       networkId: this.networkId,
       servicePath: topicPath.servicePath(),
       requestId: requestId,
+      logger: this.logger.withActionPath(topicPath.asString() || ''),
     };
 
     // Call handler with new signature
@@ -390,7 +395,17 @@ export class Node {
       this.retainedIndex.setValue(evtTopic, key);
       this.retainedKeyToTopic.set(key, evtTopic);
     }
-    await Promise.allSettled(subs.map(s => s.subscriber(message)));
+    await Promise.allSettled(subs.map(s => {
+      const eventContext = new EventContextImpl(
+        this.networkId,
+        message.service,
+        message.event,
+        true, // isLocal
+        this.logger?.withEventPath?.(`${evtTopic.servicePath()}/${actionPath}`) || this.logger,
+        this
+      );
+      return s.subscriber(message.payload, eventContext);
+    }));
     // If no locals and remote is configured, forward publish
     if (subs.length === 0 && this.remoteAdapter) {
       const path = evtTopic.asString?.() ?? `${this.networkId}:${service}/${event}`;
@@ -440,7 +455,17 @@ export class Node {
       this.retainedIndex.setValue(evtTopic, key);
       this.retainedKeyToTopic.set(key, evtTopic);
     }
-    await Promise.allSettled(subs.map(s => s.subscriber(message)));
+    await Promise.allSettled(subs.map(s => {
+      const eventContext = new EventContextImpl(
+        this.networkId,
+        message.service,
+        message.event,
+        true, // isLocal
+        this.logger?.withEventPath?.(`${evtTopic.servicePath()}/${actionPath}`) || this.logger,
+        this
+      );
+      return s.subscriber(message.payload, eventContext);
+    }));
     if (subs.length === 0 && this.remoteAdapter) {
       const ser = inArc.serialize();
       if (!ser.ok) throw ser.error;
@@ -551,6 +576,7 @@ export class Node {
   // Helper method to get retained events for a topic
   private getRetainedEvents(topicPath: TopicPath): EventMessage[] {
     const key = `${this.networkId}:${topicPath.servicePath()}/${topicPath.actionPath()}`;
+
     const list = this.retainedEvents.get(key);
     if (!list) return [];
 
@@ -606,6 +632,7 @@ export class Node {
         networkId: this.networkId,
         servicePath: service,
         requestId: requestId,
+        logger: this.logger?.withActionPath?.(`${service}/${action}`) || this.logger,
       };
 
       // Call handler with new signature
@@ -645,7 +672,33 @@ export class Node {
       };
 
       // Always deliver locally first
-      await Promise.allSettled(subs.map(s => s.subscriber(message)));
+      await Promise.allSettled(subs.map(s => {
+        const eventContext = new EventContextImpl(
+          this.networkId,
+          message.service,
+          message.event,
+          true, // isLocal
+          this.logger?.withEventPath?.(`${evtTopic.servicePath()}/${actionPath}`) || this.logger,
+          this
+        );
+        return s.subscriber(message.payload, eventContext);
+      }));
+
+      // Handle retained events if requested
+      if (options?.retain) {
+        const key = `${this.networkId}:${topicPath.servicePath()}/${topicPath.actionPath()}`;
+        this.logger?.debug?.(`Storing retained event for key: ${key}, service: ${service}, event: ${event}`);
+        this.logger?.debug?.(`topicPath.servicePath(): ${topicPath.servicePath()}, topicPath.actionPath(): ${topicPath.actionPath()}`);
+        const list = this.retainedEvents.get(key) ?? [];
+        list.push({ ts: message.timestampMs, event, payload });
+        if (list.length > this.maxRetainedPerTopic) {
+          list.splice(0, list.length - this.maxRetainedPerTopic);
+        }
+        this.retainedEvents.set(key, list);
+        this.retainedIndex.setValue(topicPath, key);
+        this.retainedKeyToTopic.set(key, topicPath);
+        this.logger?.debug?.(`Retained events for key ${key}: ${list.length} events`);
+      }
 
       // Forward to remote if configured and there are remote subscribers
       if (this.remoteAdapter) {
@@ -665,6 +718,7 @@ export class Node {
    */
   async publish(topic: string, data?: AnyValue): Promise<Result<void, string>> {
     try {
+
       if (!this.running) return err('Node not started');
 
       const topicPath = TopicPath.new(topic, this.networkId);
@@ -674,6 +728,7 @@ export class Node {
 
       const subs = this.registry.getSubscribers(topicPath);
       const payload = data || AnyValue.null();
+
       const service = topicPath.servicePath();
       const event = topic.split('/').pop() || '';
       const message: EventMessage = {
@@ -684,7 +739,17 @@ export class Node {
       };
 
       // Always deliver locally first
-      await Promise.allSettled(subs.map(s => s.subscriber(message)));
+      await Promise.allSettled(subs.map(s => {
+        const eventContext = new EventContextImpl(
+          this.networkId,
+          message.service,
+          message.event,
+          true, // isLocal
+          this.logger?.withEventPath?.(`${evtTopic.servicePath()}/${actionPath}`) || this.logger,
+          this
+        );
+        return s.subscriber(message.payload, eventContext);
+      }));
 
       // Forward to remote if configured and there are remote subscribers
       if (this.remoteAdapter) {
@@ -731,7 +796,15 @@ export class Node {
       if (options?.includePast) {
         const pastEvents = this.getRetainedEvents(topicPath);
         for (const event of pastEvents) {
-          callback(event);
+          const eventContext = new EventContextImpl(
+            this.networkId,
+            event.service,
+            event.event,
+            true, // isLocal - retained events are always local
+            this.logger?.withEventPath?.(`${event.service}/${event.event}`) || this.logger,
+            this
+          );
+          callback(event.payload, eventContext);
         }
       }
 

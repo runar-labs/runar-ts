@@ -1,6 +1,7 @@
-
 ## Core Rules
+
 ### 1. No Fallbacks - Single Path Execution
+
 - **❌ WRONG**: Try one type, fallback to another
 - **✅ CORRECT**: Expect exact type, fail if mismatch
 
@@ -23,6 +24,7 @@ const label = stringResult.value;
 ```
 
 ### 2. Action Handler Signature
+
 ```typescript
 type ActionHandler = (
   payload: AnyValue,
@@ -31,6 +33,7 @@ type ActionHandler = (
 ```
 
 ### 3. Never Use `unknown` Types
+
 ```typescript
 // ❌ BAD
 const result = payload.as<unknown>();
@@ -43,6 +46,7 @@ const result = payload.as<MyStruct>();
 ## Framework Responsibilities
 
 ### Framework Handles:
+
 - Serialization/Deserialization (CBOR conversion)
 - Encryption/Decryption (remote calls)
 - Network Transport (local vs remote routing)
@@ -50,6 +54,7 @@ const result = payload.as<MyStruct>();
 - Type Safety (runtime type checking)
 
 ### Action Handlers Do:
+
 - Business Logic Only (pure functions)
 - Type Checking (`AnyValue.as<T>()`)
 - Error Handling (`Result<AnyValue, string>`)
@@ -58,6 +63,7 @@ const result = payload.as<MyStruct>();
 ## Anti-Patterns (NEVER DO)
 
 ### 1. Fallback Logic
+
 ```typescript
 // ❌ NEVER DO THIS
 const stringResult = payload.as<string>();
@@ -72,6 +78,7 @@ if (stringResult.ok) {
 ```
 
 ### 2. Manual Serialization
+
 ```typescript
 // ❌ NEVER DO THIS
 const input = AnyValue.fromBytes(req.payload); // Framework handles this
@@ -79,6 +86,7 @@ return { ok: true, payload: result.serialize() }; // Framework handles this
 ```
 
 ### 3. Request ID Handling
+
 ```typescript
 // ❌ NEVER DO THIS
 return {
@@ -89,6 +97,7 @@ return {
 ```
 
 ### 4. Complex Return Types
+
 ```typescript
 // ❌ NEVER DO THIS
 return {
@@ -102,12 +111,14 @@ return {
 ## Testing Best Practices
 
 **Recommended Approach:**
+
 - Create offline node
 - Add service to be tested + all dependent services
 - Call action through node API (proper context, can call other actions)
 - Fast, lightweight, real integration tests
 
 **Alternative (Mock-based unit tests also possible but not recommended):**
+
 ```typescript
 describe('myAction', () => {
   it('should process string input correctly', async () => {

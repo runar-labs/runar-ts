@@ -28,9 +28,10 @@ export class Logger {
     this.component = component;
   }
 
-  setNodeId(nodeId: string): void {
+  setNodeId(nodeId: string): Logger {
     if (this.nodeId !== undefined) throw new Error('Node ID already set for this logger');
     this.nodeId = nodeId;
+    return this;
   }
 
   withComponent(component: Component): Logger {
