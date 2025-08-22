@@ -13,7 +13,10 @@ console.log('Pattern:', pattern.asString());
 console.log('Pattern isPattern:', pattern.isPattern());
 console.log('Pattern hasMultiWildcard:', pattern.hasMultiWildcard());
 const patternPathSegments = (pattern as any).segments;
-console.log('Pattern PathSegments:', patternPathSegments.map((s: any) => ({ kind: s.kind, value: s.value })));
+console.log(
+  'Pattern PathSegments:',
+  patternPathSegments.map((s: any) => ({ kind: s.kind, value: s.value }))
+);
 console.log('Pattern segments (string):', pattern.getSegments());
 
 const testPathResult = TopicPath.new('main:services/auth/login', 'default');
@@ -26,7 +29,10 @@ const testPath = testPathResult.value;
 console.log('Test path:', testPath.asString());
 console.log('Test path isPattern:', testPath.isPattern());
 const testPathPathSegments = (testPath as any).segments;
-console.log('Test path PathSegments:', testPathPathSegments.map((s: any) => ({ kind: s.kind, value: s.value })));
+console.log(
+  'Test path PathSegments:',
+  testPathPathSegments.map((s: any) => ({ kind: s.kind, value: s.value }))
+);
 console.log('Test path segments (string):', testPath.getSegments());
 
 console.log('Pattern matches test path:', pattern.matches(testPath));
@@ -35,8 +41,14 @@ console.log('Test path matches pattern:', testPath.matches(pattern));
 // Let's also test what happens with the segmentsMatch directly
 const patternSegs = (pattern as any).segments;
 const testPathSegs = (testPath as any).segments;
-console.log('Direct segmentsMatch (pattern, concrete):', (pattern as any).segmentsMatch(patternSegs, testPathSegs));
-console.log('Direct segmentsMatch (concrete, pattern):', (pattern as any).segmentsMatch(testPathSegs, patternSegs));
+console.log(
+  'Direct segmentsMatch (pattern, concrete):',
+  (pattern as any).segmentsMatch(patternSegs, testPathSegs)
+);
+console.log(
+  'Direct segmentsMatch (concrete, pattern):',
+  (pattern as any).segmentsMatch(testPathSegs, patternSegs)
+);
 
 // Debug the multi-wildcard logic
 console.log('Pattern segments length:', patternSegs.length);

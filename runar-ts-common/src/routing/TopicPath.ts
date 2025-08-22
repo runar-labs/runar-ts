@@ -372,7 +372,11 @@ export class TopicPath {
 
     // Fast path 2: if segment counts don't match and there's no multi-wildcard,
     // the paths can't match
-    if (this.segmentCount !== topic.segmentCount && !this.hasMultiWildcard() && !topic.hasMultiWildcard()) {
+    if (
+      this.segmentCount !== topic.segmentCount &&
+      !this.hasMultiWildcard() &&
+      !topic.hasMultiWildcard()
+    ) {
       return false;
     }
 
@@ -476,7 +480,10 @@ export class TopicPath {
         switch (topicSeg.kind) {
           case PathSegmentType.Literal:
             // For literals, the segments must match exactly
-            if (patternSeg.kind === PathSegmentType.Literal && topicSeg.value === patternSeg.value) {
+            if (
+              patternSeg.kind === PathSegmentType.Literal &&
+              topicSeg.value === patternSeg.value
+            ) {
               continue;
             }
             return false;
@@ -568,8 +575,6 @@ export class TopicPath {
   static test_default(path: string): Result<TopicPath, string> {
     return TopicPath.new(path, 'default');
   }
-
-
 
   /**
    * Check if this path contains template parameters
@@ -682,8 +687,6 @@ export class TopicPath {
   static getSegmentType(bitmap: number, index: number): PathSegmentType {
     return ((bitmap >> (index * 2)) & 0b11) as number as PathSegmentType;
   }
-
-
 
   /**
    * Check if two individual segments match

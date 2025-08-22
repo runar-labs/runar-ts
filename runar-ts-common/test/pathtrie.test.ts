@@ -315,6 +315,7 @@ describe('PathTrie', () => {
         // Remove handlers containing '2'
         const removed = trie.removeHandler(topic, h => h.includes('2'));
         expect(removed).toBe(true);
+
         expect(trie.handlerCount()).toBe(2);
 
         // Check remaining handlers
@@ -527,6 +528,472 @@ describe('PathTrie', () => {
         // Should be able to find it
         const matches = trie.find(topic);
         expect(matches).toEqual(['deep_handler']);
+      }
+    });
+  });
+
+  describe('Wildcard Search Intermediate Nodes (Rust Compatibility)', () => {
+    test('should find handlers at all levels with wildcard search', () => {
+      const trie = PathTrie.default<string>();
+
+      // Simulate the users_db service with actions at different levels
+      // This replicates the actual bug where replication/get_table_events is not found
+
+      // Action at root level
+      const action1Result = TopicPath.new('users_db/execute_query', 'network1');
+      expect(action1Result.ok).toBe(true);
+      if (action1Result.ok) {
+        trie.setValue(action1Result.value, 'users_db/execute_query');
+      }
+
+      // Action at intermediate level (replication/get_table_events)
+      const action2Result = TopicPath.new('users_db/replication/get_table_events', 'network1');
+      expect(action2Result.ok).toBe(true);
+      if (action2Result.ok) {
+        trie.setValue(action2Result.value, 'users_db/replication/get_table_events');
+      }
+
+      // Test wildcard search that should find ALL actions for the service
+      const searchResult = TopicPath.new('users_db/*', 'network1');
+      expect(searchResult.ok).toBe(true);
+
+      if (searchResult.ok) {
+        const searchPattern = searchResult.value;
+        const matches = trie.find(searchPattern);
+
+        // This should return BOTH actions, but currently only returns execute_query
+        // because replication/get_table_events is not a leaf node in the trie structure
+        expect(matches.length).toBe(2);
+        expect(matches).toContain('users_db/execute_query');
+        expect(matches).toContain('users_db/replication/get_table_events');
+      }
+    });
+
+    test('should find handlers with multi-wildcard search', () => {
+      const trie = PathTrie.default<string>();
+
+      // Action at root level
+      const action1Result = TopicPath.new('users_db/execute_query', 'network1');
+      expect(action1Result.ok).toBe(true);
+      if (action1Result.ok) {
+        trie.setValue(action1Result.value, 'users_db/execute_query');
+      }
+
+      // Action at intermediate level
+      const action2Result = TopicPath.new('users_db/replication/get_table_events', 'network1');
+      expect(action2Result.ok).toBe(true);
+      if (action2Result.ok) {
+        trie.setValue(action2Result.value, 'users_db/replication/get_table_events');
+      }
+
+      // Test with multi-wildcard to be thorough
+      const searchResult = TopicPath.new('users_db/>', 'network1');
+      expect(searchResult.ok).toBe(true);
+
+      if (searchResult.ok) {
+        const searchPattern = searchResult.value;
+        const matches = trie.find(searchPattern);
+
+        expect(matches.length).toBe(2);
+        expect(matches).toContain('users_db/execute_query');
+        expect(matches).toContain('users_db/replication/get_table_events');
+      }
+    });
+
+    test('should handle deep intermediate nodes with wildcard search', () => {
+      const trie = PathTrie.default<string>();
+
+      // More complex case with deeper intermediate nodes
+      const actions = [
+        { path: 'serviceA/action1', handler: 'serviceA/action1' },
+        {
+          path: 'serviceA/replication/events/get_table_events',
+          handler: 'serviceA/replication/events/get_table_events',
+        },
+        {
+          path: 'serviceA/replication/events/get_table_state',
+          handler: 'serviceA/replication/events/get_table_state',
+        },
+        {
+          path: 'serviceA/replication/config/get_config',
+          handler: 'serviceA/replication/config/get_config',
+        },
+      ];
+
+      for (const action of actions) {
+        const topicResult = TopicPath.new(action.path, 'network1');
+        expect(topicResult.ok).toBe(true);
+        if (topicResult.ok) {
+          trie.setValue(topicResult.value, action.handler);
+        }
+      }
+
+      // Test wildcard search
+      const searchResult = TopicPath.new('serviceA/*', 'network1');
+      expect(searchResult.ok).toBe(true);
+
+      if (searchResult.ok) {
+        const searchPattern = searchResult.value;
+        const matches = trie.find(searchPattern);
+
+        // Should find action1 and all replication actions
+        expect(matches.length).toBe(4);
+        expect(matches).toContain('serviceA/action1');
+        expect(matches).toContain('serviceA/replication/events/get_table_events');
+        expect(matches).toContain('serviceA/replication/events/get_table_state');
+        expect(matches).toContain('serviceA/replication/config/get_config');
+      }
+    });
+
+    test('should handle mixed level handlers with wildcard search', () => {
+      const trie = PathTrie.default<string>();
+
+      // Mixed levels - some at root, some at intermediate
+      const actions = [
+        { path: 'serviceB/query', handler: 'serviceB/query' },
+        { path: 'serviceB/execute', handler: 'serviceB/execute' },
+        { path: 'serviceB/replication/sync', handler: 'serviceB/replication/sync' },
+        { path: 'serviceB/replication/events', handler: 'serviceB/replication/events' },
+        { path: 'serviceB/admin/config', handler: 'serviceB/admin/config' },
+      ];
+
+      for (const action of actions) {
+        const topicResult = TopicPath.new(action.path, 'network1');
+        expect(topicResult.ok).toBe(true);
+        if (topicResult.ok) {
+          trie.setValue(topicResult.value, action.handler);
+        }
+      }
+
+      // Test wildcard search
+      const searchResult = TopicPath.new('serviceB/*', 'network1');
+      expect(searchResult.ok).toBe(true);
+
+      if (searchResult.ok) {
+        const searchPattern = searchResult.value;
+        const matches = trie.find(searchPattern);
+
+        // Should find ALL actions at all levels
+        expect(matches.length).toBe(5);
+        expect(matches).toContain('serviceB/query');
+        expect(matches).toContain('serviceB/execute');
+        expect(matches).toContain('serviceB/replication/sync');
+        expect(matches).toContain('serviceB/replication/events');
+        expect(matches).toContain('serviceB/admin/config');
+      }
+    });
+  });
+
+  describe('Cross-Network Search (Rust Compatibility)', () => {
+    test('should isolate searches by network for exact matches', () => {
+      const trie = PathTrie.default<string>();
+
+      // Add same paths with different networks
+      const actions = [
+        { path: 'services/math/state', network: 'network1', handler: 'MATH_NETWORK1' },
+        { path: 'services/math/state', network: 'network2', handler: 'MATH_NETWORK2' },
+        { path: 'services/auth/state', network: 'network1', handler: 'AUTH_NETWORK1' },
+        { path: 'services/auth/state', network: 'network2', handler: 'AUTH_NETWORK2' },
+      ];
+
+      for (const action of actions) {
+        const topicResult = TopicPath.new(action.path, action.network);
+        expect(topicResult.ok).toBe(true);
+        if (topicResult.ok) {
+          trie.setValue(topicResult.value, action.handler);
+        }
+      }
+
+      // Test exact path matching with network isolation
+      const topic1Result = TopicPath.new('services/math/state', 'network1');
+      expect(topic1Result.ok).toBe(true);
+      if (topic1Result.ok) {
+        const matches1 = trie.find(topic1Result.value);
+        expect(matches1).toEqual(['MATH_NETWORK1']);
+      }
+
+      const topic2Result = TopicPath.new('services/math/state', 'network2');
+      expect(topic2Result.ok).toBe(true);
+      if (topic2Result.ok) {
+        const matches2 = trie.find(topic2Result.value);
+        expect(matches2).toEqual(['MATH_NETWORK2']);
+      }
+
+      // Test non-existent network
+      const topic3Result = TopicPath.new('services/math/state', 'network3');
+      expect(topic3Result.ok).toBe(true);
+      if (topic3Result.ok) {
+        const matches3 = trie.find(topic3Result.value);
+        expect(matches3).toEqual([]);
+      }
+    });
+
+    test('should isolate searches by network for template matches', () => {
+      const trie = PathTrie.default<string>();
+
+      // Add template paths with different networks
+      const templates = [
+        {
+          path: 'services/{service}/events',
+          network: 'network1',
+          handler: 'EVENTS_TEMPLATE_NETWORK1',
+        },
+        {
+          path: 'services/{service}/events',
+          network: 'network2',
+          handler: 'EVENTS_TEMPLATE_NETWORK2',
+        },
+      ];
+
+      for (const template of templates) {
+        const topicResult = TopicPath.new(template.path, template.network);
+        expect(topicResult.ok).toBe(true);
+        if (topicResult.ok) {
+          trie.setValue(topicResult.value, template.handler);
+        }
+      }
+
+      // Test template matching with network isolation
+      const topic1Result = TopicPath.new('services/math/events', 'network1');
+      expect(topic1Result.ok).toBe(true);
+      if (topic1Result.ok) {
+        const matches1 = trie.find(topic1Result.value);
+        expect(matches1).toEqual(['EVENTS_TEMPLATE_NETWORK1']);
+      }
+
+      const topic2Result = TopicPath.new('services/math/events', 'network2');
+      expect(topic2Result.ok).toBe(true);
+      if (topic2Result.ok) {
+        const matches2 = trie.find(topic2Result.value);
+        expect(matches2).toEqual(['EVENTS_TEMPLATE_NETWORK2']);
+      }
+
+      // Test parameter extraction with network isolation
+      if (topic1Result.ok) {
+        const matchesWithParams = trie.findMatches(topic1Result.value);
+        expect(matchesWithParams.length).toBe(1);
+        expect(matchesWithParams[0].content).toBe('EVENTS_TEMPLATE_NETWORK1');
+        expect(matchesWithParams[0].params.get('service')).toBe('math');
+      }
+    });
+
+    test('should isolate searches by network for wildcard matches', () => {
+      const trie = PathTrie.default<string>();
+
+      // Add wildcard paths with different networks
+      const wildcards = [
+        { path: 'services/*/config', network: 'network1', handler: 'CONFIG_WILDCARD_NETWORK1' },
+        { path: 'services/*/config', network: 'network2', handler: 'CONFIG_WILDCARD_NETWORK2' },
+      ];
+
+      for (const wildcard of wildcards) {
+        const topicResult = TopicPath.new(wildcard.path, wildcard.network);
+        expect(topicResult.ok).toBe(true);
+        if (topicResult.ok) {
+          trie.setValue(topicResult.value, wildcard.handler);
+        }
+      }
+
+      // Test wildcard matching with network isolation
+      const topic1Result = TopicPath.new('services/math/config', 'network1');
+      expect(topic1Result.ok).toBe(true);
+      if (topic1Result.ok) {
+        const matches1 = trie.find(topic1Result.value);
+        expect(matches1).toEqual(['CONFIG_WILDCARD_NETWORK1']);
+      }
+
+      const topic2Result = TopicPath.new('services/math/config', 'network2');
+      expect(topic2Result.ok).toBe(true);
+      if (topic2Result.ok) {
+        const matches2 = trie.find(topic2Result.value);
+        expect(matches2).toEqual(['CONFIG_WILDCARD_NETWORK2']);
+      }
+    });
+  });
+
+  describe('Complex Template and Wildcard Combinations (Rust Compatibility)', () => {
+    test('should handle template then wildcard patterns', () => {
+      const trie = PathTrie.default<string>();
+
+      // Template + wildcard
+      const patternResult = TopicPath.new('services/{service_path}/*/details', 'network1');
+      expect(patternResult.ok).toBe(true);
+
+      if (patternResult.ok) {
+        trie.setValue(patternResult.value, 'TEMPLATE_THEN_WILDCARD');
+
+        // Test matching
+        const topicResult = TopicPath.new('services/math/state/details', 'network1');
+        expect(topicResult.ok).toBe(true);
+
+        if (topicResult.ok) {
+          const matches = trie.findMatches(topicResult.value);
+          expect(matches.length).toBe(1);
+          expect(matches[0].content).toBe('TEMPLATE_THEN_WILDCARD');
+          expect(matches[0].params.get('service_path')).toBe('math');
+        }
+      }
+    });
+
+    test('should handle wildcard then template patterns', () => {
+      const trie = PathTrie.default<string>();
+
+      // Wildcard + template
+      const patternResult = TopicPath.new('services/*/actions/{action}', 'network1');
+      expect(patternResult.ok).toBe(true);
+
+      if (patternResult.ok) {
+        trie.setValue(patternResult.value, 'WILDCARD_THEN_TEMPLATE');
+
+        // Test matching
+        const topicResult = TopicPath.new('services/math/actions/login', 'network1');
+        expect(topicResult.ok).toBe(true);
+
+        if (topicResult.ok) {
+          const matches = trie.findMatches(topicResult.value);
+          expect(matches.length).toBe(1);
+          expect(matches[0].content).toBe('WILDCARD_THEN_TEMPLATE');
+          expect(matches[0].params.get('action')).toBe('login');
+        }
+      }
+    });
+
+    test('should handle template then multi-wildcard patterns', () => {
+      const trie = PathTrie.default<string>();
+
+      // Template + multi-wildcard
+      const patternResult = TopicPath.new('services/{service_path}/>', 'network1');
+      expect(patternResult.ok).toBe(true);
+
+      if (patternResult.ok) {
+        trie.setValue(patternResult.value, 'TEMPLATE_THEN_MULTI');
+
+        // Test with deep paths
+        const deepPaths = ['services/math/a/b/c', 'services/math/x/y/z/w', 'services/auth/simple'];
+
+        for (const pathStr of deepPaths) {
+          const topicResult = TopicPath.new(pathStr, 'network1');
+          expect(topicResult.ok).toBe(true);
+
+          if (topicResult.ok) {
+            const matches = trie.find(topicResult.value);
+            expect(matches).toContain('TEMPLATE_THEN_MULTI');
+          }
+        }
+      }
+    });
+
+    test('should handle multi-wildcard then template patterns', () => {
+      const trie = PathTrie.default<string>();
+
+      // Multi-wildcard at end with template earlier
+      const patternResult = TopicPath.new('{type}/services/>', 'network1');
+      expect(patternResult.ok).toBe(true);
+
+      if (patternResult.ok) {
+        trie.setValue(patternResult.value, 'MULTI_THEN_TEMPLATE');
+
+        // Test multi-wildcard then template
+        const topicResult = TopicPath.new('internal/services/math/actions/anything', 'network1');
+        expect(topicResult.ok).toBe(true);
+
+        if (topicResult.ok) {
+          const matches = trie.find(topicResult.value);
+          expect(matches).toContain('MULTI_THEN_TEMPLATE');
+        }
+      }
+    });
+
+    test('should handle complex mixed patterns', () => {
+      const trie = PathTrie.default<string>();
+
+      // Complex mix of templates and wildcards
+      const patternResult = TopicPath.new('{type}/*/services/{name}/actions/*', 'network1');
+      expect(patternResult.ok).toBe(true);
+
+      if (patternResult.ok) {
+        trie.setValue(patternResult.value, 'COMPLEX_MIX');
+
+        // Test complex mix
+        const topicResult = TopicPath.new('internal/any/services/auth/actions/login', 'network1');
+        expect(topicResult.ok).toBe(true);
+
+        if (topicResult.ok) {
+          const matches = trie.find(topicResult.value);
+          expect(matches).toContain('COMPLEX_MIX');
+        }
+      }
+    });
+  });
+
+  describe('Template Parameter Edge Cases (Rust Compatibility)', () => {
+    test('should handle repeated parameter names', () => {
+      const trie = PathTrie.default<string>();
+
+      // Template with repeated parameter name
+      const patternResult = TopicPath.new('services/{param}/actions/{param}', 'network1');
+      expect(patternResult.ok).toBe(true);
+
+      if (patternResult.ok) {
+        trie.setValue(patternResult.value, 'REPEATED_PARAM');
+
+        // Test with repeated parameter
+        const topicResult = TopicPath.new('services/param/actions/param', 'network1');
+        expect(topicResult.ok).toBe(true);
+
+        if (topicResult.ok) {
+          const matches = trie.find(topicResult.value);
+          expect(matches).toContain('REPEATED_PARAM');
+        }
+      }
+    });
+
+    test('should handle templates at different positions', () => {
+      const trie = PathTrie.default<string>();
+
+      // Template at beginning
+      const pattern1Result = TopicPath.new('{type}/services/state', 'network1');
+      expect(pattern1Result.ok).toBe(true);
+      if (pattern1Result.ok) {
+        trie.setValue(pattern1Result.value, 'START_TEMPLATE');
+      }
+
+      // Template at end
+      const pattern2Result = TopicPath.new('services/state/{param}', 'network1');
+      expect(pattern2Result.ok).toBe(true);
+      if (pattern2Result.ok) {
+        trie.setValue(pattern2Result.value, 'END_TEMPLATE');
+      }
+
+      // Template in all positions
+      const pattern3Result = TopicPath.new('{a}/{b}/{c}', 'network1');
+      expect(pattern3Result.ok).toBe(true);
+      if (pattern3Result.ok) {
+        trie.setValue(pattern3Result.value, 'ALL_TEMPLATES');
+      }
+
+      // Test template at beginning
+      const topic1Result = TopicPath.new('internal/services/state', 'network1');
+      expect(topic1Result.ok).toBe(true);
+      if (topic1Result.ok) {
+        const matches1 = trie.find(topic1Result.value);
+        expect(matches1).toContain('START_TEMPLATE');
+      }
+
+      // Test template at end
+      const topic2Result = TopicPath.new('services/state/details', 'network1');
+      expect(topic2Result.ok).toBe(true);
+      if (topic2Result.ok) {
+        const matches2 = trie.find(topic2Result.value);
+        expect(matches2).toContain('END_TEMPLATE');
+      }
+
+      // Test all templates
+      const topic3Result = TopicPath.new('x/y/z', 'network1');
+      expect(topic3Result.ok).toBe(true);
+      if (topic3Result.ok) {
+        const matches3 = trie.find(topic3Result.value);
+        expect(matches3).toContain('ALL_TEMPLATES');
       }
     });
   });

@@ -109,7 +109,9 @@ export class PathTrie<T> {
     const networkId = topic.networkId();
     const networkTrie = this.networks.get(networkId);
     if (!networkTrie) return false;
-    return this.removeHandlerInternal(networkTrie, topic.getSegments(), 0, predicate);
+    const removedCount = this.removeHandlerInternal(networkTrie, topic.getSegments(), 0, predicate);
+    this.totalCount -= removedCount;
+    return removedCount > 0;
   }
 
   // Check if this trie is empty (has no handlers or children)
@@ -280,45 +282,55 @@ export class PathTrie<T> {
     segments: string[],
     index: number,
     predicate: F
-  ): boolean {
+  ): number {
     if (index >= segments.length) {
       // We've reached the end of the path
       const initialLen = node.content.length;
       node.content = node.content.filter(h => !predicate(h));
       const removed = initialLen - node.content.length;
       node.count -= removed;
-      return removed > 0;
+      return removed;
     }
 
     const segment = segments[index]!;
-    let removed = false;
+    let removedCount = 0;
 
     if (segment === '>') {
       // Multi-wildcard - remove from multi_wildcard_handlers
       const initialLen = node.multiWildcard.length;
       node.multiWildcard = node.multiWildcard.filter(h => !predicate(h));
-      const removedCount = initialLen - node.multiWildcard.length;
-      node.count -= removedCount;
-      removed = removedCount > 0;
+      const removed = initialLen - node.multiWildcard.length;
+      node.count -= removed;
+      removedCount = removed;
     } else if (segment === '*') {
       // Single wildcard - delegate to wildcard child if it exists
       if (node.wildcardChild) {
-        removed = this.removeHandlerInternal(node.wildcardChild, segments, index + 1, predicate);
+        removedCount = this.removeHandlerInternal(
+          node.wildcardChild,
+          segments,
+          index + 1,
+          predicate
+        );
       }
     } else if (segment.startsWith('{') && segment.endsWith('}')) {
       // Template parameter - delegate to template child if it exists
       if (node.templateChild) {
-        removed = this.removeHandlerInternal(node.templateChild, segments, index + 1, predicate);
+        removedCount = this.removeHandlerInternal(
+          node.templateChild,
+          segments,
+          index + 1,
+          predicate
+        );
       }
     } else {
       // Literal segment - delegate to the appropriate child if it exists
       const child = node.children.get(segment);
       if (child) {
-        removed = this.removeHandlerInternal(child, segments, index + 1, predicate);
+        removedCount = this.removeHandlerInternal(child, segments, index + 1, predicate);
       }
     }
 
-    return removed;
+    return removedCount;
   }
 
   // Internal method to collect all values from this trie and its children
@@ -341,20 +353,14 @@ export class PathTrie<T> {
     }
   }
 
-
-
-
-
   /**
    * Internal recursive implementation of remove_handler
    */
-
 
   /**
    * Check if this trie is empty (has no handlers or children)
    * Equivalent to Rust's is_empty method
    */
-
 
   /**
    * Check if a node and its children are empty
@@ -380,10 +386,4 @@ export class PathTrie<T> {
 
     return true;
   }
-
-
-
-
-
-  }
-  
+}
