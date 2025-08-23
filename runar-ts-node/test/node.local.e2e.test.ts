@@ -73,10 +73,12 @@ describe('Node local E2E', () => {
     const seen: number[] = [];
     const subResult = await node.subscribe(
       'math/added',
-      async (payload: AnyValue, context: EventContext) => {
-        const r = payload.as<{ sum: number }>();
-        if (r.ok) {
-          seen.push(r.value.sum);
+      async (context: EventContext, payload?: AnyValue) => {
+        if (payload) {
+          const r = payload.as<{ sum: number }>();
+          if (r.ok) {
+            seen.push(r.value.sum);
+          }
         }
         return ok(undefined);
       },

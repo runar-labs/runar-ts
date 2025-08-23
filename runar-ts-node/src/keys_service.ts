@@ -1,5 +1,5 @@
-import { AbstractService, LifecycleContext, RequestContext } from './core';
-import { ok, err } from 'runar-ts-common';
+import { AbstractService, NodeLifecycleContext, RequestContext, Option } from './core';
+import { Result, ok, err } from 'runar-ts-common';
 import { AnyValue } from 'runar-ts-serializer';
 import type { KeysDelegate } from './keys_delegate';
 
@@ -26,10 +26,15 @@ export class KeysService implements AbstractService {
     this._networkId = networkId;
   }
 
-  async init(context: LifecycleContext): Promise<void> {
+  async init(context: NodeLifecycleContext): Promise<Result<void, string>> {
     const result = await context.registerAction(
       'ensure_symmetric_key',
-      async (payload: AnyValue, context: RequestContext) => {
+      async (payload: Option<AnyValue>, context: RequestContext) => {
+        // Check if payload exists
+        if (!payload) {
+          return err('Expected payload for symmetric key label');
+        }
+
         // Expect string input only - no fallbacks
         const stringResult = payload.as<string>();
         if (!stringResult.ok) {
@@ -43,10 +48,17 @@ export class KeysService implements AbstractService {
     );
 
     if (!result.ok) {
-      throw new Error(`Failed to register action: ${result.error}`);
+      return err(`Failed to register action: ${result.error}`);
     }
+
+    return ok(undefined);
   }
 
-  async start(_context: LifecycleContext): Promise<void> {}
-  async stop(_context: LifecycleContext): Promise<void> {}
+  async start(_context: NodeLifecycleContext): Promise<Result<void, string>> {
+    return ok(undefined);
+  }
+
+  async stop(_context: NodeLifecycleContext): Promise<Result<void, string>> {
+    return ok(undefined);
+  }
 }

@@ -20,13 +20,13 @@ export interface AbstractService {
   description(): string;
   networkId(): string | undefined;
   setNetworkId(networkId: string): void;
-  init(context: LifecycleContext): Promise<Result<void, string>>;
-  start(context: LifecycleContext): Promise<Result<void, string>>;
-  stop(context: LifecycleContext): Promise<Result<void, string>>;
+  init(context: NodeLifecycleContext): Promise<Result<void, string>>;
+  start(context: NodeLifecycleContext): Promise<Result<void, string>>;
+  stop(context: NodeLifecycleContext): Promise<Result<void, string>>;
 }
 
 // Service lifecycle context (matching Rust LifecycleContext trait)
-export interface LifecycleContext {
+export interface NodeLifecycleContext {
   networkId: string;
   servicePath: string;
   logger: Logger;
@@ -38,10 +38,61 @@ export interface LifecycleContext {
   publish(topic: string, data?: AnyValue): Promise<Result<void, string>>;
 }
 
+// Event message interface (used by the event system)
+export interface EventMessage {
+  service: string;
+  event: string;
+  payload?: AnyValue;
+  timestampMs?: number;
+}
+
+// Implementation of NodeLifecycleContext
+export class NodeLifecycleContextImpl implements NodeLifecycleContext {
+  private actionHandlers: Map<string, ActionHandler> = new Map();
+
+  constructor(
+    public readonly networkId: string,
+    public readonly servicePath: string,
+    public readonly logger: any,
+    private readonly node: any
+  ) {}
+
+  async registerAction(actionName: string, handler: ActionHandler): Promise<Result<void, string>> {
+    try {
+      // Store the action handler locally
+      this.actionHandlers.set(actionName, handler);
+
+      // Create the full action topic path
+      const fullActionPath = `${this.servicePath}/${actionName}`;
+      const actionTopicResult = TopicPath.new(fullActionPath, this.networkId);
+      if (!actionTopicResult.ok) {
+        return err(`Invalid action topic path: ${actionTopicResult.error}`);
+      }
+
+      // Register with the node's registry
+      this.node.registry.addLocalActionHandler(actionTopicResult.value, handler);
+
+      return ok(undefined);
+    } catch (error) {
+      return err(`Failed to register action ${actionName}: ${error}`);
+    }
+  }
+
+  async publish(topic: string, data?: AnyValue): Promise<Result<void, string>> {
+    return this.node.publish(topic, data);
+  }
+
+  // Method to get registered action handlers (for the registry to access)
+  getActionHandlers(): Map<string, ActionHandler> {
+    return this.actionHandlers;
+  }
+}
+
 // Request context (matching Rust RequestContext)
 export interface RequestContext {
   topicPath: TopicPath;
   node: NodeDelegate;
+  networkId?: string;
   logger: Logger;
   pathParams: Map<string, string>;
 
@@ -95,8 +146,8 @@ export type EventSubscriber = (
 // Utility types
 export type Option<T> = T | undefined;
 
-// Concrete implementation of LifecycleContext
-export class LifecycleContextImpl implements LifecycleContext {
+// Concrete implementation of NodeLifecycleContext
+export class LifecycleContextImpl implements NodeLifecycleContext {
   networkId: string;
   servicePath: string;
   logger: Logger;

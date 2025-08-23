@@ -15,9 +15,11 @@ describe('Retained events clearing', () => {
     const seen: number[] = [];
     await node.subscribe(
       'svc/>',
-      async (payload: AnyValue, context: EventContext) => {
-        const r = payload.as<{ n: number }>();
-        if (r.ok) seen.push(r.value.n);
+      async (context: EventContext, payload?: AnyValue) => {
+        if (payload) {
+          const r = payload.as<{ n: number }>();
+          if (r.ok) seen.push(r.value.n);
+        }
         return ok(undefined);
       },
       { includePast: true }

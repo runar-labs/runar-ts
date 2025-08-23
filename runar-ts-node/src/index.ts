@@ -4,15 +4,14 @@ import { PathTrie, TopicPath } from 'runar-ts-common';
 
 import {
   ActionHandler,
-  ActionRequest,
   EventMessage,
   EventSubscriber,
-  ServiceName,
   AbstractService,
-  LifecycleContext,
   NodeLifecycleContext,
+  NodeLifecycleContextImpl,
   ServiceState,
   RequestContext,
+  EventContext,
   EventContextImpl,
 } from './core';
 import { Logger, Component } from 'runar-ts-common';
@@ -170,10 +169,10 @@ export class Node {
   constructor(networkId = 'default') {
     this.networkId = networkId;
     try {
-      this.logger = LoggerClass.newRoot(ComponentEnum.Node).setNodeId(networkId);
+      this.logger = LoggerClass.newRoot(ComponentEnum.Node).setNodeId(networkId) as any;
     } catch (error) {
       console.error('Failed to create logger:', error);
-      this.logger = console; // fallback
+      this.logger = console as any; // fallback
     }
   }
 
@@ -192,7 +191,11 @@ export class Node {
   };
 
   addService(service: AbstractService): void {
-    const serviceTopic = TopicPath.newService(this.networkId, service.path());
+    const serviceTopicResult = TopicPath.newService(this.networkId, service.path());
+    if (!serviceTopicResult.ok) {
+      throw new Error(`Failed to create service topic: ${serviceTopicResult.error}`);
+    }
+    const serviceTopic = serviceTopicResult.value;
     const entry: ServiceEntry = {
       service,
       serviceTopic,
@@ -213,13 +216,13 @@ export class Node {
     // Start internal registry service first
     const reg = new RegistryService(this.getLocalServicesSnapshot);
     reg.setNetworkId(this.networkId);
-    const regCtx = new NodeLifecycleContext(this.networkId, reg.path(), this.logger, this);
+    const regCtx = new NodeLifecycleContextImpl(this.networkId, reg.path(), this.logger, this);
     try {
       this.logger?.info?.('About to call RegistryService.init()');
       await reg.init(regCtx);
       this.logger?.info?.('RegistryService.init() completed successfully');
     } catch (error) {
-      this.logger?.error?.('RegistryService.init() failed:', error);
+      this.logger?.error?.(`RegistryService.init() failed: ${error}`);
       throw error;
     }
     this.addService(reg);
@@ -228,13 +231,13 @@ export class Node {
       const svc = entry.service;
       if (svc === reg) continue; // already init
       svc.setNetworkId(this.networkId);
-      const ctx = new NodeLifecycleContext(this.networkId, svc.path(), this.logger, this);
+      const ctx = new NodeLifecycleContextImpl(this.networkId, svc.path(), this.logger, this);
       await svc.init(ctx);
       this.registry.updateServiceState(svc.path(), ServiceState.Initialized);
     }
     for (const entry of this.registry.getLocalServices()) {
       const svc = entry.service;
-      const ctx = new NodeLifecycleContext(this.networkId, svc.path(), this.logger, this);
+      const ctx = new NodeLifecycleContextImpl(this.networkId, svc.path(), this.logger, this);
       await svc.start(ctx);
       this.registry.updateServiceState(svc.path(), ServiceState.Running);
     }
@@ -248,7 +251,7 @@ export class Node {
 
     for (const entry of this.registry.getLocalServices()) {
       const svc = entry.service;
-      const ctx = new NodeLifecycleContext(this.networkId, svc.path(), this.logger, this);
+      const ctx = new NodeLifecycleContextImpl(this.networkId, svc.path(), this.logger, this);
       await svc.stop(ctx);
       this.registry.updateServiceState(svc.path(), ServiceState.Stopped);
     }
@@ -257,7 +260,11 @@ export class Node {
 
   clearRetainedEventsMatching(pattern: string): number {
     const fullPattern = pattern.includes(':') ? pattern : `${this.networkId}:${pattern}`;
-    const topicPattern = TopicPath.new(fullPattern, this.networkId);
+    const topicPatternResult = TopicPath.new(fullPattern, this.networkId);
+    if (!topicPatternResult.ok) {
+      return 0; // No matches if pattern is invalid
+    }
+    const topicPattern = topicPatternResult.value;
     const matchedKeys = this.retainedIndex.findWildcardMatches(topicPattern).map(m => m.content);
     let removed = 0;
     for (const key of matchedKeys) {
@@ -307,10 +314,11 @@ export class Node {
     try {
       if (!this.running) return err('Node not started');
 
-      const topicPath = TopicPath.new(path, this.networkId);
-      if (!topicPath) {
-        return err(`Invalid topic path: ${path}`);
+      const topicPathResult = TopicPath.new(path, this.networkId);
+      if (!topicPathResult.ok) {
+        return err(`Invalid topic path: ${topicPathResult.error}`);
       }
+      const topicPath = topicPathResult.value;
 
       const handlers = this.registry.findLocalActionHandlers(topicPath);
       if (handlers.length === 0) {
@@ -335,11 +343,17 @@ export class Node {
 
       // Create RequestContext for handler
       const requestContext: RequestContext = {
+        topicPath,
+        node: this,
         networkId: this.networkId,
-        servicePath: service,
-        requestId: requestId,
         logger: this.logger?.withActionPath?.(`${service}/${action}`) || this.logger,
         pathParams,
+        request: this.request.bind(this),
+        publish: this.publish.bind(this),
+        debug: (message: string) => this.logger?.debug?.(message),
+        info: (message: string) => this.logger?.info?.(message),
+        warn: (message: string) => this.logger?.warn?.(message),
+        error: (message: string) => this.logger?.error?.(message),
       };
 
       // Call handler with new signature
@@ -347,7 +361,7 @@ export class Node {
       if (res.ok && res.value) {
         return ok(res.value);
       }
-      return err(res.error || 'Unknown error');
+      return err(!res.ok ? res.error : 'Unknown error');
     } catch (error) {
       return err(error instanceof Error ? error.message : String(error));
     }
@@ -362,10 +376,11 @@ export class Node {
     try {
       if (!this.running) return err('Node not started');
 
-      const topicPath = TopicPath.new(topic, this.networkId);
-      if (!topicPath) {
-        return err(`Invalid topic path: ${topic}`);
+      const topicPathResult = TopicPath.new(topic, this.networkId);
+      if (!topicPathResult.ok) {
+        return err(`Invalid topic path: ${topicPathResult.error}`);
       }
+      const topicPath = topicPathResult.value;
 
       const subs = this.registry.getSubscribers(topicPath);
       const payload = data || AnyValue.null();
@@ -382,15 +397,12 @@ export class Node {
       await Promise.allSettled(
         subs.map(s => {
           const eventContext = new EventContextImpl(
-            this.networkId,
-            message.service,
-            message.event,
-            true, // isLocal
+            topicPath,
+            this,
             this.logger?.withEventPath?.(`${topicPath.servicePath()}/${message.event}`) ||
-              this.logger,
-            this
+              this.logger
           );
-          return s.subscriber(message.payload, eventContext);
+          return s.subscriber(eventContext, message.payload);
         })
       );
 
@@ -404,7 +416,7 @@ export class Node {
           `topicPath.servicePath(): ${topicPath.servicePath()}, topicPath.actionPath(): ${topicPath.actionPath()}`
         );
         const list = this.retainedEvents.get(key) ?? [];
-        list.push({ ts: message.timestampMs, event, payload });
+        list.push({ ts: message.timestampMs || Date.now(), event, payload });
         if (list.length > this.maxRetainedPerTopic) {
           list.splice(0, list.length - this.maxRetainedPerTopic);
         }
@@ -429,10 +441,11 @@ export class Node {
     try {
       if (!this.running) return err('Node not started');
 
-      const topicPath = TopicPath.new(topic, this.networkId);
-      if (!topicPath) {
-        return err(`Invalid topic path: ${topic}`);
+      const topicPathResult = TopicPath.new(topic, this.networkId);
+      if (!topicPathResult.ok) {
+        return err(`Invalid topic path: ${topicPathResult.error}`);
       }
+      const topicPath = topicPathResult.value;
 
       const subs = this.registry.getSubscribers(topicPath);
       const payload = data || AnyValue.null();
@@ -450,15 +463,12 @@ export class Node {
       await Promise.allSettled(
         subs.map(s => {
           const eventContext = new EventContextImpl(
-            this.networkId,
-            message.service,
-            message.event,
-            true, // isLocal
+            topicPath,
+            this,
             this.logger?.withEventPath?.(`${topicPath.servicePath()}/${message.event}`) ||
-              this.logger,
-            this
+              this.logger
           );
-          return s.subscriber(message.payload, eventContext);
+          return s.subscriber(eventContext, message.payload);
         })
       );
 
@@ -481,10 +491,11 @@ export class Node {
     try {
       if (!this.running) return err('Node not started');
 
-      const topicPath = TopicPath.new(topic, this.networkId);
-      if (!topicPath) {
-        return err(`Invalid topic path: ${topic}`);
+      const topicPathResult = TopicPath.new(topic, this.networkId);
+      if (!topicPathResult.ok) {
+        return err(`Invalid topic path: ${topicPathResult.error}`);
       }
+      const topicPath = topicPathResult.value;
 
       const metadata: SubscriptionMetadata = {
         path: topic,
@@ -503,14 +514,11 @@ export class Node {
         const pastEvents = this.getRetainedEvents(topicPath);
         for (const event of pastEvents) {
           const eventContext = new EventContextImpl(
-            this.networkId,
-            event.service,
-            event.event,
-            true, // isLocal - retained events are always local
-            this.logger?.withEventPath?.(`${event.service}/${event.event}`) || this.logger,
-            this
+            topicPath,
+            this,
+            this.logger?.withEventPath?.(`${event.service}/${event.event}`) || this.logger
           );
-          callback(event.payload, eventContext);
+          callback(eventContext, event.payload);
         }
       }
 
@@ -560,11 +568,12 @@ export class Node {
         }
       };
 
-      const callback = (event: EventMessage) => {
+      const callback: EventSubscriber = async (context: EventContext, data?: AnyValue) => {
         if (!resolved) {
           resolved = true;
-          resolve(ok(event.payload));
+          resolve(ok(data));
         }
+        return ok(undefined);
       };
 
       // Set up timeout

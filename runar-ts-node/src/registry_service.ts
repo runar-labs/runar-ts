@@ -1,5 +1,5 @@
-import { AbstractService, LifecycleContext, ServiceState } from './core';
-import { ok, err } from 'runar-ts-common';
+import { AbstractService, NodeLifecycleContext, ServiceState } from './core';
+import { Result, ok, err } from 'runar-ts-common';
 import { TopicPath } from 'runar-ts-common';
 import { ServiceEntry } from './index';
 import { NodeRegistryDelegate, RegistryDelegate } from './registry_delegate';
@@ -35,7 +35,7 @@ export class RegistryService implements AbstractService {
     this._networkId = networkId;
   }
 
-  async init(context: LifecycleContext): Promise<Result<void, string>> {
+  async init(context: NodeLifecycleContext): Promise<Result<void, string>> {
     context.logger.info('Initializing RegistryService');
 
     // services/list -> Vec<ServiceMetadata>
@@ -67,11 +67,14 @@ export class RegistryService implements AbstractService {
             .join(', ')}, extracted servicePath: ${servicePath}`
         );
         const match = this.findServiceByPath(servicePath || null, services);
-        const meta = match
-          ? await this.delegate.getServiceMetadata(
-              TopicPath.newService(this._networkId ?? 'default', match.service.path())
-            )
-          : null;
+        let meta = null;
+        if (match) {
+          const serviceTopicResult = TopicPath.newService(this._networkId ?? 'default', match.service.path());
+          const serviceTopic = serviceTopicResult.ok ? serviceTopicResult.value : undefined;
+          if (serviceTopic) {
+            meta = await this.delegate.getServiceMetadata(serviceTopic);
+          }
+        }
         return ok(AnyValue.from(meta));
       }
     );
@@ -97,9 +100,10 @@ export class RegistryService implements AbstractService {
         const match = this.findServiceByPath(servicePath || null, services);
         if (match) {
           // validate via delegate
-          await this.delegate.validatePauseTransition(
-            TopicPath.newService(this._networkId ?? 'default', match.service.path())
-          );
+          const serviceTopicResult = TopicPath.newService(this._networkId ?? 'default', match.service.path());
+          if (serviceTopicResult.ok) {
+            await this.delegate.validatePauseTransition(serviceTopicResult.value);
+          }
           match.serviceState = ServiceState.Paused;
           return ok(AnyValue.from(ServiceState.Paused));
         }
@@ -115,9 +119,10 @@ export class RegistryService implements AbstractService {
         const servicePath = context.pathParams.get('service_path');
         const match = this.findServiceByPath(servicePath || null, services);
         if (match) {
-          await this.delegate.validateResumeTransition(
-            TopicPath.newService(this._networkId ?? 'default', match.service.path())
-          );
+          const serviceTopicResult = TopicPath.newService(this._networkId ?? 'default', match.service.path());
+          if (serviceTopicResult.ok) {
+            await this.delegate.validateResumeTransition(serviceTopicResult.value);
+          }
           match.serviceState = ServiceState.Running;
           return ok(AnyValue.from(ServiceState.Running));
         }
@@ -147,10 +152,10 @@ export class RegistryService implements AbstractService {
     return ok(undefined);
   }
 
-  async start(_context: LifecycleContext): Promise<Result<void, string>> {
+  async start(_context: NodeLifecycleContext): Promise<Result<void, string>> {
     return ok(undefined);
   }
-  async stop(_context: LifecycleContext): Promise<Result<void, string>> {
+  async stop(_context: NodeLifecycleContext): Promise<Result<void, string>> {
     return ok(undefined);
   }
 

@@ -119,7 +119,10 @@ describe('Comprehensive TopicPath and PathTrie Tests (Mirroring Rust)', () => {
       if (patternResult.ok) {
         // Test successful matches
         const path1Result = TopicPath.new('main:services/auth/events/user/login', 'default');
-        const path2Result = TopicPath.new('main:services/math/events/calculation/completed', 'default');
+        const path2Result = TopicPath.new(
+          'main:services/math/events/calculation/completed',
+          'default'
+        );
 
         expect(path1Result.ok).toBe(true);
         expect(path2Result.ok).toBe(true);
@@ -564,7 +567,9 @@ describe('Comprehensive TopicPath and PathTrie Tests (Mirroring Rust)', () => {
           expect(infoParamsResult.value.get('service_path')).toBe('math');
         }
 
-        const stateParamsResult = statePathResult.value.extractParams('services/{service_path}/state');
+        const stateParamsResult = statePathResult.value.extractParams(
+          'services/{service_path}/state'
+        );
         expect(stateParamsResult.ok).toBe(true);
 
         if (stateParamsResult.ok) {
