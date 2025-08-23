@@ -73,10 +73,12 @@ function main(): void {
   const listTyped = AnyValue.newList([1, 2, 3]);
   serializeAndWrite(out, 'list_i64.bin', listTyped);
 
-  const mapTyped = AnyValue.newMap(new Map([
-    ['a', 1],
-    ['b', 2],
-  ]));
+  const mapTyped = AnyValue.newMap(
+    new Map([
+      ['a', 1],
+      ['b', 2],
+    ])
+  );
   serializeAndWrite(out, 'map_string_i64.bin', mapTyped);
 
   // Struct plain
