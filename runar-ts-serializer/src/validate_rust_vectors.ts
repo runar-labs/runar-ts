@@ -541,6 +541,7 @@ function main(): void {
   console.log('\n🚀 Running validation tests...');
 
   const tests = [
+    // Basic scenarios
     validatePrimitiveString,
     validatePrimitiveBool,
     validatePrimitiveI64,
@@ -552,6 +553,38 @@ function main(): void {
     validateListI64,
     validateMapStringI64,
     validateStructPlain,
+
+    // Large collections
+    validateLargeList,
+    validateLargeMap,
+
+    // Nested structures
+    validateListOfMaps,
+    validateMapWithLists,
+    validateComplexNested,
+
+    // Edge cases
+    validateEmptyCollections,
+    validateSingleElements,
+
+    // Deep nesting
+    validateDeepNesting,
+
+    // Large data
+    validateLargeData,
+
+    // Complex scenarios
+    validateMixedComplexity,
+    validateRecursiveStructs,
+    validateAllTypesList,
+    validateComplexMap,
+
+    // Performance tests
+    validateVeryLargeCollections,
+
+    // Special cases
+    validateNullUndefined,
+    validateUnicodeSpecialChars,
   ];
 
   let passed = 0;
@@ -577,6 +610,139 @@ function main(): void {
     console.log('\n⚠️  Some validations failed. Check the output above for details.');
     process.exit(1);
   }
+}
+
+// === COMPREHENSIVE VALIDATION FUNCTIONS ===
+
+// Generic file validation function
+function validateFile(filename: string, description: string): boolean {
+  try {
+    const rustData = readBytes(
+      `/home/rafael/Development/runar-rust/target/serializer-vectors/${filename}`
+    );
+    const tsData = readBytes(
+      `/home/rafael/Development/runar-ts/target/serializer-vectors-ts/${filename}`
+    );
+
+    // Compare byte-for-byte
+    if (rustData.length !== tsData.length) {
+      console.log(`❌ Size mismatch for ${description}: Rust=${rustData.length}, TS=${tsData.length} bytes`);
+      return false;
+    }
+
+    for (let i = 0; i < rustData.length; i++) {
+      if (rustData[i] !== tsData[i]) {
+        console.log(`❌ Byte mismatch at position ${i} for ${description}: Rust=0x${rustData[i].toString(16)}, TS=0x${tsData[i].toString(16)}`);
+        return false;
+      }
+    }
+
+    console.log(`✅ ${description} validation passed`);
+    return true;
+  } catch (error) {
+    console.log(`❌ ${description} validation failed: ${error}`);
+    return false;
+  }
+}
+
+// Large collections validation
+function validateLargeList(): boolean {
+  console.log('🔍 Validating large list...');
+  return validateFile('list_large.bin', 'Large list (100 elements)');
+}
+
+function validateLargeMap(): boolean {
+  console.log('🔍 Validating large map...');
+  return validateFile('map_large.bin', 'Large map (50 key-value pairs)');
+}
+
+// Nested structures validation
+function validateListOfMaps(): boolean {
+  console.log('🔍 Validating list of maps...');
+  return validateFile('list_of_maps.bin', 'List containing maps');
+}
+
+function validateMapWithLists(): boolean {
+  console.log('🔍 Validating map with lists...');
+  return validateFile('map_with_lists.bin', 'Map with list values');
+}
+
+function validateComplexNested(): boolean {
+  console.log('🔍 Validating complex nested structures...');
+  return validateFile('complex_nested.bin', 'Complex nested structures');
+}
+
+// Edge cases validation
+function validateEmptyCollections(): boolean {
+  console.log('🔍 Validating empty collections...');
+  const listEmpty = validateFile('list_empty.bin', 'Empty list');
+  const mapEmpty = validateFile('map_empty.bin', 'Empty map');
+  return listEmpty && mapEmpty;
+}
+
+function validateSingleElements(): boolean {
+  console.log('🔍 Validating single element collections...');
+  const listSingle = validateFile('list_single.bin', 'Single element list');
+  const mapSingle = validateFile('map_single.bin', 'Single element map');
+  return listSingle && mapSingle;
+}
+
+// Deep nesting validation
+function validateDeepNesting(): boolean {
+  console.log('🔍 Validating deep nesting...');
+  return validateFile('deep_nesting.bin', 'Deep nested structures (4 levels)');
+}
+
+// Large data validation
+function validateLargeData(): boolean {
+  console.log('🔍 Validating large data...');
+  const largeString = validateFile('large_string.bin', 'Large string (1KB)');
+  const bigNumber = validateFile('big_number.bin', 'Big number');
+  return largeString && bigNumber;
+}
+
+// Complex scenarios validation
+function validateMixedComplexity(): boolean {
+  console.log('🔍 Validating mixed complexity...');
+  return validateFile('mixed_complexity.bin', 'Mixed type complexity');
+}
+
+function validateRecursiveStructs(): boolean {
+  console.log('🔍 Validating recursive structures...');
+  return validateFile('recursive_structs.bin', 'Recursive structures');
+}
+
+function validateAllTypesList(): boolean {
+  console.log('🔍 Validating all types list...');
+  return validateFile('all_types_list.bin', 'List with all AnyValue types');
+}
+
+function validateComplexMap(): boolean {
+  console.log('🔍 Validating complex map...');
+  return validateFile('complex_map.bin', 'Map with complex keys and values');
+}
+
+// Performance tests validation
+function validateVeryLargeCollections(): boolean {
+  console.log('🔍 Validating very large collections...');
+  const veryLargeList = validateFile('very_large_list.bin', 'Very large list (1000 elements)');
+  const veryLargeMap = validateFile('very_large_map.bin', 'Very large map (500 pairs)');
+  return veryLargeList && veryLargeMap;
+}
+
+// Special cases validation
+function validateNullUndefined(): boolean {
+  console.log('🔍 Validating null and undefined handling...');
+  const nullValue = validateFile('null_value.bin', 'Null value');
+  const undefinedLike = validateFile('undefined_like.bin', 'Undefined-like value');
+  return nullValue && undefinedLike;
+}
+
+function validateUnicodeSpecialChars(): boolean {
+  console.log('🔍 Validating unicode and special characters...');
+  const unicodeString = validateFile('unicode_string.bin', 'Unicode string');
+  const specialCharsMap = validateFile('special_chars_map.bin', 'Special characters map');
+  return unicodeString && specialCharsMap;
 }
 
 // Run if this file is executed directly

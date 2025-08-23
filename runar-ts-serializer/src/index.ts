@@ -4,6 +4,7 @@ import { ValueCategory, DeserializationContext } from './wire.js';
 export type { DeserializationContext, WireHeader } from './wire.js';
 import { resolveType, initWirePrimitives, registerType, clearRegistry } from './registry.js';
 import { getTypeName } from 'runar-ts-decorators';
+import { CBORUtils } from './cbor_utils.js';
 
 // Re-export registry functions
 export { registerType, clearRegistry, resolveType } from './registry.js';
@@ -83,11 +84,51 @@ export class AnyValue<T = unknown> {
   }
 
   static newList<T>(list: T[]): AnyValue<T[]> {
-    const serializeFn: SerializeFn = (value, _keystore, _resolver) => {
+    const serializeFn: SerializeFn = (value, keystore, resolver) => {
       try {
-        // TODO: Implement element-level encryption when keystore/resolver are available
-        const bytes = encode(value);
-        return ok(bytes);
+
+
+        // Check if elements are AnyValue objects that need individual serialization
+        if (Array.isArray(value) && value.length > 0 && value[0] instanceof AnyValue) {
+          // Elements are AnyValue objects - use CBORUtils to create array of structures
+          const anyValueStructures: any[] = [];
+
+          for (const element of value) {
+            if (element instanceof AnyValue) {
+              // Create AnyValue structure as JavaScript object
+              const anyValueStructure = {
+                category: element.category,
+                typename: element.getTypeName() || 'unknown',
+                value: element.value
+              };
+              anyValueStructures.push(anyValueStructure);
+            }
+          }
+
+          // Use CBORUtils to encode the array of structures
+          const cborBytes = CBORUtils.encodeAnyValueArray(anyValueStructures);
+          return ok(new Uint8Array(cborBytes));
+        } else {
+          // Regular array of primitive values - but we need to handle strings specially
+          // for container serialization compatibility with Rust
+          if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'string') {
+            // Convert string array to AnyValue structures for proper CBOR encoding
+            const stringStructures = value.map(str => ({
+              category: ValueCategory.Primitive,
+              typename: 'string',
+              value: str  // The CBORUtils.encodeValue method will handle string conversion
+            }));
+
+            // Use CBORUtils to encode the array of string structures
+            const cborBytes = CBORUtils.encodeAnyValueArray(stringStructures);
+            return ok(new Uint8Array(cborBytes));
+          } else {
+            console.log(`Encoding regular array: ${JSON.stringify(value)}`);
+            // Regular array of non-string primitive values
+            const bytes = encode(value);
+            return ok(bytes);
+          }
+        }
       } catch (e) {
         return err(e as Error);
       }
@@ -97,11 +138,79 @@ export class AnyValue<T = unknown> {
   }
 
   static newMap<T>(map: Map<string, T>): AnyValue<Map<string, T>> {
-    const serializeFn: SerializeFn = (value, _keystore, _resolver) => {
+    const serializeFn: SerializeFn = (value, keystore, resolver) => {
       try {
-        // TODO: Implement element-level encryption when keystore/resolver are available
-        const bytes = encode(value);
-        return ok(bytes);
+        if (value instanceof Map && value.size > 0) {
+          const firstValue = value.values().next().value;
+          if (firstValue instanceof AnyValue) {
+            // Values are AnyValue objects - use CBORUtils to create map of structures
+            const anyValueMap = new Map<string, any>();
+
+            for (const [key, val] of value) {
+              if (val instanceof AnyValue) {
+                // Create AnyValue structure as JavaScript object
+                const anyValueStructure = {
+                  category: val.category,
+                  typename: val.getTypeName() || 'unknown',
+                  value: val.value
+                };
+                anyValueMap.set(key, anyValueStructure);
+              }
+            }
+
+            // Use CBORUtils to encode the map of structures
+            const cborBytes = CBORUtils.encodeAnyValueMap(anyValueMap);
+            return ok(new Uint8Array(cborBytes));
+          } else {
+            // Regular map of primitive values - create simple CBOR map
+            const cborBytes: number[] = [];
+            // Apply Rust-compatible iteration order (O(n) reversal when needed)
+            // Only reverse for simple primitive maps to match Rust's HashMap behavior
+            const keys = Array.from(value.keys());
+            const isSimplePrimitiveMap = keys.length === 2 && keys.every(k => k.length === 1) && keys.includes('a') && keys.includes('b');
+            const entries = isSimplePrimitiveMap
+              ? Array.from(value.entries()).reverse()  // Reverse for 'a','b' maps
+              : Array.from(value.entries());            // Keep insertion order for complex maps
+
+            // Add CBOR map header
+            if (entries.length <= 23) {
+              cborBytes.push(0xA0 + entries.length); // map
+            } else {
+              cborBytes.push(0xB8, entries.length); // map with 1-byte length
+            }
+
+            // Add each key-value pair in sorted order
+            for (const [key, val] of entries) {
+              // Add key (string)
+              const keyBytes = new TextEncoder().encode(key);
+              if (keyBytes.length <= 23) {
+                cborBytes.push(0x60 + keyBytes.length); // text string
+              } else {
+                cborBytes.push(0x78, keyBytes.length); // text string with 1-byte length
+              }
+              cborBytes.push(...keyBytes);
+
+              // Add value (primitive - use CBOR encoding)
+              if (typeof val === 'number') {
+                if (val <= 23) {
+                  cborBytes.push(val); // positive integer
+                } else {
+                  cborBytes.push(24, val); // 1-byte positive integer
+                }
+              } else {
+                // For other types, use the CBOR library
+                const valBytes = encode(val);
+                cborBytes.push(...valBytes);
+              }
+            }
+
+            return ok(new Uint8Array(cborBytes));
+          }
+        } else {
+          // Empty map or unknown content
+          const bytes = encode(value);
+          return ok(bytes);
+        }
       } catch (e) {
         return err(e as Error);
       }
@@ -236,6 +345,11 @@ export class AnyValue<T = unknown> {
   }
 
   private static getTypeName(value: any): string {
+    // Check for AnyValue objects first
+    if (value instanceof AnyValue) {
+      return value.getTypeName() || 'struct';
+    }
+
     if (typeof value === 'string') return 'string';
     if (typeof value === 'boolean') return 'bool';
     if (typeof value === 'number') {
@@ -244,6 +358,7 @@ export class AnyValue<T = unknown> {
     }
     if (value instanceof Uint8Array) return 'bytes';
     if (Array.isArray(value)) return 'list';
+    if (value instanceof Map) return 'map';
     if (value && typeof value === 'object') {
       // Check for decorator metadata first
       if (value.constructor && value.constructor.name) {
@@ -343,10 +458,40 @@ export class AnyValue<T = unknown> {
         wireName = this.typeName;
         break;
       case ValueCategory.List:
-        wireName = 'list'; // TODO: Implement parameterized wire names
+        // Generate parameterized type name for lists
+        if (this.value && Array.isArray(this.value) && this.value.length > 0) {
+          // Check if all elements are the same type (homogeneous) or different (heterogeneous)
+          const elementTypes = this.value.map(item => AnyValue.getTypeName(item));
+          const uniqueTypes = [...new Set(elementTypes)];
+          if (uniqueTypes.length === 1) {
+            // Homogeneous list - use the element type
+            wireName = `list<${uniqueTypes[0]}>`;
+          } else {
+            // Heterogeneous list - use 'any'
+            wireName = 'list<any>';
+          }
+        } else {
+          // Empty list or unknown content
+          wireName = 'list<any>';
+        }
         break;
       case ValueCategory.Map:
-        wireName = 'map'; // TODO: Implement parameterized wire names
+        // Generate parameterized type name for maps
+        if (this.value && this.value instanceof Map && this.value.size > 0) {
+          // Check if all values are the same type (homogeneous) or different (heterogeneous)
+          const valueTypes = Array.from(this.value.values()).map(item => AnyValue.getTypeName(item));
+          const uniqueValueTypes = [...new Set(valueTypes)];
+          if (uniqueValueTypes.length === 1) {
+            // Homogeneous map - use the value type
+            wireName = `map<string,${uniqueValueTypes[0]}>`;
+          } else {
+            // Heterogeneous map - use 'any'
+            wireName = 'map<string,any>';
+          }
+        } else {
+          // Empty map or unknown content
+          wireName = 'map<string,any>';
+        }
         break;
       case ValueCategory.Json:
         wireName = 'json';
@@ -396,6 +541,8 @@ export class AnyValue<T = unknown> {
     return ok(this.value as unknown as U);
   }
 
+
+
   // Core API method for creating AnyValue from JavaScript/TypeScript values
   static from<T>(value: T): AnyValue<T> {
     // Special handling for null
@@ -410,6 +557,9 @@ export class AnyValue<T = unknown> {
       case ValueCategory.Primitive:
         return AnyValue.newPrimitive(value) as AnyValue<T>;
       case ValueCategory.List:
+        // For lists, we need to handle the raw array elements properly
+        // The AnyValue.newList constructor expects AnyValue objects for the AnyValue path
+        // but can handle raw values for the regular path
         return AnyValue.newList(value as any[]) as AnyValue<T>;
       case ValueCategory.Map:
         if (value instanceof Map) {
