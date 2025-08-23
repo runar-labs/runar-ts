@@ -82,7 +82,9 @@ describe('Cross-Language Compatibility (TypeScript ↔ Rust)', () => {
       if (stringArrayBytes.ok) {
         expect(stringArrayBytes.value[0]).toBe(ValueCategory.List);
         const typeNameLen = stringArrayBytes.value[2];
-        const typeName = new TextDecoder().decode(stringArrayBytes.value.subarray(3, 3 + typeNameLen));
+        const typeName = new TextDecoder().decode(
+          stringArrayBytes.value.subarray(3, 3 + typeNameLen)
+        );
         expect(typeName).toBe('list<string>');
       }
 
@@ -94,7 +96,9 @@ describe('Cross-Language Compatibility (TypeScript ↔ Rust)', () => {
       if (boolArrayBytes.ok) {
         expect(boolArrayBytes.value[0]).toBe(ValueCategory.List);
         const typeNameLen = boolArrayBytes.value[2];
-        const typeName = new TextDecoder().decode(boolArrayBytes.value.subarray(3, 3 + typeNameLen));
+        const typeName = new TextDecoder().decode(
+          boolArrayBytes.value.subarray(3, 3 + typeNameLen)
+        );
         expect(typeName).toBe('list<bool>');
       }
     });
