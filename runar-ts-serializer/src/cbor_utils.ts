@@ -28,10 +28,10 @@ export class CBORUtils {
   static encodeMapHeader(count: number): number[] {
     if (count <= 23) {
       // Small map: Major Type 5 + count in additional info
-      return [0xA0 + count];
+      return [0xa0 + count];
     } else {
       // Large map: Major Type 5 + 24 + 1-byte count
-      return [0xB8, count];
+      return [0xb8, count];
     }
   }
 
@@ -58,7 +58,9 @@ export class CBORUtils {
    */
   static encodePositiveInteger(value: number): number[] {
     if (typeof value !== 'number') {
-      throw new Error(`Expected number for integer encoding, got ${typeof value}: ${JSON.stringify(value)}`);
+      throw new Error(
+        `Expected number for integer encoding, got ${typeof value}: ${JSON.stringify(value)}`
+      );
     }
 
     if (value <= 23) {
@@ -69,7 +71,9 @@ export class CBORUtils {
       return [24, value];
     } else {
       // For larger values, we'd need more complex encoding
-      throw new Error(`Integer value ${JSON.stringify(value)} (${typeof value}) too large for current implementation`);
+      throw new Error(
+        `Integer value ${JSON.stringify(value)} (${typeof value}) too large for current implementation`
+      );
     }
   }
 
@@ -87,7 +91,9 @@ export class CBORUtils {
     for (let i = 0; i < integers.length; i++) {
       const value = integers[i];
       if (typeof value !== 'number') {
-        throw new Error(`Expected number at index ${i} in integer array, got ${typeof value}: ${JSON.stringify(value)}`);
+        throw new Error(
+          `Expected number at index ${i} in integer array, got ${typeof value}: ${JSON.stringify(value)}`
+        );
       }
       result.push(...this.encodePositiveInteger(value));
     }
@@ -158,7 +164,7 @@ export class CBORUtils {
           return result;
         } else if (firstElementType === 'boolean') {
           // Array of booleans - encode as integer array (0 for false, 1 for true)
-          const boolArray = value.map(bool => bool ? 1 : 0);
+          const boolArray = value.map(bool => (bool ? 1 : 0));
           return this.encodeIntegerArray(boolArray);
         } else if (firstElementType === 'number') {
           // Check if all elements are actually numbers
@@ -268,10 +274,14 @@ export class CBORUtils {
     // Apply Rust-compatible iteration order (O(n) reversal when needed)
     // Only reverse for simple primitive maps to match Rust's HashMap behavior
     const keys = Array.from(anyValueMap.keys());
-    const isSimplePrimitiveMap = keys.length === 2 && keys.every(k => k.length === 1) && keys.includes('a') && keys.includes('b');
+    const isSimplePrimitiveMap =
+      keys.length === 2 &&
+      keys.every(k => k.length === 1) &&
+      keys.includes('a') &&
+      keys.includes('b');
     const sortedEntries = isSimplePrimitiveMap
-      ? Array.from(anyValueMap.entries()).reverse()  // Reverse for 'a','b' maps
-      : Array.from(anyValueMap.entries());            // Keep insertion order for complex maps
+      ? Array.from(anyValueMap.entries()).reverse() // Reverse for 'a','b' maps
+      : Array.from(anyValueMap.entries()); // Keep insertion order for complex maps
 
     // Each key-value pair in appropriate order for Rust compatibility
     for (const [key, anyValue] of sortedEntries) {

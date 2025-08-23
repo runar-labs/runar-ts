@@ -86,8 +86,6 @@ export class AnyValue<T = unknown> {
   static newList<T>(list: T[]): AnyValue<T[]> {
     const serializeFn: SerializeFn = (value, keystore, resolver) => {
       try {
-
-
         // Check if elements are AnyValue objects that need individual serialization
         if (Array.isArray(value) && value.length > 0 && value[0] instanceof AnyValue) {
           // Elements are AnyValue objects - use CBORUtils to create array of structures
@@ -99,7 +97,7 @@ export class AnyValue<T = unknown> {
               const anyValueStructure = {
                 category: element.category,
                 typename: element.getTypeName() || 'unknown',
-                value: element.value
+                value: element.value,
               };
               anyValueStructures.push(anyValueStructure);
             }
@@ -116,7 +114,7 @@ export class AnyValue<T = unknown> {
             const stringStructures = value.map(str => ({
               category: ValueCategory.Primitive,
               typename: 'string',
-              value: str  // The CBORUtils.encodeValue method will handle string conversion
+              value: str, // The CBORUtils.encodeValue method will handle string conversion
             }));
 
             // Use CBORUtils to encode the array of string structures
@@ -152,7 +150,7 @@ export class AnyValue<T = unknown> {
                 const anyValueStructure = {
                   category: val.category,
                   typename: val.getTypeName() || 'unknown',
-                  value: val.value
+                  value: val.value,
                 };
                 anyValueMap.set(key, anyValueStructure);
               }
@@ -167,16 +165,20 @@ export class AnyValue<T = unknown> {
             // Apply Rust-compatible iteration order (O(n) reversal when needed)
             // Only reverse for simple primitive maps to match Rust's HashMap behavior
             const keys = Array.from(value.keys());
-            const isSimplePrimitiveMap = keys.length === 2 && keys.every(k => k.length === 1) && keys.includes('a') && keys.includes('b');
+            const isSimplePrimitiveMap =
+              keys.length === 2 &&
+              keys.every(k => k.length === 1) &&
+              keys.includes('a') &&
+              keys.includes('b');
             const entries = isSimplePrimitiveMap
-              ? Array.from(value.entries()).reverse()  // Reverse for 'a','b' maps
-              : Array.from(value.entries());            // Keep insertion order for complex maps
+              ? Array.from(value.entries()).reverse() // Reverse for 'a','b' maps
+              : Array.from(value.entries()); // Keep insertion order for complex maps
 
             // Add CBOR map header
             if (entries.length <= 23) {
-              cborBytes.push(0xA0 + entries.length); // map
+              cborBytes.push(0xa0 + entries.length); // map
             } else {
-              cborBytes.push(0xB8, entries.length); // map with 1-byte length
+              cborBytes.push(0xb8, entries.length); // map with 1-byte length
             }
 
             // Add each key-value pair in sorted order
@@ -479,7 +481,9 @@ export class AnyValue<T = unknown> {
         // Generate parameterized type name for maps
         if (this.value && this.value instanceof Map && this.value.size > 0) {
           // Check if all values are the same type (homogeneous) or different (heterogeneous)
-          const valueTypes = Array.from(this.value.values()).map(item => AnyValue.getTypeName(item));
+          const valueTypes = Array.from(this.value.values()).map(item =>
+            AnyValue.getTypeName(item)
+          );
           const uniqueValueTypes = [...new Set(valueTypes)];
           if (uniqueValueTypes.length === 1) {
             // Homogeneous map - use the value type
@@ -540,8 +544,6 @@ export class AnyValue<T = unknown> {
     }
     return ok(this.value as unknown as U);
   }
-
-
 
   // Core API method for creating AnyValue from JavaScript/TypeScript values
   static from<T>(value: T): AnyValue<T> {

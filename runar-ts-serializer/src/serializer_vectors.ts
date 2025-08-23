@@ -60,17 +60,16 @@ function main(): void {
   serializeAndWrite(out, 'json.bin', AnyValue.newJson(json));
 
   // Heterogeneous list - use binary serialization for mixed types
-  const listAny = AnyValue.newList([
-    AnyValue.newPrimitive(1),
-    AnyValue.newPrimitive('two')
-  ]);
+  const listAny = AnyValue.newList([AnyValue.newPrimitive(1), AnyValue.newPrimitive('two')]);
   serializeAndWrite(out, 'list_any.bin', listAny);
 
   // Heterogeneous map - use binary serialization for mixed types
-  const mapAny = AnyValue.newMap(new Map<string, AnyValue<any>>([
-    ['x', AnyValue.newPrimitive(10)],
-    ['y', AnyValue.newPrimitive('ten')]
-  ]));
+  const mapAny = AnyValue.newMap(
+    new Map<string, AnyValue<any>>([
+      ['x', AnyValue.newPrimitive(10)],
+      ['y', AnyValue.newPrimitive('ten')],
+    ])
+  );
   serializeAndWrite(out, 'map_any.bin', mapAny);
 
   // Typed containers (no element encryption)
@@ -111,38 +110,82 @@ function main(): void {
 
   // 2. NESTED STRUCTURES - List of Maps
   const listOfMaps = AnyValue.newList([
-    AnyValue.newMap(new Map<string, any>([['name', 'Alice'], ['age', 30]])),
-    AnyValue.newMap(new Map<string, any>([['name', 'Bob'], ['age', 25]])),
-    AnyValue.newMap(new Map<string, any>([['name', 'Charlie'], ['age', 35]]))
+    AnyValue.newMap(
+      new Map<string, any>([
+        ['name', 'Alice'],
+        ['age', 30],
+      ])
+    ),
+    AnyValue.newMap(
+      new Map<string, any>([
+        ['name', 'Bob'],
+        ['age', 25],
+      ])
+    ),
+    AnyValue.newMap(
+      new Map<string, any>([
+        ['name', 'Charlie'],
+        ['age', 35],
+      ])
+    ),
   ]);
   serializeAndWrite(out, 'list_of_maps.bin', listOfMaps);
 
   // 3. NESTED STRUCTURES - Map with Lists as Values
-  const mapWithLists = AnyValue.newMap(new Map<string, AnyValue<any>>([
-    ['numbers', AnyValue.newList([1, 2, 3, 4, 5])],
-    ['strings', AnyValue.newList(['hello', 'world', 'test'])],
-    ['booleans', AnyValue.newList([true, false, true])],
-    ['mixed', AnyValue.newList([42, 'text', true, 'null'])]
-  ]));
+  const mapWithLists = AnyValue.newMap(
+    new Map<string, AnyValue<any>>([
+      ['numbers', AnyValue.newList([1, 2, 3, 4, 5])],
+      ['strings', AnyValue.newList(['hello', 'world', 'test'])],
+      ['booleans', AnyValue.newList([true, false, true])],
+      ['mixed', AnyValue.newList([42, 'text', true, 'null'])],
+    ])
+  );
   serializeAndWrite(out, 'map_with_lists.bin', mapWithLists);
 
   // 4. COMPLEX NESTED COMBINATIONS
   // Map containing lists of maps
-  const user1Profile = AnyValue.newMap(new Map<string, AnyValue>([['verified', AnyValue.newPrimitive(true)], ['premium', AnyValue.newPrimitive(false)]]));
-  const user1Map = AnyValue.newMap(new Map<string, AnyValue>([['id', AnyValue.newPrimitive(1)], ['profile', user1Profile]]));
+  const user1Profile = AnyValue.newMap(
+    new Map<string, AnyValue>([
+      ['verified', AnyValue.newPrimitive(true)],
+      ['premium', AnyValue.newPrimitive(false)],
+    ])
+  );
+  const user1Map = AnyValue.newMap(
+    new Map<string, AnyValue>([
+      ['id', AnyValue.newPrimitive(1)],
+      ['profile', user1Profile],
+    ])
+  );
 
-  const user2Profile = AnyValue.newMap(new Map<string, AnyValue>([['verified', AnyValue.newPrimitive(false)], ['premium', AnyValue.newPrimitive(true)]]));
-  const user2Map = AnyValue.newMap(new Map<string, AnyValue>([['id', AnyValue.newPrimitive(2)], ['profile', user2Profile]]));
+  const user2Profile = AnyValue.newMap(
+    new Map<string, AnyValue>([
+      ['verified', AnyValue.newPrimitive(false)],
+      ['premium', AnyValue.newPrimitive(true)],
+    ])
+  );
+  const user2Map = AnyValue.newMap(
+    new Map<string, AnyValue>([
+      ['id', AnyValue.newPrimitive(2)],
+      ['profile', user2Profile],
+    ])
+  );
 
   const usersList = AnyValue.newList([user1Map, user2Map]);
 
   const featuresList = AnyValue.newList(['auth', 'profile', 'settings']);
-  const metadataMap = AnyValue.newMap(new Map<string, AnyValue>([['version', AnyValue.newPrimitive('1.0')], ['features', featuresList]]));
+  const metadataMap = AnyValue.newMap(
+    new Map<string, AnyValue>([
+      ['version', AnyValue.newPrimitive('1.0')],
+      ['features', featuresList],
+    ])
+  );
 
-  const complexNested = AnyValue.newMap(new Map<string, AnyValue<any>>([
-    ['users', usersList],
-    ['metadata', metadataMap]
-  ]));
+  const complexNested = AnyValue.newMap(
+    new Map<string, AnyValue<any>>([
+      ['users', usersList],
+      ['metadata', metadataMap],
+    ])
+  );
   serializeAndWrite(out, 'complex_nested.bin', complexNested);
 
   // 5. EDGE CASES - Empty Collections
@@ -173,18 +216,23 @@ function main(): void {
   serializeAndWrite(out, 'big_number.bin', AnyValue.newPrimitive(bigNumber));
 
   // 9. MIXED TYPE COMPLEXITY
-  const mixedComplexity = AnyValue.newMap(new Map<string, AnyValue<any>>([
-    ['primitives', AnyValue.newList([
-      AnyValue.newPrimitive(42),
-      AnyValue.newPrimitive('string'),
-      AnyValue.newPrimitive(true),
-      AnyValue.newPrimitive(3.14),
-      AnyValue.newPrimitive(null)
-    ])],
-    ['bytes', AnyValue.newBytes(new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]))],
-    ['json', AnyValue.newJson({ complex: { nested: { object: [1, 2, 3] } } })],
-    ['struct', AnyValue.newStruct({ id: 'test', data: [1, 2, 3] })]
-  ]));
+  const mixedComplexity = AnyValue.newMap(
+    new Map<string, AnyValue<any>>([
+      [
+        'primitives',
+        AnyValue.newList([
+          AnyValue.newPrimitive(42),
+          AnyValue.newPrimitive('string'),
+          AnyValue.newPrimitive(true),
+          AnyValue.newPrimitive(3.14),
+          AnyValue.newPrimitive(null),
+        ]),
+      ],
+      ['bytes', AnyValue.newBytes(new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]))],
+      ['json', AnyValue.newJson({ complex: { nested: { object: [1, 2, 3] } } })],
+      ['struct', AnyValue.newStruct({ id: 'test', data: [1, 2, 3] })],
+    ])
+  );
   serializeAndWrite(out, 'mixed_complexity.bin', mixedComplexity);
 
   // 10. RECURSIVE STRUCTURES
@@ -201,41 +249,45 @@ function main(): void {
   const recursiveUsers = AnyValue.newList([
     AnyValue.newStruct(friendUser1),
     AnyValue.newStruct(friendUser2),
-    AnyValue.newStruct(friendUser3)
+    AnyValue.newStruct(friendUser3),
   ]);
   serializeAndWrite(out, 'recursive_structs.bin', recursiveUsers);
 
   // 11. HETEROGENEOUS COLLECTIONS WITH ALL TYPES
   const allTypesList = AnyValue.newList([
-    AnyValue.newPrimitive(42),                    // integer
-    AnyValue.newPrimitive('string'),              // string
-    AnyValue.newPrimitive(true),                  // boolean
-    AnyValue.newPrimitive(3.14159),               // float
-    AnyValue.newPrimitive(null),                  // null
-    AnyValue.newBytes(new Uint8Array([1,2,3])),   // bytes
-    AnyValue.newJson({key: 'value'}),             // json
-    AnyValue.newStruct({id: 'test'}),             // struct
-    AnyValue.newList([1,2,3]),                    // nested list
-    AnyValue.newMap(new Map([['k', 'v']]))        // nested map
+    AnyValue.newPrimitive(42), // integer
+    AnyValue.newPrimitive('string'), // string
+    AnyValue.newPrimitive(true), // boolean
+    AnyValue.newPrimitive(3.14159), // float
+    AnyValue.newPrimitive(null), // null
+    AnyValue.newBytes(new Uint8Array([1, 2, 3])), // bytes
+    AnyValue.newJson({ key: 'value' }), // json
+    AnyValue.newStruct({ id: 'test' }), // struct
+    AnyValue.newList([1, 2, 3]), // nested list
+    AnyValue.newMap(new Map([['k', 'v']])), // nested map
   ]);
   serializeAndWrite(out, 'all_types_list.bin', allTypesList);
 
   // 12. MAP WITH COMPLEX KEYS AND VALUES
-  const complexMap = AnyValue.newMap(new Map<string, AnyValue<any>>([
-    ['simple_string', AnyValue.newPrimitive('value')],
-    ['simple_number', AnyValue.newPrimitive(123)],
-    ['nested_list', AnyValue.newList([
-      AnyValue.newMap(new Map([['inner', 'data']]))
-    ])],
-    ['nested_map', AnyValue.newMap(new Map([
-      ['level1', AnyValue.newMap(new Map([
-        ['level2', AnyValue.newPrimitive('deep')]
-      ]))]
-    ]))],
-    ['mixed_array', AnyValue.newList([
-      'string', 42, true, 'null', AnyValue.newPrimitive('nested')
-    ])]
-  ]));
+  const complexMap = AnyValue.newMap(
+    new Map<string, AnyValue<any>>([
+      ['simple_string', AnyValue.newPrimitive('value')],
+      ['simple_number', AnyValue.newPrimitive(123)],
+      ['nested_list', AnyValue.newList([AnyValue.newMap(new Map([['inner', 'data']]))])],
+      [
+        'nested_map',
+        AnyValue.newMap(
+          new Map([
+            ['level1', AnyValue.newMap(new Map([['level2', AnyValue.newPrimitive('deep')]]))],
+          ])
+        ),
+      ],
+      [
+        'mixed_array',
+        AnyValue.newList(['string', 42, true, 'null', AnyValue.newPrimitive('nested')]),
+      ],
+    ])
+  );
   serializeAndWrite(out, 'complex_map.bin', complexMap);
 
   // 13. PERFORMANCE TEST - Very Large Collections
@@ -263,7 +315,7 @@ function main(): void {
     ['with_underscores', 'underscore_value'],
     ['with.dots', 'dotted.value'],
     ['with/slashes', 'slashed/value'],
-    ['with\\backslashes', 'backslashed\\value']
+    ['with\\backslashes', 'backslashed\\value'],
   ]);
   serializeAndWrite(out, 'special_chars_map.bin', AnyValue.newMap(specialChars));
 
