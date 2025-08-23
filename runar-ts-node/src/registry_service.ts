@@ -69,7 +69,10 @@ export class RegistryService implements AbstractService {
         const match = this.findServiceByPath(servicePath || null, services);
         let meta = null;
         if (match) {
-          const serviceTopicResult = TopicPath.newService(this._networkId ?? 'default', match.service.path());
+          const serviceTopicResult = TopicPath.newService(
+            this._networkId ?? 'default',
+            match.service.path()
+          );
           const serviceTopic = serviceTopicResult.ok ? serviceTopicResult.value : undefined;
           if (serviceTopic) {
             meta = await this.delegate.getServiceMetadata(serviceTopic);
@@ -100,7 +103,10 @@ export class RegistryService implements AbstractService {
         const match = this.findServiceByPath(servicePath || null, services);
         if (match) {
           // validate via delegate
-          const serviceTopicResult = TopicPath.newService(this._networkId ?? 'default', match.service.path());
+          const serviceTopicResult = TopicPath.newService(
+            this._networkId ?? 'default',
+            match.service.path()
+          );
           if (serviceTopicResult.ok) {
             await this.delegate.validatePauseTransition(serviceTopicResult.value);
           }
@@ -119,7 +125,10 @@ export class RegistryService implements AbstractService {
         const servicePath = context.pathParams.get('service_path');
         const match = this.findServiceByPath(servicePath || null, services);
         if (match) {
-          const serviceTopicResult = TopicPath.newService(this._networkId ?? 'default', match.service.path());
+          const serviceTopicResult = TopicPath.newService(
+            this._networkId ?? 'default',
+            match.service.path()
+          );
           if (serviceTopicResult.ok) {
             await this.delegate.validateResumeTransition(serviceTopicResult.value);
           }

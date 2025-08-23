@@ -1,12 +1,12 @@
 import { encode, decode } from 'cbor-x';
-import { Result, ok, err } from './result';
-import { ValueCategory, DeserializationContext } from './wire';
-export type { DeserializationContext, WireHeader } from './wire';
-import { resolveType, initWirePrimitives, registerType, clearRegistry } from './registry';
+import { Result, ok, err } from './result.js';
+import { ValueCategory, DeserializationContext } from './wire.js';
+export type { DeserializationContext, WireHeader } from './wire.js';
+import { resolveType, initWirePrimitives, registerType, clearRegistry } from './registry.js';
 import { getTypeName } from 'runar-ts-decorators';
 
 // Re-export registry functions
-export { registerType, clearRegistry, resolveType } from './registry';
+export { registerType, clearRegistry, resolveType } from './registry.js';
 
 // Create a TypeRegistry class for compatibility
 export class TypeRegistry {
@@ -445,7 +445,7 @@ export class AnyValue<T = unknown> {
 
 // Export the result types
 export { ok, err } from './result.js';
-export type { Result } from './result';
+export type { Result } from './result.js';
 
 // Export the wire types
 export { ValueCategory, readHeader, writeHeader, bodyOffset } from './wire.js';

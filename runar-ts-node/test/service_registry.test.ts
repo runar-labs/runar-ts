@@ -48,20 +48,8 @@ describe('ServiceRegistry subscriptions', () => {
       const wc2 = wc2Result.value;
       const serviceTopic = serviceTopicResult.value;
       const cb = () => {};
-      const id1 = registry.subscribe(
-        wc1,
-        serviceTopic,
-        cb,
-        { path: wc1.asString() },
-        'Local'
-      );
-      const id2 = registry.subscribe(
-        wc2,
-        serviceTopic,
-        cb,
-        { path: wc2.asString() },
-        'Local'
-      );
+      const id1 = registry.subscribe(wc1, serviceTopic, cb, { path: wc1.asString() }, 'Local');
+      const id2 = registry.subscribe(wc2, serviceTopic, cb, { path: wc2.asString() }, 'Local');
       const h1 = registry.getSubscribers(wc1);
       const h2 = registry.getSubscribers(wc2);
       assert.equal(h1.length, 1);

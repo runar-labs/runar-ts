@@ -1,4 +1,4 @@
-import { Result, ok, err } from './result';
+import { Result, ok, err } from './result.js';
 
 // Value categories exactly matching Rust runar-serializer
 export enum ValueCategory {
