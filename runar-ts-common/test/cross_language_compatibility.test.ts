@@ -61,8 +61,41 @@ describe('Cross-Language Compatibility (TypeScript ↔ Rust)', () => {
       if (arrayBytes.ok) {
         expect(arrayBytes.value[0]).toBe(ValueCategory.List);
         expect(arrayBytes.value[1]).toBe(0); // not encrypted
-        expect(arrayBytes.value[2]).toBe(4); // "list"
-        expect(new TextDecoder().decode(arrayBytes.value.subarray(3, 7))).toBe('list');
+
+        // Get the type name length and decode the type name
+        const typeNameLen = arrayBytes.value[2];
+        const typeName = new TextDecoder().decode(arrayBytes.value.subarray(3, 3 + typeNameLen));
+
+        // The type name should be in the format "list<element_type>"
+        expect(typeName).toMatch(/^list<.+>$/);
+        expect(typeNameLen).toBe(typeName.length);
+
+        // For integer arrays, it should be "list<i64>"
+        expect(typeName).toBe('list<i64>');
+      }
+
+      // Test string array
+      const stringArrayValue = AnyValue.from(['hello', 'world']);
+      const stringArrayBytes = stringArrayValue.serialize();
+      expect(stringArrayBytes.ok).toBe(true);
+
+      if (stringArrayBytes.ok) {
+        expect(stringArrayBytes.value[0]).toBe(ValueCategory.List);
+        const typeNameLen = stringArrayBytes.value[2];
+        const typeName = new TextDecoder().decode(stringArrayBytes.value.subarray(3, 3 + typeNameLen));
+        expect(typeName).toBe('list<string>');
+      }
+
+      // Test boolean array
+      const boolArrayValue = AnyValue.from([true, false]);
+      const boolArrayBytes = boolArrayValue.serialize();
+      expect(boolArrayBytes.ok).toBe(true);
+
+      if (boolArrayBytes.ok) {
+        expect(boolArrayBytes.value[0]).toBe(ValueCategory.List);
+        const typeNameLen = boolArrayBytes.value[2];
+        const typeName = new TextDecoder().decode(boolArrayBytes.value.subarray(3, 3 + typeNameLen));
+        expect(typeName).toBe('list<bool>');
       }
     });
 
