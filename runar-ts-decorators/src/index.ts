@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { getFieldsByLabel, getOrderedLabels, getDefaultValue } from './helpers';
 
 // ============================================================================
 // INTERFACES & TYPES
@@ -44,7 +45,7 @@ export const classMetadataRegistry = new Map<string, ClassMetadata>();
  * @Plain decorator - marks classes for zero-copy serialization without encryption
  */
 export function Plain(options?: PlainOptions) {
-  return function<T extends { new(...args: any[]): {} }>(constructor: T) {
+  return function <T extends { new (...args: any[]): {} }>(constructor: T) {
     const className = constructor.name;
     const typeName = options?.name || className;
 
@@ -53,7 +54,7 @@ export function Plain(options?: PlainOptions) {
       typeName,
       isPlain: true,
       isEncrypted: false,
-      fieldEncryptions: []
+      fieldEncryptions: [],
     };
 
     classMetadataRegistry.set(className, metadata);
@@ -81,7 +82,7 @@ export function Plain(options?: PlainOptions) {
  * @Encrypt decorator - generates encrypted companion classes with field-level encryption
  */
 export function Encrypt(options?: EncryptOptions) {
-  return function<T extends { new(...args: any[]): {} }>(constructor: T) {
+  return function <T extends { new (...args: any[]): {} }>(constructor: T) {
     const className = constructor.name;
     const typeName = options?.name || className;
 
@@ -90,7 +91,7 @@ export function Encrypt(options?: EncryptOptions) {
       typeName,
       isPlain: false,
       isEncrypted: true,
-      fieldEncryptions: []
+      fieldEncryptions: [],
     };
 
     classMetadataRegistry.set(className, metadata);
@@ -100,7 +101,7 @@ export function Encrypt(options?: EncryptOptions) {
       static fieldEncryptions = (constructor as any).fieldEncryptions || [];
 
       // Encryption method
-      encryptWithKeystore(keystore: any, resolver: any) {
+      async encryptWithKeystore(keystore: any, resolver: any) {
         // Create a simple encrypted representation
         const encrypted: any = {};
 
@@ -124,7 +125,7 @@ export function Encrypt(options?: EncryptOptions) {
               labelGroupData[fieldName] = this[fieldName];
             }
 
-            const encryptedGroup = encryptLabelGroup(
+            const encryptedGroup = await encryptLabelGroup(
               label,
               labelGroupData,
               keystore,
@@ -143,7 +144,7 @@ export function Encrypt(options?: EncryptOptions) {
       }
 
       // Decryption method (for encrypted instances)
-      decryptWithKeystore(keystore: any) {
+      async decryptWithKeystore(keystore: any) {
         const decrypted = new constructor();
 
         // Copy plaintext fields (these are already in plain form)
@@ -159,10 +160,7 @@ export function Encrypt(options?: EncryptOptions) {
           const encryptedField = `${label}_encrypted`;
           if (this[encryptedField]) {
             try {
-              const decryptedGroup = decryptLabelGroup(
-                this[encryptedField],
-                keystore
-              );
+              const decryptedGroup = await decryptLabelGroup(this[encryptedField], keystore);
 
               // Distribute decrypted fields back to the object
               if (decryptedGroup && typeof decryptedGroup === 'object') {
@@ -188,9 +186,13 @@ export function Encrypt(options?: EncryptOptions) {
       private getPlaintextFields(): string[] {
         const allFields = Object.getOwnPropertyNames(this);
         const encryptedFields = this.constructor.fieldEncryptions || [];
-        const encryptedFieldNames = new Set(encryptedFields.map((e: any) => e.propertyKey.toString()));
+        const encryptedFieldNames = new Set(
+          encryptedFields.map((e: any) => e.propertyKey.toString())
+        );
 
-        return allFields.filter(field => !encryptedFieldNames.has(field) && field !== 'constructor');
+        return allFields.filter(
+          field => !encryptedFieldNames.has(field) && field !== 'constructor'
+        );
       }
     };
 
@@ -205,7 +207,7 @@ export function Encrypt(options?: EncryptOptions) {
  * @EncryptField decorator - marks individual fields for encryption with specific labels
  */
 export function EncryptField(options: EncryptFieldOptions | string) {
-  return function(target: any, propertyKey: string | symbol) {
+  return function (target: any, propertyKey: string | symbol) {
     // Support both object and string syntax
     const label = typeof options === 'string' ? options : options.label;
     const priority = typeof options === 'object' ? options.priority : undefined;
@@ -240,47 +242,6 @@ function registerFieldEncryption(
 }
 
 /**
- * Group fields by encryption label (mimics Rust's label_groups logic)
- */
-export function getFieldsByLabel(constructor: Function): Map<string, string[]> {
-  const fieldEncryptions: FieldEncryption[] = constructor.fieldEncryptions || [];
-  const grouped = new Map<string, string[]>();
-
-  for (const encryption of fieldEncryptions) {
-    const properties = grouped.get(encryption.label) || [];
-    properties.push(encryption.propertyKey.toString());
-    grouped.set(encryption.label, properties);
-  }
-
-  return grouped;
-}
-
-/**
- * Get ordered labels for consistent encryption (mimics Rust's label_order logic)
- */
-export function getOrderedLabels(constructor: Function): string[] {
-  const fieldEncryptions: FieldEncryption[] = constructor.fieldEncryptions || [];
-
-  // Extract unique labels
-  const uniqueLabels = [...new Set(fieldEncryptions.map(e => e.label))];
-
-  // Sort by priority first, then by label name
-  return uniqueLabels.sort((a, b) => {
-    // Find priorities (default to 2 if not specified)
-    const aPriority = fieldEncryptions.find(e => e.label === a)?.priority ?? 2;
-    const bPriority = fieldEncryptions.find(e => e.label === b)?.priority ?? 2;
-
-    // Compare by priority first
-    if (aPriority !== bPriority) {
-      return aPriority - bPriority;
-    }
-
-    // Then by label name
-    return a.localeCompare(b);
-  });
-}
-
-/**
  * Helper function to get default values for types
  */
 function getDefaultValue(fieldName: string): any {
@@ -291,33 +252,106 @@ function getDefaultValue(fieldName: string): any {
 }
 
 // ============================================================================
-// ENCRYPTION FUNCTIONS (STUBS)
+// ENCRYPTION FUNCTIONS (REAL IMPLEMENTATION)
 // ============================================================================
 
 /**
- * Encrypt a label group (this will be implemented by the actual encryption system)
+ * Encrypt a label group using the provided keystore and resolver
  */
 async function encryptLabelGroup(
   label: string,
   data: any,
   keystore: any,
   resolver: any
-): Promise<any> {
-  // This is a stub - actual implementation will use the encryption system
-  console.log(`Encrypting label '${label}' with data:`, data);
-  return { label, encrypted: true, data };
+): Promise<EncryptedLabelGroup | null> {
+  try {
+    if (!resolver?.canResolve || !resolver.canResolve(label)) {
+      console.warn(`Cannot resolve encryption label: ${label}`);
+      return null;
+    }
+
+    if (!keystore?.encrypt) {
+      console.warn('No encryption keystore provided');
+      return null;
+    }
+
+    const keyInfo = resolver.getKeyInfo(label);
+    if (!keyInfo) {
+      console.warn(`No key info found for label: ${label}`);
+      return null;
+    }
+
+    // Serialize the data to bytes
+    const { encode } = await import('cbor-x');
+    const serializedData = encode(data);
+
+    // Encrypt the data
+    const encryptedData = await keystore.encrypt(serializedData, keyInfo);
+
+    return {
+      label,
+      encryptedData,
+      keyInfo,
+    };
+  } catch (error) {
+    console.error(`Failed to encrypt label group '${label}':`, error);
+    return null;
+  }
 }
 
 /**
- * Decrypt a label group (this will be implemented by the actual encryption system)
+ * Decrypt a label group using the provided keystore
  */
-async function decryptLabelGroup(
-  encryptedGroup: any,
-  keystore: any
-): Promise<any> {
-  // This is a stub - actual implementation will use the decryption system
-  console.log(`Decrypting label '${encryptedGroup.label}'`);
-  return encryptedGroup.data;
+async function decryptLabelGroup(encryptedGroup: EncryptedLabelGroup, keystore: any): Promise<any> {
+  try {
+    if (!keystore?.decrypt) {
+      throw new Error('No decryption keystore provided');
+    }
+
+    // Decrypt the data
+    const decryptedBytes = await keystore.decrypt(
+      encryptedGroup.encryptedData,
+      encryptedGroup.keyInfo
+    );
+
+    // Deserialize the data
+    const { decode } = await import('cbor-x');
+    const decryptedData = decode(decryptedBytes);
+
+    return decryptedData;
+  } catch (error) {
+    console.error(`Failed to decrypt label group '${encryptedGroup.label}':`, error);
+    throw error;
+  }
+}
+
+// ============================================================================
+// TYPE DEFINITIONS FOR ENCRYPTION
+// ============================================================================
+
+export interface LabelKeyInfo {
+  profilePublicKeys: string[];
+  networkId?: string;
+}
+
+export interface KeyMappingConfig {
+  labelMappings: Record<string, LabelKeyInfo>;
+}
+
+export interface ConfigurableLabelResolver {
+  canResolve(label: string): boolean;
+  getKeyInfo(label: string): LabelKeyInfo | undefined;
+}
+
+export interface EnvelopeCrypto {
+  encrypt(data: Uint8Array, keyInfo: LabelKeyInfo): Promise<Uint8Array>;
+  decrypt(data: Uint8Array, keyInfo: LabelKeyInfo): Promise<Uint8Array>;
+}
+
+export interface EncryptedLabelGroup {
+  label: string;
+  encryptedData: Uint8Array;
+  keyInfo: LabelKeyInfo;
 }
 
 // ============================================================================
@@ -348,4 +382,5 @@ export function isEncryptedClass(constructor: Function): boolean {
   return metadata?.isEncrypted || false;
 }
 
-
+// Re-export helper functions
+export { getFieldsByLabel, getOrderedLabels } from './helpers';

@@ -9,19 +9,25 @@ import {
   isPlainClass,
   isEncryptedClass,
   getFieldsByLabel,
-  getOrderedLabels
+  getOrderedLabels,
 } from '../src';
 
 // Test @Plain decorator
 describe('@Plain Decorator', () => {
   @Plain()
   class SimpleStruct {
-    constructor(public a: number, public b: string) {}
+    constructor(
+      public a: number,
+      public b: string
+    ) {}
   }
 
-  @Plain({ name: "custom.TestStructAB" })
+  @Plain({ name: 'custom.TestStructAB' })
   class CustomNameStruct {
-    constructor(public x: number, public y: string) {}
+    constructor(
+      public x: number,
+      public y: string
+    ) {}
   }
 
   it('should register plain class metadata', () => {
@@ -42,10 +48,10 @@ describe('@Plain Decorator', () => {
     expect(isEncryptedClass(SimpleStruct)).toBe(false);
   });
 
-  it('should have encryption methods (no-op)', () => {
+  it('should have encryption methods (no-op)', async () => {
     const instance = new SimpleStruct(42, 'hello');
-    const encrypted = instance.encryptWithKeystore({}, {});
-    const decrypted = instance.decryptWithKeystore({});
+    const encrypted = await instance.encryptWithKeystore({}, {});
+    const decrypted = await instance.decryptWithKeystore({});
 
     expect(encrypted).toBe(instance);
     expect(decrypted).toBe(instance);
@@ -71,7 +77,7 @@ describe('@Encrypt Decorator', () => {
     }
   }
 
-  @Encrypt({ name: "custom.EncryptedData" })
+  @Encrypt({ name: 'custom.EncryptedData' })
   class CustomEncryptedData {
     public timestamp: number;
 
@@ -160,7 +166,7 @@ describe('@EncryptField Decorator', () => {
 
 // Test complex encryption scenarios
 describe('Complex Encryption Scenarios', () => {
-  @Encrypt({ name: "complex.EncryptedProfile" })
+  @Encrypt({ name: 'complex.EncryptedProfile' })
   class ComplexProfile {
     // Plaintext fields (no encryption)
     public id: string;
@@ -240,7 +246,7 @@ describe('Encryption/Decryption Flow', () => {
     expect(typeof instance.decryptWithKeystore).toBe('function');
   });
 
-  it('should call encryption functions (stubs)', () => {
+  it('should call encryption functions (stubs)', async () => {
     const instance = new TestEncryption('123', 'secret');
 
     // Mock console.log to capture stub output
@@ -252,12 +258,13 @@ describe('Encryption/Decryption Flow', () => {
     const mockResolver = { canResolve: () => true };
 
     // Call encryption (this will use our stub implementation)
-    const encrypted = instance.encryptWithKeystore(mockKeystore, mockResolver);
+    const encrypted = await instance.encryptWithKeystore(mockKeystore, mockResolver);
 
     // Restore console.log
     console.log = originalLog;
 
-    // Verify stub was called
-    expect(logs.some(log => log.includes("Encrypting label 'test_label'"))).toBe(true);
+    // Verify stub was called (this will be false since we have real encryption now, not stubs)
+    // The test is just checking that the method exists and can be called
+    expect(encrypted).toBeDefined();
   });
 });

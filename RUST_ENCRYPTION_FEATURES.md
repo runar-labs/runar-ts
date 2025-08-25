@@ -58,12 +58,14 @@ pub fn derive_plain(input: TokenStream) -> TokenStream {
 ```
 
 **Key Features**:
+
 - Implements `RunarEncryptable`, `RunarEncrypt`, and `RunarDecrypt` traits
 - No-op encryption (returns self.clone())
 - Auto-registration via `ctor` crate for JSON conversion and wire name
 - Supports custom wire names via `#[runar(name = "custom_name")]`
 
 **Test Evidence** (`basic_serialization_test.rs`, `arc_value_test.rs`):
+
 - Zero-copy serialization/deserialization
 - Automatic JSON conversion registration
 - Type-safe primitive serialization (String, i64, bool)
@@ -77,6 +79,7 @@ pub fn derive_plain(input: TokenStream) -> TokenStream {
 **Code Analysis** (`lib.rs` lines 97-318):
 
 **Core Logic (lines 104-151)**:
+
 ```rust
 let mut plaintext_fields: Vec<(Ident, Type)> = Vec::new();
 let mut label_groups: std::collections::BTreeMap<String, Vec<(Ident, Type)>> = std::collections::BTreeMap::new();
@@ -108,12 +111,14 @@ label_order.sort_by(|a, b| {
 ```
 
 **Label Processing (lines 159-203)**:
+
 - Groups fields by encryption labels
 - Creates sub-structs for each label group
 - Generates encryption/decryption logic per label
 - Handles label resolution and key lookup
 
 **Encrypted Struct Generation (lines 209-243)**:
+
 ```rust
 let encrypted_struct_def = quote! {
     #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
@@ -125,12 +130,14 @@ let encrypted_struct_def = quote! {
 ```
 
 **Encryption/Decryption Implementation (lines 248-293)**:
+
 - `RunarEncrypt` trait implementation
 - `RunarDecrypt` trait implementation
 - Field-level encryption using `encrypt_label_group`
 - Label-based decryption with access control
 
 **Auto-Registration (lines 295-315)**:
+
 ```rust
 const _: () = {
     #[ctor::ctor]
@@ -143,12 +150,13 @@ const _: () = {
 ```
 
 **Supported Labels** (from `encryption_test.rs`):
+
 - `#[runar(user)]`: Encrypted with user profile keys
 - `#[runar(system)]`: Encrypted with network/system keys
 - `#[runar(search)]`: Search index copy (encrypted)
 - `#[runar(system_only)]`: System/network context only
 
-LABELS are developer defined, and later mapped to actual public keys using the label resolver. 
+LABELS are developer defined, and later mapped to actual public keys using the label resolver.
 so these values ehre user, system etc.. are jsut an example, but the dveloper can use any string they want to define a label.
 
 ### 1.3 @runar Attribute Macro
@@ -156,6 +164,7 @@ so these values ehre user, system etc.. are jsut an example, but the dveloper ca
 **Purpose**: No-op attribute macro for field annotations.
 
 **Code Analysis** (`lib.rs` lines 326-330):
+
 ```rust
 #[proc_macro_attribute]
 pub fn runar(_attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -168,6 +177,7 @@ pub fn runar(_attr: TokenStream, item: TokenStream) -> TokenStream {
 ### 1.4 Wire Name Extraction
 
 **Code Analysis** (`lib.rs` lines 29-50):
+
 ```rust
 fn extract_wire_name(attrs: &[Attribute], default_ident: &Ident) -> proc_macro2::TokenStream {
     for attr in attrs.iter() {
@@ -188,6 +198,7 @@ fn extract_wire_name(attrs: &[Attribute], default_ident: &Ident) -> proc_macro2:
 ### 1.5 Label Parsing
 
 **Code Analysis** (`lib.rs` lines 8-15):
+
 ```rust
 fn parse_runar_labels(attr: &Attribute) -> Vec<String> {
     if !attr.path().is_ident("runar") {
@@ -204,6 +215,7 @@ fn parse_runar_labels(attr: &Attribute) -> Vec<String> {
 **Encryption Test (`encryption_test.rs`)**:
 
 **Test Structure (lines 17-29)**:
+
 ```rust
 #[derive(Clone, PartialEq, Debug, serde::Serialize, serde::Deserialize, Encrypt)]
 #[runar(name = "encryption_test.TestProfile")]
@@ -221,18 +233,21 @@ pub struct TestProfile {
 ```
 
 **Key Insights**:
+
 - Mixed encryption levels on single struct
 - Custom wire name specification
 - Label-based access control testing
 - Mobile vs Node keystore access patterns
 
 **Encryption Flow (lines 122-150)**:
+
 1. Create original struct instance
 2. Call `encrypt_with_keystore()` with keystore and resolver
 3. Returns `EncryptedTestProfile` with encrypted fields
 4. Decrypt with appropriate keystore based on access level
 
 **Access Control Testing**:
+
 - Mobile keystore: Can access user fields, cannot access system_only
 - Node keystore: Can access system fields, cannot access user fields
 - Label resolver determines which keys can decrypt which fields
@@ -244,13 +259,14 @@ pub struct TestProfile {
 **Purpose**: Mark classes for zero-copy serialization without encryption.
 
 **TypeScript Implementation**:
+
 ```typescript
 interface PlainOptions {
   name?: string;
 }
 
 function Plain(options?: PlainOptions) {
-  return function<T extends { new(...args: any[]): {} }>(constructor: T) {
+  return function <T extends { new (...args: any[]): {} }>(constructor: T) {
     // Register for JSON conversion
     AnyValue.registerJsonConverter(constructor, options?.name || constructor.name);
 
@@ -271,18 +287,23 @@ function Plain(options?: PlainOptions) {
 ```
 
 **Usage**:
+
 ```typescript
-@Plain({ name: "custom.TestStructAB" })
+@Plain({ name: 'custom.TestStructAB' })
 class TestStruct {
-  constructor(public a: number, public b: string) {}
+  constructor(
+    public a: number,
+    public b: string
+  ) {}
 }
 ```
 
 ### 2.2 @Encrypt Decorator
 
-**Purpose**: Generate encrypted companion class with field-level (grouped  by labels) encryption.
+**Purpose**: Generate encrypted companion class with field-level (grouped by labels) encryption.
 
 **TypeScript Implementation**:
+
 ```typescript
 interface EncryptOptions {
   name?: string;
@@ -294,7 +315,7 @@ interface FieldEncryption {
 }
 
 function Encrypt(options?: EncryptOptions) {
-  return function<T extends { new(...args: any[]): {} }>(constructor: T) {
+  return function <T extends { new (...args: any[]): {} }>(constructor: T) {
     const encryptedClassName = `Encrypted${constructor.name}`;
     const fieldEncryptions: FieldEncryption[] = [];
 
@@ -307,7 +328,7 @@ function Encrypt(options?: EncryptOptions) {
 
       // Encryption method
       encryptWithKeystore(keystore: any, resolver: any) {
-        const encrypted = new (globalThis[encryptedClassName])();
+        const encrypted = new globalThis[encryptedClassName]();
 
         // Copy plaintext fields (fields without encryption decorators)
         const plaintextFields = this.getPlaintextFields();
@@ -329,12 +350,7 @@ function Encrypt(options?: EncryptOptions) {
               labelGroupData[fieldName] = this[fieldName];
             }
 
-            const encryptedGroup = encryptLabelGroup(
-              label,
-              labelGroupData,
-              keystore,
-              resolver
-            );
+            const encryptedGroup = encryptLabelGroup(label, labelGroupData, keystore, resolver);
             encrypted[`${label}_encrypted`] = encryptedGroup;
           } else {
             encrypted[`${label}_encrypted`] = null;
@@ -361,10 +377,7 @@ function Encrypt(options?: EncryptOptions) {
           const encryptedField = `${label}_encrypted`;
           if (this[encryptedField]) {
             try {
-              const decryptedGroup = decryptLabelGroup(
-                this[encryptedField],
-                keystore
-              );
+              const decryptedGroup = decryptLabelGroup(this[encryptedField], keystore);
 
               // Distribute decrypted fields back to the object
               if (decryptedGroup && typeof decryptedGroup === 'object') {
@@ -390,9 +403,13 @@ function Encrypt(options?: EncryptOptions) {
       private getPlaintextFields(): string[] {
         const allFields = Object.getOwnPropertyNames(this);
         const encryptedFields = this.constructor.fieldEncryptions || [];
-        const encryptedFieldNames = new Set(encryptedFields.map((e: any) => e.propertyKey.toString()));
+        const encryptedFieldNames = new Set(
+          encryptedFields.map((e: any) => e.propertyKey.toString())
+        );
 
-        return allFields.filter(field => !encryptedFieldNames.has(field) && field !== 'constructor');
+        return allFields.filter(
+          field => !encryptedFieldNames.has(field) && field !== 'constructor'
+        );
       }
     };
   };
@@ -409,13 +426,13 @@ function Encrypt(options?: EncryptOptions) {
 
 ```typescript
 interface EncryptFieldOptions {
-  label: string;  // The encryption label (e.g., "user", "system", "search", "system_only")
-  priority?: number;  // Optional priority for label ordering (lower = higher priority)
+  label: string; // The encryption label (e.g., "user", "system", "search", "system_only")
+  priority?: number; // Optional priority for label ordering (lower = higher priority)
 }
 
 // Generic field encryption decorator
 function EncryptField(options: EncryptFieldOptions | string) {
-  return function(target: any, propertyKey: string | symbol) {
+  return function (target: any, propertyKey: string | symbol) {
     // Support both object and string syntax
     const label = typeof options === 'string' ? options : options.label;
     const priority = typeof options === 'object' ? options.priority : undefined;
@@ -494,7 +511,7 @@ function getDefaultValue(fieldName: string): any {
 
 ```typescript
 // Example 1: Using generic decorator with custom labels
-@Encrypt({ name: "encryption_test.TestProfile" })
+@Encrypt({ name: 'encryption_test.TestProfile' })
 class TestProfile {
   public id: string;
 
@@ -512,7 +529,7 @@ class TestProfile {
 }
 
 // Example 2: Using @EncryptField with different label patterns
-@Encrypt({ name: "encryption_test.TestProfile" })
+@Encrypt({ name: 'encryption_test.TestProfile' })
 class TestProfile {
   public id: string;
 
@@ -530,7 +547,7 @@ class TestProfile {
 }
 
 // Example 3: Custom labels with priorities
-@Encrypt({ name: "custom.TestStruct" })
+@Encrypt({ name: 'custom.TestStruct' })
 class CustomStruct {
   public id: string;
 
@@ -545,32 +562,31 @@ class CustomStruct {
 }
 
 // Example 4: Mixed encryption levels on single struct
-@Encrypt({ name: "complex.EncryptedData" })
+@Encrypt({ name: 'complex.EncryptedData' })
 class ComplexData {
   // Plaintext fields (no encryption decorator)
   public id: string;
   public createdAt: Date;
 
   // Different encryption levels
-  @EncryptField('network')  // Custom label
+  @EncryptField('network') // Custom label
   public networkConfig: object;
 
-  @EncryptField('user_profile')  // Custom label
+  @EncryptField('user_profile') // Custom label
   public userPreferences: object;
 
-  @EncryptField('audit_log')  // Custom label
+  @EncryptField('audit_log') // Custom label
   public accessLogs: string[];
 }
 ```
 
 **Key Benefits**:
+
 1. **Flexible Labels**: Developers can use any string as a label, not just hardcoded ones
 2. **Grouping**: Fields with the same label are automatically grouped for encryption
 3. **Priority System**: Control encryption order (mimics Rust's label ordering)
 4. **Consistent API**: Single decorator pattern reduces confusion
 5. **Extensible**: Easy to add new labels without changing decorator code
-
-
 
 ### 2.4 Label-Based Encryption System
 
@@ -635,7 +651,7 @@ async function encryptLabelGroup(
   return {
     label,
     encryptedData: encrypted,
-    keyInfo
+    keyInfo,
   };
 }
 
@@ -643,10 +659,7 @@ async function decryptLabelGroup(
   encryptedGroup: EncryptedLabelGroup,
   keystore: EnvelopeCrypto
 ): Promise<any> {
-  const decrypted = await keystore.decrypt(
-    encryptedGroup.encryptedData,
-    encryptedGroup.keyInfo
-  );
+  const decrypted = await keystore.decrypt(encryptedGroup.encryptedData, encryptedGroup.keyInfo);
 
   const arcValue = AnyValue.fromBytes(decrypted);
   return arcValue.asType();
@@ -656,6 +669,7 @@ async function decryptLabelGroup(
 ### 2.5 Serialization Context
 
 **TypeScript Implementation**:
+
 ```typescript
 interface SerializationContext {
   keystore: EnvelopeCrypto;
@@ -666,10 +680,7 @@ interface SerializationContext {
 
 // Enhanced AnyValue serialization
 class AnyValue {
-  static serializeWithEncryption(
-    value: any,
-    context?: SerializationContext
-  ): Uint8Array {
+  static serializeWithEncryption(value: any, context?: SerializationContext): Uint8Array {
     if (!context) {
       return this.serializeWithoutEncryption(value);
     }
@@ -683,10 +694,7 @@ class AnyValue {
     return this.serializeWithoutEncryption(value);
   }
 
-  static deserializeWithDecryption(
-    bytes: Uint8Array,
-    keystore?: EnvelopeCrypto
-  ): any {
+  static deserializeWithDecryption(bytes: Uint8Array, keystore?: EnvelopeCrypto): any {
     const arcValue = this.deserializeWithoutDecryption(bytes);
 
     if (!keystore) {
@@ -707,6 +715,7 @@ class AnyValue {
 ### 2.6 Registry System
 
 **TypeScript Implementation**:
+
 ```typescript
 class TypeRegistry {
   private static jsonConverters = new Map<string, (data: any) => any>();
@@ -722,11 +731,19 @@ class TypeRegistry {
     this.typeNames.set(type, wireName);
   }
 
-  static registerDecryptor(plainType: string, encryptedType: string, decryptor: (data: any, keystore: any) => any) {
+  static registerDecryptor(
+    plainType: string,
+    encryptedType: string,
+    decryptor: (data: any, keystore: any) => any
+  ) {
     this.decryptors.set(plainType, decryptor);
   }
 
-  static registerEncryptor(plainType: string, encryptedType: string, encryptor: (data: any, keystore: any, resolver: any) => any) {
+  static registerEncryptor(
+    plainType: string,
+    encryptedType: string,
+    encryptor: (data: any, keystore: any, resolver: any) => any
+  ) {
     this.encryptors.set(plainType, encryptor);
   }
 
@@ -742,7 +759,9 @@ class TypeRegistry {
     return this.decryptors.get(plainType);
   }
 
-  static getEncryptor(plainType: string): ((data: any, keystore: any, resolver: any) => any) | undefined {
+  static getEncryptor(
+    plainType: string
+  ): ((data: any, keystore: any, resolver: any) => any) | undefined {
     return this.encryptors.get(plainType);
   }
 }
@@ -837,14 +856,19 @@ class TypeRegistry {
 ### 5.1 Step-by-Step Migration
 
 1. **Start with Plain Types**:
+
    ```typescript
    @Plain()
    class SimpleStruct {
-     constructor(public a: number, public b: string) {}
+     constructor(
+       public a: number,
+       public b: string
+     ) {}
    }
    ```
 
 2. **Add Field Encryption**:
+
    ```typescript
    @Encrypt()
    class UserProfile {
@@ -859,16 +883,18 @@ class TypeRegistry {
    ```
 
 3. **Custom Wire Names**:
+
    ```typescript
-   @Plain({ name: "custom.StructName" })
+   @Plain({ name: 'custom.StructName' })
    class CustomStruct {
      // fields
    }
    ```
 
 4. **Full Encryption**:
+
    ```typescript
-   @Encrypt({ name: "encryption.TestProfile" })
+   @Encrypt({ name: 'encryption.TestProfile' })
    class TestProfile {
      public id: string;
 

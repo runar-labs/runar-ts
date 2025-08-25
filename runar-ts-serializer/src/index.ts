@@ -39,7 +39,11 @@ export type ValueUnion =
   | { type: 'map'; value: Record<string, ValueUnion> };
 
 // Type alias to simplify complex function pointer type (matches Rust)
-type SerializeFn = (value: any, keystore?: any, resolver?: any) => Result<Uint8Array>;
+type SerializeFn = (
+  value: any,
+  keystore?: any,
+  resolver?: any
+) => Result<Uint8Array> | Promise<Result<Uint8Array>>;
 
 export class AnyValue<T = unknown> {
   private category: ValueCategory;
@@ -223,15 +227,34 @@ export class AnyValue<T = unknown> {
 
   static newStruct<T>(value: T): AnyValue<T> {
     const typeName = AnyValue.getTypeName(value);
-    const serializeFn: SerializeFn = (value, _keystore, _resolver) => {
-      try {
-        // TODO: Implement struct encryption when keystore/resolver are available
-        const bytes = encode(value);
-        return ok(bytes);
-      } catch (e) {
-        return err(e as Error);
-      }
-    };
+
+    // Check if the value has real encryption methods (from @Encrypt decorator, not @Plain)
+    const hasEncryptionMethods =
+      value &&
+      typeof value === 'object' &&
+      'encryptWithKeystore' in value &&
+      value.encryptWithKeystore !== (value as any).__isPlainNoOp;
+
+    const serializeFn: SerializeFn = hasEncryptionMethods
+      ? async (value, keystore, resolver) => {
+          try {
+            // This is a decorated class - use its encryption method
+            const encrypted = await value.encryptWithKeystore(keystore, resolver);
+            const bytes = encode(encrypted);
+            return ok(bytes);
+          } catch (e) {
+            return err(e as Error);
+          }
+        }
+      : value => {
+          try {
+            // Regular struct serialization
+            const bytes = encode(value);
+            return ok(bytes);
+          } catch (e) {
+            return err(e as Error);
+          }
+        };
 
     return new AnyValue(ValueCategory.Struct, value, serializeFn, typeName);
   }
@@ -321,11 +344,32 @@ export class AnyValue<T = unknown> {
         return err(new Error(`Unsupported category for deserialization: ${category}`));
     }
 
-    // Create a basic serialize function for deserialized values
-    const serializeFn: SerializeFn = () => {
+    // Handle encrypted instances from decorators
+    if (value && typeof value === 'object' && 'decryptWithKeystore' in value && ctx?.keystore) {
       try {
-        const bytes = encode(value);
-        return ok(bytes);
+        // This is an encrypted instance from decorators - decrypt it
+        const decrypted = value.decryptWithKeystore(ctx.keystore);
+        value = decrypted;
+      } catch (e) {
+        // If decryption fails, keep the encrypted value but log the error
+        console.warn(`Failed to decrypt instance: ${e}`);
+      }
+    }
+
+    // Create a basic serialize function for deserialized values
+    const serializeFn: SerializeFn = (val, keystore, resolver) => {
+      try {
+        // Check if the value has encryption methods (from decorators)
+        if (val && typeof val === 'object' && 'encryptWithKeystore' in val) {
+          // This is a decorated class - use its encryption method
+          const encrypted = val.encryptWithKeystore(keystore, resolver);
+          const bytes = encode(encrypted);
+          return ok(bytes);
+        } else {
+          // Regular serialization
+          const bytes = encode(val);
+          return ok(bytes);
+        }
       } catch (e) {
         return err(e as Error);
       }
@@ -437,8 +481,38 @@ export class AnyValue<T = unknown> {
     return this.typeName;
   }
 
-  // Serialization method matching Rust exactly
-  serialize(context?: any): Result<Uint8Array> {
+  // Enhanced serialization method with encryption support
+  serializeWithEncryption(context?: { keystore?: any; resolver?: any }): Result<Uint8Array> {
+    return this.serialize(context);
+  }
+
+  // Static method to deserialize with encryption support
+  static deserializeWithDecryption(
+    bytes: Uint8Array,
+    context?: {
+      keystore?: any;
+    }
+  ): Result<AnyValue<any>> {
+    return AnyValue.deserialize(bytes, context);
+  }
+
+  // Serialization method matching Rust exactly (with backward compatibility)
+  serialize(context?: any): Result<Uint8Array> | Promise<Result<Uint8Array>> {
+    // Check if we need async serialization (has encryption methods)
+    const hasEncryptionMethods =
+      this.value && typeof this.value === 'object' && 'encryptWithKeystore' in this.value;
+
+    if (hasEncryptionMethods && context?.keystore) {
+      // Return a promise for async encryption
+      return this.serializeAsync(context);
+    } else {
+      // Return synchronous result
+      return this.serializeSync(context);
+    }
+  }
+
+  // Synchronous serialization for backward compatibility
+  private serializeSync(context?: any): Result<Uint8Array> {
     if (this.isNull()) {
       return ok(new Uint8Array([0]));
     }
@@ -521,8 +595,120 @@ export class AnyValue<T = unknown> {
       return err(new Error(`Wire type name too long: ${wireName}`));
     }
 
-    // Serialize the value
-    const bytes = this.serializeFn(this.value, context?.keystore, context?.resolver);
+    // Serialize the value (sync version) - handle both sync and async serializeFn
+    let bytes: Result<Uint8Array>;
+    try {
+      const bytesResult = this.serializeFn(this.value, context?.keystore, context?.resolver);
+      // If it's a promise, we can't handle it in sync mode
+      if (bytesResult instanceof Promise) {
+        return err(new Error('Async serialization function called in sync context'));
+      }
+      if (!bytesResult.ok) {
+        return err(bytesResult.error);
+      }
+      // Store the result for building the wire format
+      bytes = bytesResult;
+    } catch (e) {
+      return err(e as Error);
+    }
+
+    // Build the wire format: [category][is_encrypted][type_name_len][type_name_bytes...][data...]
+    const isEncryptedByte = context ? 0x01 : 0x00;
+    mutBuf.push(isEncryptedByte);
+    mutBuf.push(typeNameBytes.length);
+    mutBuf.push(...typeNameBytes);
+    mutBuf.push(...bytes.value);
+
+    return ok(new Uint8Array(mutBuf));
+  }
+
+  // Async serialization for encryption
+  private async serializeAsync(context?: any): Promise<Result<Uint8Array>> {
+    if (this.isNull()) {
+      return ok(new Uint8Array([0]));
+    }
+
+    if (!this.serializeFn) {
+      return err(new Error('No serialize function available'));
+    }
+
+    const categoryByte = this.category;
+    const mutBuf: number[] = [categoryByte];
+
+    // Resolve wire name (parameterized for containers)
+    let wireName: string;
+    switch (this.category) {
+      case ValueCategory.Primitive:
+        if (!this.typeName) {
+          return err(new Error('Missing type name for primitive'));
+        }
+        wireName = this.typeName;
+        break;
+      case ValueCategory.List:
+        // Generate parameterized type name for lists
+        if (this.value && Array.isArray(this.value) && this.value.length > 0) {
+          // Check if all elements are the same type (homogeneous) or different (heterogeneous)
+          const elementTypes = this.value.map(item => AnyValue.getTypeName(item));
+          const uniqueTypes = [...new Set(elementTypes)];
+          if (uniqueTypes.length === 1) {
+            // Homogeneous list - use the element type
+            wireName = `list<${uniqueTypes[0]}>`;
+          } else {
+            // Heterogeneous list - use 'any'
+            wireName = 'list<any>';
+          }
+        } else {
+          // Empty list or unknown content
+          wireName = 'list<any>';
+        }
+        break;
+      case ValueCategory.Map:
+        // Generate parameterized type name for maps
+        if (this.value && this.value instanceof Map && this.value.size > 0) {
+          // Check if all values are the same type (homogeneous) or different (heterogeneous)
+          const valueTypes = Array.from(this.value.values()).map(item =>
+            AnyValue.getTypeName(item)
+          );
+          const uniqueValueTypes = [...new Set(valueTypes)];
+          if (uniqueValueTypes.length === 1) {
+            // Homogeneous map - use the value type
+            wireName = `map<string,${uniqueValueTypes[0]}>`;
+          } else {
+            // Heterogeneous map - use 'any'
+            wireName = 'map<string,any>';
+          }
+        } else {
+          // Empty map or unknown content
+          wireName = 'map<string,any>';
+        }
+        break;
+      case ValueCategory.Json:
+        wireName = 'json';
+        break;
+      case ValueCategory.Bytes:
+        wireName = 'bytes';
+        break;
+      case ValueCategory.Struct:
+        if (!this.typeName) {
+          return err(new Error('Missing type name for struct'));
+        }
+        wireName = this.typeName;
+        break;
+      case ValueCategory.Null:
+        wireName = 'null';
+        break;
+      default:
+        return err(new Error(`Unknown category: ${this.category}`));
+    }
+
+    const typeNameBytes = new TextEncoder().encode(wireName);
+    if (typeNameBytes.length > 255) {
+      return err(new Error(`Wire type name too long: ${wireName}`));
+    }
+
+    // Serialize the value (async version)
+    const bytesResult = this.serializeFn(this.value, context?.keystore, context?.resolver);
+    const bytes = bytesResult instanceof Promise ? await bytesResult : bytesResult;
     if (!bytes.ok) {
       return err(bytes.error);
     }
