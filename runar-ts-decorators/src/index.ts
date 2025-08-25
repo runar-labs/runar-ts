@@ -59,17 +59,9 @@ export function Plain(options?: PlainOptions) {
 
     classMetadataRegistry.set(className, metadata);
 
-    // Add runtime methods to the class
-    const decoratedClass = class extends constructor {
-      // These methods will be implemented by the serializer
-      encryptWithKeystore(keystore: any, resolver: any) {
-        return this; // No-op for plain types
-      }
-
-      decryptWithKeystore(keystore: any) {
-        return this; // No-op for plain types
-      }
-    };
+    // For plain classes, we don't need to add encryption methods
+    // The serializer will handle them as regular structs
+    const decoratedClass = class extends constructor {};
 
     // Set the name property so that metadata lookup works
     Object.defineProperty(decoratedClass, 'name', { value: className });
@@ -352,6 +344,112 @@ export interface EncryptedLabelGroup {
   label: string;
   encryptedData: Uint8Array;
   keyInfo: LabelKeyInfo;
+}
+
+// ============================================================================
+// NEW: RUNAR NODEJS API INTEGRATION
+// ============================================================================
+
+/**
+ * Adapter interface for the new runar-nodejs-api Keys class
+ * This provides envelope encryption capabilities for the decorators
+ */
+export interface RunarKeysAdapter {
+  // Basic keystore interface that decorators expect
+  encrypt(data: Uint8Array, keyInfo: LabelKeyInfo): Promise<Uint8Array>;
+  decrypt(data: Uint8Array, keyInfo: LabelKeyInfo): Promise<Uint8Array>;
+
+  // Additional envelope encryption methods
+  encryptWithEnvelope(
+    data: Uint8Array,
+    networkId: string,
+    profilePublicKeys: Uint8Array[]
+  ): Promise<Uint8Array>;
+  decryptEnvelope(encryptedData: Uint8Array): Promise<Uint8Array>;
+}
+
+/**
+ * Implementation of RunarKeysAdapter that wraps the new Keys class
+ */
+export class RunarKeysAdapter implements RunarKeysAdapter {
+  private keys: any; // The actual Keys instance from runar-nodejs-api
+  private managerType: 'mobile' | 'node';
+
+  constructor(keys: any, managerType: 'mobile' | 'node' = 'node') {
+    this.keys = keys;
+    this.managerType = managerType;
+  }
+
+  async encrypt(data: Uint8Array, keyInfo: LabelKeyInfo): Promise<Uint8Array> {
+    // Use envelope encryption if we have network context
+    if (keyInfo.networkId && keyInfo.profilePublicKeys.length > 0) {
+      const profileKeys = keyInfo.profilePublicKeys.map(pk => Buffer.from(pk));
+
+      if (this.managerType === 'mobile') {
+        return this.keys.mobileEncryptWithEnvelope(
+          Buffer.from(data),
+          keyInfo.networkId,
+          profileKeys
+        );
+      } else {
+        return this.keys.nodeEncryptWithEnvelope(Buffer.from(data), keyInfo.networkId, profileKeys);
+      }
+    } else {
+      // Fall back to local encryption
+      return this.keys.encryptLocalData(Buffer.from(data));
+    }
+  }
+
+  async decrypt(data: Uint8Array, keyInfo: LabelKeyInfo): Promise<Uint8Array> {
+    // Try envelope decryption first if we have network context
+    if (keyInfo.networkId && keyInfo.profilePublicKeys.length > 0) {
+      try {
+        if (this.managerType === 'mobile') {
+          return this.keys.mobileDecryptEnvelope(Buffer.from(data));
+        } else {
+          return this.keys.nodeDecryptEnvelope(Buffer.from(data));
+        }
+      } catch (error) {
+        // Fall back to local decryption if envelope decryption fails
+        console.warn('Envelope decryption failed, falling back to local decryption:', error);
+      }
+    }
+
+    // Fall back to local decryption
+    return this.keys.decryptLocalData(Buffer.from(data));
+  }
+
+  async encryptWithEnvelope(
+    data: Uint8Array,
+    networkId: string,
+    profilePublicKeys: Uint8Array[]
+  ): Promise<Uint8Array> {
+    const profileKeys = profilePublicKeys.map(pk => Buffer.from(pk));
+
+    if (this.managerType === 'mobile') {
+      return this.keys.mobileEncryptWithEnvelope(Buffer.from(data), networkId, profileKeys);
+    } else {
+      return this.keys.nodeEncryptWithEnvelope(Buffer.from(data), networkId, profileKeys);
+    }
+  }
+
+  async decryptEnvelope(encryptedData: Uint8Array): Promise<Uint8Array> {
+    if (this.managerType === 'mobile') {
+      return this.keys.mobileDecryptEnvelope(Buffer.from(encryptedData));
+    } else {
+      return this.keys.nodeDecryptEnvelope(Buffer.from(encryptedData));
+    }
+  }
+}
+
+/**
+ * Factory function to create a RunarKeysAdapter from a Keys instance
+ */
+export function createRunarKeysAdapter(
+  keys: any,
+  managerType: 'mobile' | 'node' = 'node'
+): RunarKeysAdapter {
+  return new RunarKeysAdapter(keys, managerType);
 }
 
 // ============================================================================

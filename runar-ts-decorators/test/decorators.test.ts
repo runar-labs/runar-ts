@@ -48,13 +48,11 @@ describe('@Plain Decorator', () => {
     expect(isEncryptedClass(SimpleStruct)).toBe(false);
   });
 
-  it('should have encryption methods (no-op)', async () => {
+  it('should not have encryption methods (plain classes are serialized directly)', () => {
     const instance = new SimpleStruct(42, 'hello');
-    const encrypted = await instance.encryptWithKeystore({}, {});
-    const decrypted = await instance.decryptWithKeystore({});
-
-    expect(encrypted).toBe(instance);
-    expect(decrypted).toBe(instance);
+    // Plain classes don't have encryption methods - they're serialized directly
+    expect(instance.encryptWithKeystore).toBeUndefined();
+    expect(instance.decryptWithKeystore).toBeUndefined();
   });
 });
 

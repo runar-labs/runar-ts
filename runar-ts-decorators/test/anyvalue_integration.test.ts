@@ -59,8 +59,8 @@ describe('AnyValue Integration with Decorators', () => {
       const user = new SimpleUser('123', 'John Doe', 'john@example.com');
       const anyValue = AnyValue.newStruct(user);
 
-      // Serialize without encryption context
-      const result = anyValue.serialize();
+      // Serialize without encryption context - use async version since decorated classes may be async
+      const result = await anyValue.serialize();
       if (!result.ok) {
         console.log('Plain serialization failed:', result.error);
       }
