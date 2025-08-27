@@ -386,11 +386,7 @@ export class RunarKeysAdapter implements RunarKeysAdapter {
     if (keyInfo.networkId && keyInfo.profilePublicKeys.length > 0) {
       const profileKeys = keyInfo.profilePublicKeys.map(pk => Buffer.from(pk));
 
-      return this.keystore.encryptWithEnvelope(
-        Buffer.from(data),
-        keyInfo.networkId,
-        profileKeys
-      );
+      return this.keystore.encryptWithEnvelope(Buffer.from(data), keyInfo.networkId, profileKeys);
     } else {
       // For local encryption, we need to use a different approach
       // since CommonKeysInterface doesn't have local encryption methods

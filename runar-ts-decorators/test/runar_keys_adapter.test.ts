@@ -5,11 +5,11 @@ import type { CommonKeysInterface } from 'runar-ts-serializer/src/wire.js';
 // Mock CommonKeysInterface implementation
 class MockCommonKeysInterface implements CommonKeysInterface {
   private platform: 'mobile' | 'node';
-  
+
   constructor(platform: 'mobile' | 'node') {
     this.platform = platform;
   }
-  
+
   encryptWithEnvelope(data: Buffer, networkId: string | null, profilePublicKeys: Buffer[]): Buffer {
     if (this.platform === 'mobile') {
       // Simple mock: prepend "mobile_encrypted:" to the data
@@ -25,11 +25,11 @@ class MockCommonKeysInterface implements CommonKeysInterface {
       return encrypted;
     }
   }
-  
+
   decryptEnvelope(eedCbor: Buffer): Buffer {
     // Convert to string to check for prefixes
     const dataStr = eedCbor.toString('utf8');
-    
+
     // Check for mobile encrypted format
     if (dataStr.startsWith('mobile_encrypted:')) {
       return Buffer.from(dataStr.substring(18));
@@ -41,22 +41,22 @@ class MockCommonKeysInterface implements CommonKeysInterface {
     // If no known format, return as-is (for testing purposes)
     return Buffer.from(eedCbor);
   }
-  
+
   ensureSymmetricKey(keyName: string): Buffer {
     return Buffer.from(`symmetric_key_${keyName}`);
   }
-  
+
   setLabelMapping(mappingCbor: Buffer): void {}
   setLocalNodeInfo(nodeInfoCbor: Buffer): void {}
   setPersistenceDir(dir: string): void {}
   enableAutoPersist(enabled: boolean): void {}
   async wipePersistence(): Promise<void> {}
   async flushState(): Promise<void> {}
-  
+
   getKeystoreState(): number {
     return this.platform === 'mobile' ? 1 : 2;
   }
-  
+
   getKeystoreCaps(): any {
     return { capabilities: 'mock' };
   }
@@ -84,7 +84,7 @@ describe('RunarKeysAdapter', () => {
       const data = new Uint8Array([1, 2, 3, 4]);
       const keyInfo = {
         networkId: 'test-network',
-        profilePublicKeys: ['key1', 'key2'] // Use strings as expected by LabelKeyInfo
+        profilePublicKeys: ['key1', 'key2'], // Use strings as expected by LabelKeyInfo
       };
 
       const encrypted = await mobileAdapter.encrypt(data, keyInfo);
@@ -94,7 +94,7 @@ describe('RunarKeysAdapter', () => {
     it('should fall back to local encryption when no network context', async () => {
       const data = new Uint8Array([1, 2, 3, 4]);
       const keyInfo = {
-        profilePublicKeys: [] // No network context
+        profilePublicKeys: [], // No network context
       };
 
       await expect(mobileAdapter.encrypt(data, keyInfo)).rejects.toThrow(
@@ -106,7 +106,11 @@ describe('RunarKeysAdapter', () => {
       const originalData = new Uint8Array([1, 2, 3, 4]);
       const profileKeys = [new Uint8Array([1, 2, 3]), new Uint8Array([4, 5, 6])];
 
-      const encrypted = await mobileAdapter.encryptWithEnvelope(originalData, 'test-network', profileKeys);
+      const encrypted = await mobileAdapter.encryptWithEnvelope(
+        originalData,
+        'test-network',
+        profileKeys
+      );
       const decrypted = await mobileAdapter.decryptEnvelope(encrypted);
 
       // Convert Buffer to Uint8Array for comparison
@@ -125,7 +129,11 @@ describe('RunarKeysAdapter', () => {
       const originalData = new Uint8Array([1, 2, 3, 4]);
       const profileKeys = [new Uint8Array([1, 2, 3]), new Uint8Array([4, 5, 6])];
 
-      const encrypted = await mobileAdapter.encryptWithEnvelope(originalData, 'test-network', profileKeys);
+      const encrypted = await mobileAdapter.encryptWithEnvelope(
+        originalData,
+        'test-network',
+        profileKeys
+      );
       const decrypted = await mobileAdapter.decryptEnvelope(encrypted);
 
       // Convert Buffer to Uint8Array for comparison
@@ -142,7 +150,7 @@ describe('RunarKeysAdapter', () => {
       const data = new Uint8Array([1, 2, 3, 4]);
       const keyInfo = {
         networkId: 'test-network',
-        profilePublicKeys: ['key1', 'key2'] // Use strings as expected by LabelKeyInfo
+        profilePublicKeys: ['key1', 'key2'], // Use strings as expected by LabelKeyInfo
       };
 
       const encrypted = await nodeAdapter.encrypt(data, keyInfo);
@@ -152,7 +160,7 @@ describe('RunarKeysAdapter', () => {
     it('should fall back to local encryption when no network context', async () => {
       const data = new Uint8Array([1, 2, 3, 4]);
       const keyInfo = {
-        profilePublicKeys: [] // No network context
+        profilePublicKeys: [], // No network context
       };
 
       await expect(nodeAdapter.encrypt(data, keyInfo)).rejects.toThrow(
@@ -164,7 +172,7 @@ describe('RunarKeysAdapter', () => {
       const originalData = new Uint8Array([1, 2, 3, 4]);
       const keyInfo = {
         networkId: 'test-network',
-        profilePublicKeys: ['key1', 'key2']
+        profilePublicKeys: ['key1', 'key2'],
       };
 
       const encrypted = await nodeAdapter.encrypt(originalData, keyInfo);
@@ -185,7 +193,7 @@ describe('RunarKeysAdapter', () => {
       const originalData = new Uint8Array([1, 2, 3, 4]);
       const keyInfo = {
         networkId: 'test-network',
-        profilePublicKeys: ['key1', 'key2']
+        profilePublicKeys: ['key1', 'key2'],
       };
 
       const encrypted = await nodeAdapter.encrypt(originalData, keyInfo);

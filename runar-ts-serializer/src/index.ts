@@ -1,7 +1,17 @@
 import { encode, decode } from 'cbor-x';
 import { Result, ok, err } from './result.js';
-import { ValueCategory, DeserializationContext, SerializationContext, CommonKeysInterface } from './wire.js';
-export type { DeserializationContext, WireHeader, SerializationContext, CommonKeysInterface } from './wire.js';
+import {
+  ValueCategory,
+  DeserializationContext,
+  SerializationContext,
+  CommonKeysInterface,
+} from './wire.js';
+export type {
+  DeserializationContext,
+  WireHeader,
+  SerializationContext,
+  CommonKeysInterface,
+} from './wire.js';
 import { resolveType, initWirePrimitives, registerType, clearRegistry } from './registry.js';
 import { getTypeName } from 'runar-ts-decorators';
 import { CBORUtils } from './cbor_utils.js';
@@ -482,7 +492,9 @@ export class AnyValue<T = unknown> {
   }
 
   // Enhanced serialization method with encryption support
-  serializeWithEncryption(context?: SerializationContext): Result<Uint8Array> | Promise<Result<Uint8Array>> {
+  serializeWithEncryption(
+    context?: SerializationContext
+  ): Result<Uint8Array> | Promise<Result<Uint8Array>> {
     return this.serialize(context);
   }
 
@@ -793,9 +805,9 @@ export function serializeEntity(entity: any): Uint8Array | Promise<Uint8Array> {
   // Serialize the entity directly
   const av = AnyValue.from(entity);
   const result = av.serialize();
-  
+
   if (result instanceof Promise) {
-    return result.then(r => r.ok ? r.value : new Uint8Array());
+    return result.then(r => (r.ok ? r.value : new Uint8Array()));
   } else {
     return result.ok ? result.value : new Uint8Array();
   }

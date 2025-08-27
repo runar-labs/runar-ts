@@ -13,6 +13,7 @@ Following the **exact Rust pattern** where:
 ## 🔍 **Rust Implementation Analysis**
 
 ### **Rust NodeConfig Structure**
+
 ```rust
 pub struct NodeConfig {
     // ... other fields ...
@@ -29,6 +30,7 @@ impl NodeConfig {
 ```
 
 ### **Rust Node Constructor**
+
 ```rust
 pub async fn new(config: NodeConfig) -> Result<Self> {
     // Extract the key manager from config before moving config
@@ -48,6 +50,7 @@ pub async fn new(config: NodeConfig) -> Result<Self> {
 ```
 
 ### **Rust Wrapper for Serializer**
+
 ```rust
 // Wrapper to implement EnvelopeCrypto for Arc<RwLock<NodeKeyManager>>
 struct NodeKeyManagerWrapper(Arc<StdRwLock<NodeKeyManager>>);
@@ -75,6 +78,7 @@ impl EnvelopeCrypto for NodeKeyManagerWrapper {
 ```
 
 ### **Rust Serialization Context Creation**
+
 ```rust
 // Create serialization context for encryption
 let serialization_context = runar_serializer::traits::SerializationContext {
@@ -86,6 +90,7 @@ let serialization_context = runar_serializer::traits::SerializationContext {
 ```
 
 ### **Rust CLI Flow**
+
 ```rust
 // CLI loads existing keys from OS keystore
 fn load_node_keys(&self, config: &CliNodeConfig) -> Result<NodeKeyManager> {
@@ -178,10 +183,10 @@ export class Node {
     this.config = config;
     this.networkId = config.defaultNetworkId;
     this.keysManager = keysManager;
-    
+
     // Create wrapper for serializer (matching Rust NodeKeyManagerWrapper)
     this.keysWrapper = new KeysManagerWrapper(this.keysManager);
-    
+
     this.logger = LoggerClass.newRoot(ComponentEnum.Node).setNodeId(this.networkId);
   }
 
@@ -191,15 +196,12 @@ export class Node {
   }
 
   // Method to create serialization context (matching Rust pattern)
-  createSerializationContext(
-    networkId: string, 
-    profilePublicKey?: Buffer
-  ): SerializationContext {
+  createSerializationContext(networkId: string, profilePublicKey?: Buffer): SerializationContext {
     return {
       keystore: this.keysWrapper,
       resolver: this.labelResolver, // Would need to implement this
       networkId,
-      profilePublicKey
+      profilePublicKey,
     };
   }
 
@@ -222,56 +224,52 @@ export class KeysManagerWrapper implements CommonKeysInterface {
   constructor(private keys: Keys) {}
 
   // === ENVELOPE ENCRYPTION (AUTOMATIC ROUTING) ===
-  encryptWithEnvelope(
-    data: Buffer, 
-    networkId: string | null, 
-    profilePublicKeys: Buffer[]
-  ): Buffer {
+  encryptWithEnvelope(data: Buffer, networkId: string | null, profilePublicKeys: Buffer[]): Buffer {
     // Use the original working approach: nodes only support network-wide encryption
     // This matches Rust: keys_manager.create_envelope_for_network(data, network_id)
     return this.keys.nodeEncryptWithEnvelope(data, networkId, profilePublicKeys);
   }
-  
+
   decryptEnvelope(eedCbor: Buffer): Buffer {
     // This matches Rust: keys_manager.decrypt_envelope_data(env)
     return this.keys.nodeDecryptEnvelope(eedCbor);
   }
-  
+
   // === UTILITY METHODS (BOTH PLATFORMS) ===
   ensureSymmetricKey(keyName: string): Buffer {
     return this.keys.ensureSymmetricKey(keyName);
   }
-  
+
   setLabelMapping(mappingCbor: Buffer): void {
     this.keys.setLabelMapping(mappingCbor);
   }
-  
+
   setLocalNodeInfo(nodeInfoCbor: Buffer): void {
     this.keys.setLocalNodeInfo(nodeInfoCbor);
   }
-  
+
   // === CONFIGURATION (BOTH PLATFORMS) ===
   setPersistenceDir(dir: string): void {
     this.keys.setPersistenceDir(dir);
   }
-  
+
   enableAutoPersist(enabled: boolean): void {
     this.keys.enableAutoPersist(enabled);
   }
-  
+
   async wipePersistence(): Promise<void> {
     return this.keys.wipePersistence();
   }
-  
+
   async flushState(): Promise<void> {
     return this.keys.flushState();
   }
-  
+
   // === STATE QUERIES (BOTH PLATFORMS) ===
   getKeystoreState(): number {
     return this.keys.nodeGetKeystoreState();
   }
-  
+
   getKeystoreCaps(): any {
     return this.keys.getKeystoreCaps();
   }
@@ -287,32 +285,32 @@ import type { Keys } from 'runar-nodejs-api';
 
 export class NodeConfigManager {
   private configPath: string;
-  
+
   constructor(configPath: string) {
     this.configPath = configPath;
   }
-  
+
   // Load existing config from disk (matching Rust CLI pattern)
   async loadConfig(): Promise<NodeConfig | null> {
     try {
       const configData = await fs.readFile(this.configPath, 'utf8');
       const config = JSON.parse(configData);
-      
+
       // Load and initialize keysManager based on platform
       const keysManager = await this.loadNodeKeys(config.keysName);
-      
+
       const nodeConfig = new NodeConfig(config.defaultNetworkId)
         .withKeyManager(keysManager)
         .withAdditionalNetworks(config.networkIds || [])
         .withRequestTimeout(config.requestTimeoutMs || 30000);
-      
+
       return nodeConfig;
     } catch (error) {
       // No existing config found
       return null;
     }
   }
-  
+
   // Create new config during setup process (matching Rust CLI pattern)
   async createConfig(
     defaultNetworkId: string,
@@ -321,41 +319,43 @@ export class NodeConfigManager {
   ): Promise<NodeConfig> {
     // Initialize keysManager for the specified platform
     const keysManager = await this.initializeKeysManager(platform, keysName);
-    
-    const config = new NodeConfig(defaultNetworkId)
-      .withKeyManager(keysManager);
-    
+
+    const config = new NodeConfig(defaultNetworkId).withKeyManager(keysManager);
+
     // Save config to disk
     await this.saveConfig(config, keysName);
-    
+
     return config;
   }
-  
+
   // Load node keys from OS keystore (matching Rust load_node_keys)
   private async loadNodeKeys(keysName: string): Promise<Keys> {
     // This would use the OS keystore equivalent in TypeScript
     // For now, we'll assume keys are already initialized
     const keys = new Keys(); // from runar-nodejs-api
-    
+
     // Load existing state from OS keystore
     // This matches Rust: OsKeyStore::new().retrieve_node_keys()
     const serializedState = await this.retrieveFromOSKeystore(keysName);
-    
+
     // Deserialize the node state (CBOR)
     // This matches Rust: serde_cbor::from_slice(&serialized_state)
     const nodeState = this.deserializeNodeState(serializedState);
-    
+
     // Create keys manager from state
     // This matches Rust: NodeKeyManager::from_state(node_state, key_logger)
     keys.loadFromState(nodeState);
-    
+
     return keys;
   }
-  
+
   // Initialize keysManager based on platform (matching Rust pattern)
-  private async initializeKeysManager(platform: 'mobile' | 'node', keysName: string): Promise<Keys> {
+  private async initializeKeysManager(
+    platform: 'mobile' | 'node',
+    keysName: string
+  ): Promise<Keys> {
     const keys = new Keys(); // from runar-nodejs-api
-    
+
     if (platform === 'mobile') {
       keys.initAsMobile();
       // Initialize mobile-specific features
@@ -364,13 +364,13 @@ export class NodeConfigManager {
       keys.initAsNode();
       // Initialize node-specific features if needed
     }
-    
+
     // Save to OS keystore
     await this.saveToOSKeystore(keysName, keys);
-    
+
     return keys;
   }
-  
+
   // Save config to disk (matching Rust pattern)
   private async saveConfig(config: NodeConfig, keysName: string): Promise<void> {
     const configData = {
@@ -380,21 +380,21 @@ export class NodeConfigManager {
       requestTimeoutMs: config.requestTimeoutMs,
       // Note: keysManager instance is not serialized, only the keysName
     };
-    
+
     await fs.writeFile(this.configPath, JSON.stringify(configData, null, 2));
   }
-  
+
   // Helper methods for OS keystore operations
   private async retrieveFromOSKeystore(keysName: string): Promise<Buffer> {
     // Implementation would depend on OS keystore library
     throw new Error('OS keystore integration not implemented yet');
   }
-  
+
   private async saveToOSKeystore(keysName: string, keys: Keys): Promise<void> {
     // Implementation would depend on OS keystore library
     throw new Error('OS keystore integration not implemented yet');
   }
-  
+
   private deserializeNodeState(serializedState: Buffer): any {
     // Implementation would depend on CBOR library
     throw new Error('CBOR deserialization not implemented yet');
@@ -416,18 +416,14 @@ let config = await configManager.loadConfig();
 if (!config) {
   // No existing config - run setup process (matching Rust CLI)
   logger.info('No existing configuration found. Running setup...');
-  
+
   const defaultNetworkId = 'primary-network';
   const platform = 'node'; // or 'mobile' based on user choice
   const keysName = 'my-node-keys';
-  
+
   // Create new config with initialized keysManager (matching Rust CLI)
-  config = await configManager.createConfig(
-    defaultNetworkId,
-    platform,
-    keysName
-  );
-  
+  config = await configManager.createConfig(defaultNetworkId, platform, keysName);
+
   logger.info('Configuration created successfully!');
 } else {
   logger.info('Existing configuration loaded.');
@@ -458,18 +454,18 @@ describe('Serializer encryption tests', () => {
     // Create keystore directly (like CLI will do)
     const keys = new Keys(); // from runar-nodejs-api
     keys.initAsNode();
-    
+
     // Create wrapper (matching Rust NodeKeyManagerWrapper)
     const keysWrapper = new KeysManagerWrapper(keys);
-    
+
     // Initialize node-specific features
     const networkId = 'test-network';
     const profileKey = Buffer.from('test-profile-key');
-    
+
     // Use common interface - no platform awareness needed!
     const encrypted = keysWrapper.encryptWithEnvelope(data, networkId, [profileKey]);
     const decrypted = keysWrapper.decryptEnvelope(encrypted);
-    
+
     expect(decrypted).toEqual(data);
   });
 });
@@ -503,26 +499,31 @@ await sendCSRToMobile(csr, nodeId, agreementKey);
 ## 📝 **Implementation Steps (Aligned with Rust)**
 
 ### **Phase 1: Update NodeConfig (Match Rust Structure)**
+
 1. **Add withKeyManager() method** matching Rust `with_key_manager()`
 2. **Store keyManager privately** with getter method
 3. **Update constructor** to match Rust pattern
 
 ### **Phase 2: Create KeysManagerWrapper (Match Rust Wrapper)**
+
 1. **Implement CommonKeysInterface** for native Keys instance
 2. **Route to appropriate native methods** based on platform
 3. **Match Rust wrapper behavior** exactly
 
 ### **Phase 3: Update Node (Match Rust Constructor)**
+
 1. **Extract keysManager from config** like Rust does
 2. **Create KeysManagerWrapper** for serializer use
 3. **Provide createSerializationContext method** matching Rust pattern
 
 ### **Phase 4: Create CLI Config Manager (Match Rust CLI)**
+
 1. **Implement loadConfig/createConfig** methods matching Rust CLI
 2. **Handle OS keystore integration** for loading/saving keys
 3. **Match Rust CLI flow** exactly
 
 ### **Phase 5: Update Serializer Integration**
+
 1. **Ensure SerializationContext** works with KeysManagerWrapper
 2. **Test encryption integration** with the wrapper
 3. **Verify Rust compatibility** in serialization flow

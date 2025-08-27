@@ -1,11 +1,11 @@
 import { AbstractService, NodeLifecycleContext, RequestContext, Option } from './core';
 import { Result, ok, err } from 'runar-ts-common';
 import { AnyValue } from 'runar-ts-serializer';
-import type { KeysDelegate } from './keys_delegate';
+import type { KeysManagerWrapper } from './keys_manager_wrapper';
 
 export class KeysService implements AbstractService {
   private _networkId?: string;
-  constructor(private readonly delegate: KeysDelegate) {}
+  constructor(private readonly delegate: KeysManagerWrapper) {}
 
   name(): string {
     return 'runar keys';
@@ -42,7 +42,7 @@ export class KeysService implements AbstractService {
         }
 
         const label = stringResult.value;
-        const outBytes = await this.delegate.ensureSymmetricKey(label);
+        const outBytes = this.delegate.ensureSymmetricKey(label);
         return ok(AnyValue.from(outBytes));
       }
     );

@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { Node } from '../src';
+import { Node, NodeConfig } from '../src';
 import { AnyValue } from 'runar-ts-serializer';
 import {
   AbstractService,
@@ -54,7 +54,22 @@ class MathService implements AbstractService {
 
 describe('Node local E2E', () => {
   it('handles request/response and events with retention', async () => {
-    const node = new Node('testnet');
+    const mockKeys = {
+      initAsNode() {},
+      nodeEncryptWithEnvelope: (data: Buffer) => data,
+      nodeDecryptEnvelope: (data: Buffer) => data,
+      ensureSymmetricKey: (name: string) => Buffer.from(name),
+      setLabelMapping: () => {},
+      setLocalNodeInfo: () => {},
+      setPersistenceDir: () => {},
+      enableAutoPersist: () => {},
+      wipePersistence: async () => {},
+      flushState: async () => {},
+      nodeGetKeystoreState: () => 1,
+      getKeystoreCaps: () => ({}),
+    };
+    const config = new NodeConfig('testnet').withKeyManager(mockKeys as any);
+    const node = new Node(config);
     node.addService(new MathService());
     await node.start();
 

@@ -4,6 +4,7 @@ import { PathTrie, TopicPath } from 'runar-ts-common';
 import type { Keys } from 'runar-nodejs-api';
 import { KeysManagerWrapper } from './keys_manager_wrapper';
 import { SerializationContext } from 'runar-ts-serializer';
+import { KeysService } from './keys_service';
 
 import {
   ActionHandler,
@@ -33,10 +34,7 @@ export { RegistryService } from './registry_service';
 export { NodeRegistryDelegate } from './registry_delegate';
 export type { RegistryDelegate } from './registry_delegate';
 // REMOVED: RemoteAdapter exports - not in Rust API
-import { KeysService } from './keys_service';
 export { KeysService } from './keys_service';
-export { NapiKeysDelegate } from './keys_delegate';
-import { KeysManagerDelegate, CommonKeysInterface } from './keys_manager_delegate';
 
 type SubscriberKind = 'Local' | 'Remote';
 type FullSubscriptionEntry = {
@@ -183,10 +181,10 @@ export class Node {
     this.config = config;
     this.networkId = config.defaultNetworkId;
     this.keysManager = keysManager;
-    
+
     // Create wrapper for serializer (matching Rust NodeKeyManagerWrapper)
     this.keysWrapper = new KeysManagerWrapper(this.keysManager);
-    
+
     try {
       this.logger = LoggerClass.newRoot(ComponentEnum.Node).setNodeId(this.networkId) as any;
     } catch (error) {
@@ -204,7 +202,7 @@ export class Node {
   createSerializationContext(): SerializationContext {
     return {
       keystore: this.keysWrapper,
-      resolver: undefined // Would need to implement this
+      resolver: undefined, // Would need to implement this
     };
   }
 
@@ -219,10 +217,10 @@ export class Node {
     // For now, we'll create a temporary config with default values
     // TODO: Update this to use proper NodeConfig when keys are available
     const tempConfig = new NodeConfig(cfg.defaultNetworkId)
-      .withKeyManager(cfg.keys as any || null)
+      .withKeyManager((cfg.keys as any) || null)
       .withAdditionalNetworks([])
       .withRequestTimeout(30000);
-    
+
     return new Node(tempConfig);
   }
 
@@ -246,7 +244,7 @@ export class Node {
     this.registry.addLocalService(entry);
   }
 
-  addKeysService(delegate: { ensureSymmetricKey(name: string): Promise<Uint8Array> }): void {
+  addKeysService(delegate: KeysManagerWrapper): void {
     this.addService(new KeysService(delegate));
   }
 
@@ -362,7 +360,7 @@ export class Node {
 
       const handlers = this.registry.findLocalActionHandlers(topicPath);
       if (handlers.length === 0) {
-        // REMOVED: Remote fallback - not in Rust API (only local services)
+        // TODO: Remote fallback - if local is notn found will try remote call
         return err(`No handler for ${path}`);
       }
 

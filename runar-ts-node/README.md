@@ -12,13 +12,13 @@ import { Keys } from 'runar-nodejs-api';
 
 // Create a new configuration
 const config = NodeConfig.new()
-  .withDefaultNetworkId('primary-network')  // Set the default network ID
-  .withKeysManager(keysManager)             // Set the initialized Keys instance
-  .withPlatform('node')                     // Set platform (mobile or node)
-  .withKeyStorePath('./keystore')           // Set key store path
-  .withRequestTimeoutMs(30000)              // Set request timeout
+  .withDefaultNetworkId('primary-network') // Set the default network ID
+  .withKeysManager(keysManager) // Set the initialized Keys instance
+  .withPlatform('node') // Set platform (mobile or node)
+  .withKeyStorePath('./keystore') // Set key store path
+  .withRequestTimeoutMs(30000) // Set request timeout
   .withNetworkIds(['network1', 'network2']) // Add additional networks
-  .withTransportOptions({ port: 8080 })     // Set transport options
+  .withTransportOptions({ port: 8080 }) // Set transport options
   .withDiscoveryOptions({ multicast: true }); // Set discovery options
 
 // Create Node with the configuration

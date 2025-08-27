@@ -1,12 +1,27 @@
 import { describe, it, expect } from 'bun:test';
-import { Node } from '../src';
+import { Node, NodeConfig } from '../src';
 import { AnyValue } from 'runar-ts-serializer';
 import { EventContext } from '../src/core';
 import { ok } from 'runar-ts-common';
 
 describe('Retained events clearing', () => {
   it('clears retained by wildcard pattern and respects includePast ordering', async () => {
-    const node = new Node('net');
+    const mockKeys = {
+      initAsNode() {},
+      nodeEncryptWithEnvelope: (data: Buffer) => data,
+      nodeDecryptEnvelope: (data: Buffer) => data,
+      ensureSymmetricKey: (name: string) => Buffer.from(name),
+      setLabelMapping: () => {},
+      setLocalNodeInfo: () => {},
+      setPersistenceDir: () => {},
+      enableAutoPersist: () => {},
+      wipePersistence: async () => {},
+      flushState: async () => {},
+      nodeGetKeystoreState: () => 1,
+      getKeystoreCaps: () => ({}),
+    };
+    const config = new NodeConfig('net').withKeyManager(mockKeys as any);
+    const node = new Node(config);
     await node.start();
 
     await node.publish_with_options('svc/a', AnyValue.from({ n: 1 }), { retain: true });

@@ -7,6 +7,7 @@ This document analyzes the current lifecycle and architecture of how the **seria
 ## 🏗️ **Current Architecture**
 
 ### **Component Hierarchy**
+
 ```
 runar-ts-node (Main Node)
 ├── ServiceRegistry (Manages all services)
@@ -29,11 +30,12 @@ runar-ts-decorators (Encryption Decorators)
 ## 🔄 **Current Lifecycle Flow**
 
 ### **1. Node Initialization**
+
 ```typescript
 // runar-ts-node/src/index.ts
 export class Node {
   private readonly registry = new ServiceRegistry();
-  
+
   constructor(networkId = 'default') {
     this.networkId = networkId;
     this.logger = LoggerClass.newRoot(ComponentEnum.Node).setNodeId(networkId);
@@ -75,6 +77,7 @@ export class Node {
 ```
 
 ### **2. Keys Service Lifecycle**
+
 ```typescript
 // runar-ts-node/src/keys_service.ts
 export class KeysService implements AbstractService {
@@ -109,6 +112,7 @@ export class KeysService implements AbstractService {
 ```
 
 ### **3. Keys Delegate Pattern**
+
 ```typescript
 // runar-ts-node/src/keys_delegate.ts
 export interface KeysDelegate {
@@ -117,7 +121,7 @@ export interface KeysDelegate {
 
 export class NapiKeysDelegate implements KeysDelegate {
   private readonly keys: NapiKeys; // Native Keys instance
-  
+
   constructor(keys: NapiKeys) {
     this.keys = keys;
   }
@@ -130,6 +134,7 @@ export class NapiKeysDelegate implements KeysDelegate {
 ```
 
 ### **4. Serializer Registry System**
+
 ```typescript
 // runar-ts-serializer/src/registry.ts
 const typeNameToEntry = new Map<string, TypeEntry>();
@@ -151,6 +156,7 @@ export function registerWireName(rustTypeName: string, wireName: string): void {
 ```
 
 ### **5. Serializer Encryption Integration**
+
 ```typescript
 // runar-ts-serializer/src/index.ts
 export class AnyValue<T = unknown> {
@@ -180,6 +186,7 @@ export class AnyValue<T = unknown> {
 ## 🔗 **Current Wiring Points**
 
 ### **A. Node → Keys Service → Keys Delegate**
+
 ```typescript
 // Current usage pattern
 const node = new Node('net');
@@ -192,21 +199,26 @@ const result = await node.request('$keys/ensure_symmetric_key', 'label');
 ```
 
 ### **B. Serializer → Encryption Context**
+
 ```typescript
 // Serializer expects encryption context with keystore
 const context = {
   keystore: someKeystore, // Must have encryptWithEnvelope/decryptEnvelope methods
-  resolver: someResolver
+  resolver: someResolver,
 };
 
 const serialized = await anyValue.serialize(context);
 ```
 
 ### **C. Decorators → RunarKeysAdapter**
+
 ```typescript
 // runar-ts-decorators/src/index.ts
 export class RunarKeysAdapter implements RunarKeysAdapter {
-  constructor(private keys: any, private managerType: 'mobile' | 'node' = 'node') {}
+  constructor(
+    private keys: any,
+    private managerType: 'mobile' | 'node' = 'node'
+  ) {}
 
   async encrypt(data: Uint8Array, keyInfo: LabelKeyInfo): Promise<Uint8Array> {
     if (keyInfo.networkId && keyInfo.profilePublicKeys.length > 0) {
@@ -223,22 +235,26 @@ export class RunarKeysAdapter implements RunarKeysAdapter {
 ## ⚠️ **Current Gaps and Issues**
 
 ### **1. Missing Keys Manager Integration**
+
 - **Node** creates `KeysService` with `KeysDelegate`
 - **KeysDelegate** only exposes `ensureSymmetricKey`
 - **No integration** with the new `mobileEncryptWithEnvelope`/`nodeEncryptWithEnvelope` methods
 - **No platform initialization** (`initAsMobile`/`initAsNode`)
 
 ### **2. Serializer Context Mismatch**
+
 - **Serializer** expects `context.keystore` with encryption methods
 - **Current KeysService** doesn't provide encryption context
 - **No connection** between node's keys and serializer's encryption needs
 
 ### **3. Platform Awareness Missing**
+
 - **Node** doesn't know if it's mobile or node platform
 - **KeysService** doesn't initialize platform-specific key manager
 - **No routing** to mobile vs node encryption methods
 
 ### **4. Lifecycle Disconnect**
+
 - **Node** starts services but doesn't initialize keys manager
 - **Serializer** needs encryption context but node doesn't provide it
 - **Decorators** need keys manager but aren't connected to node
@@ -246,11 +262,12 @@ export class RunarKeysAdapter implements RunarKeysAdapter {
 ## 🎯 **Required Changes for Simplified Keys Manager**
 
 ### **1. Update Node to Create Keys Manager**
+
 ```typescript
 // runar-ts-node/src/index.ts
 export class Node {
   private readonly keysManager?: CommonKeysInterface; // NEW
-  
+
   constructor(networkId = 'default', keysManager?: CommonKeysInterface) {
     this.networkId = networkId;
     this.keysManager = keysManager; // NEW
@@ -271,6 +288,7 @@ export class Node {
 ```
 
 ### **2. Update KeysService to Use Keys Manager**
+
 ```typescript
 // runar-ts-node/src/keys_service.ts
 export class KeysService implements AbstractService {
@@ -311,6 +329,7 @@ export class KeysService implements AbstractService {
 ```
 
 ### **3. Update Node Factory Methods**
+
 ```typescript
 // runar-ts-node/src/index.ts
 export class Node {
@@ -334,6 +353,7 @@ export class Node {
 ```
 
 ### **4. Update Serialization Context**
+
 ```typescript
 // runar-ts-serializer/src/index.ts
 export interface SerializationContext {
@@ -345,9 +365,8 @@ export interface SerializationContext {
 export class AnyValue<T> {
   serialize(context?: SerializationContext): Result<Uint8Array> | Promise<Result<Uint8Array>> {
     // Check if we need async serialization (has encryption methods)
-    const hasEncryptionMethods = this.value && 
-      typeof this.value === 'object' && 
-      'encryptWithKeystore' in this.value;
+    const hasEncryptionMethods =
+      this.value && typeof this.value === 'object' && 'encryptWithKeystore' in this.value;
 
     if (hasEncryptionMethods && context?.keystore) {
       // Return a promise for async encryption
@@ -363,6 +382,7 @@ export class AnyValue<T> {
 ## 🔄 **New Lifecycle Flow**
 
 ### **1. Node Creation with Keys Manager**
+
 ```typescript
 // Option A: Create with platform-specific keys manager
 const mobileNode = Node.createMobile('mobile-network');
@@ -380,6 +400,7 @@ nativeNode.addKeysService(new NapiKeysDelegate(nativeKeys));
 ```
 
 ### **2. Service Initialization with Keys Context**
+
 ```typescript
 // KeysService now has access to keys manager
 export class KeysService implements AbstractService {
@@ -394,7 +415,7 @@ export class KeysService implements AbstractService {
       await context.registerAction('encrypt_with_envelope', async (payload, ctx) => {
         // Use keysManager.encryptWithEnvelope()
       });
-      
+
       await context.registerAction('decrypt_envelope', async (payload, ctx) => {
         // Use keysManager.decryptEnvelope()
       });
@@ -409,6 +430,7 @@ export class KeysService implements AbstractService {
 ```
 
 ### **3. Serialization with Keys Context**
+
 ```typescript
 // Serializer gets keys context from node
 const node = Node.createMobile('mobile-network');
@@ -417,7 +439,7 @@ const keysManager = node.getKeysManager();
 // Create serialization context
 const context: SerializationContext = {
   keystore: keysManager, // CommonKeysInterface
-  resolver: someResolver
+  resolver: someResolver,
 };
 
 // Serialize with encryption
@@ -425,6 +447,7 @@ const serialized = await anyValue.serialize(context);
 ```
 
 ### **4. Platform-Specific Code with Native API**
+
 ```typescript
 // For platform-specific functionality, use native API directly
 const nativeKeys = createNativeKeys();
@@ -442,22 +465,26 @@ await sendCSRToMobile(csr, nodeId, agreementKey);
 ## 📋 **Implementation Steps**
 
 ### **Phase 1: Update Node Package**
+
 1. **Add keys manager support** to Node class
 2. **Create factory methods** for mobile/node platforms
 3. **Update KeysService** to use keys manager when available
 4. **Maintain backward compatibility** with existing KeysDelegate
 
 ### **Phase 2: Update Serializer Package**
+
 1. **Update SerializationContext** to use CommonKeysInterface
 2. **Ensure AnyValue** works with new interface
 3. **Test encryption integration** with keys manager
 
 ### **Phase 3: Update Decorators Package**
+
 1. **Update RunarKeysAdapter** to use CommonKeysInterface
 2. **Test encryption/decryption** with keys manager
 3. **Ensure compatibility** with existing decorators
 
 ### **Phase 4: Integration Testing**
+
 1. **Test complete lifecycle** from node creation to serialization
 2. **Verify platform-specific** vs common functionality
 3. **Test backward compatibility** with existing code
@@ -473,12 +500,12 @@ await sendCSRToMobile(csr, nodeId, agreementKey);
 
 ## 🔍 **Current State vs Required State**
 
-| Component | Current State | Required State |
-|-----------|---------------|----------------|
-| **Node** | Creates KeysService with KeysDelegate | Creates KeysService with KeysManager + KeysDelegate |
-| **KeysService** | Only symmetric key operations | Encryption + symmetric key operations |
-| **Serializer** | Expects keystore context | Gets keystore context from node |
-| **Decorators** | Uses RunarKeysAdapter | Uses RunarKeysAdapter with CommonKeysInterface |
-| **Platform** | No platform awareness | Platform-aware with appropriate keys manager |
+| Component       | Current State                         | Required State                                      |
+| --------------- | ------------------------------------- | --------------------------------------------------- |
+| **Node**        | Creates KeysService with KeysDelegate | Creates KeysService with KeysManager + KeysDelegate |
+| **KeysService** | Only symmetric key operations         | Encryption + symmetric key operations               |
+| **Serializer**  | Expects keystore context              | Gets keystore context from node                     |
+| **Decorators**  | Uses RunarKeysAdapter                 | Uses RunarKeysAdapter with CommonKeysInterface      |
+| **Platform**    | No platform awareness                 | Platform-aware with appropriate keys manager        |
 
 This analysis shows that the current architecture is **close but missing key integration points** between the node's keys management and the serializer's encryption needs. The simplified keys manager design will bridge these gaps while maintaining the existing patterns.

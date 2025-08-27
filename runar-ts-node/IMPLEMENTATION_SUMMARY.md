@@ -36,7 +36,8 @@ export class NodeConfig {
 }
 ```
 
-**Rust Equivalent**: 
+**Rust Equivalent**:
+
 ```rust
 pub struct NodeConfig {
     key_manager: Option<Arc<StdRwLock<NodeKeyManager>>>,
@@ -58,26 +59,23 @@ impl NodeConfig {
 export class KeysManagerWrapper implements CommonKeysInterface {
   constructor(private keys: Keys) {}
 
-  encryptWithEnvelope(
-    data: Buffer, 
-    networkId: string | null, 
-    profilePublicKeys: Buffer[]
-  ): Buffer {
+  encryptWithEnvelope(data: Buffer, networkId: string | null, profilePublicKeys: Buffer[]): Buffer {
     // Use the original working approach: nodes only support network-wide encryption
     // This matches Rust: keys_manager.create_envelope_for_network(data, network_id)
     return this.keys.nodeEncryptWithEnvelope(data, networkId, profilePublicKeys);
   }
-  
+
   decryptEnvelope(eedCbor: Buffer): Buffer {
     // This matches Rust: keys_manager.decrypt_envelope_data(env)
     return this.keys.nodeDecryptEnvelope(eedCbor);
   }
-  
+
   // ... other methods implementing CommonKeysInterface
 }
 ```
 
 **Rust Equivalent**:
+
 ```rust
 struct NodeKeyManagerWrapper(Arc<StdRwLock<NodeKeyManager>>);
 
@@ -114,10 +112,10 @@ export class Node {
     this.config = config;
     this.networkId = config.defaultNetworkId;
     this.keysManager = keysManager;
-    
+
     // Create wrapper for serializer (matching Rust NodeKeyManagerWrapper)
     this.keysWrapper = new KeysManagerWrapper(this.keysManager);
-    
+
     // ... logger initialization
   }
 
@@ -130,13 +128,14 @@ export class Node {
   createSerializationContext(): SerializationContext {
     return {
       keystore: this.keysWrapper,
-      resolver: undefined // Would need to implement this
+      resolver: undefined, // Would need to implement this
     };
   }
 }
 ```
 
 **Rust Equivalent**:
+
 ```rust
 pub async fn new(config: NodeConfig) -> Result<Self> {
     // Extract the key manager from config before moving config
@@ -169,7 +168,7 @@ export class NodeConfigManager {
       return null;
     }
   }
-  
+
   // Create new config during setup process (matching Rust CLI pattern)
   async createConfig(
     defaultNetworkId: string,
@@ -178,19 +177,19 @@ export class NodeConfigManager {
   ): Promise<NodeConfig> {
     // Initialize keysManager for the specified platform
     const keysManager = await this.initializeKeysManager(platform, keysName);
-    
-    const config = new NodeConfig(defaultNetworkId)
-      .withKeyManager(keysManager);
-    
+
+    const config = new NodeConfig(defaultNetworkId).withKeyManager(keysManager);
+
     // Save config to disk
     await this.saveConfig(config, keysName);
-    
+
     return config;
   }
 }
 ```
 
 **Rust Equivalent**:
+
 ```rust
 fn create_runar_config(
     &self,
@@ -207,6 +206,7 @@ fn create_runar_config(
 ## 🔄 **Data Flow (Matching Rust)**
 
 ### **1. Configuration Creation**
+
 ```typescript
 // TypeScript (matching Rust pattern)
 const config = new NodeConfig('test-network')
@@ -222,6 +222,7 @@ let config = NodeConfig::new("test-network")
 ```
 
 ### **2. Node Construction**
+
 ```typescript
 // TypeScript (matching Rust pattern)
 const node = new Node(config);
@@ -231,6 +232,7 @@ let node = Node::new(config).await?;
 ```
 
 ### **3. Serialization Context Creation**
+
 ```typescript
 // TypeScript (matching Rust pattern)
 const context = node.createSerializationContext();
@@ -272,30 +274,34 @@ All integration tests pass successfully:
 ## 📝 **Next Steps**
 
 ### **Phase 1: OS Keystore Integration**
+
 - Implement `retrieveFromOSKeystore()` method
 - Implement `saveToOSKeystore()` method
 - Add CBOR deserialization for node state
 
 ### **Phase 2: Label Resolver Integration**
+
 - Implement label resolver for serialization context
 - Add proper resolver to `createSerializationContext()`
 
 ### **Phase 3: Production Testing**
+
 - Test with real native Keys instances
 - Verify encryption/decryption works correctly
 - Test platform-specific vs common functionality
 
 ## 🔍 **Architecture Comparison**
 
-| Component | Rust Implementation | TypeScript Implementation | Status |
-|-----------|---------------------|---------------------------|---------|
-| **NodeConfig** | `with_key_manager()` method | `withKeyManager()` method | ✅ **ALIGNED** |
-| **Node Constructor** | Extracts keys from config | Extracts keys from config | ✅ **ALIGNED** |
-| **Wrapper Pattern** | `NodeKeyManagerWrapper` | `KeysManagerWrapper` | ✅ **ALIGNED** |
+| Component                 | Rust Implementation                 | TypeScript Implementation    | Status         |
+| ------------------------- | ----------------------------------- | ---------------------------- | -------------- |
+| **NodeConfig**            | `with_key_manager()` method         | `withKeyManager()` method    | ✅ **ALIGNED** |
+| **Node Constructor**      | Extracts keys from config           | Extracts keys from config    | ✅ **ALIGNED** |
+| **Wrapper Pattern**       | `NodeKeyManagerWrapper`             | `KeysManagerWrapper`         | ✅ **ALIGNED** |
 | **Serialization Context** | `Arc::new(NodeKeyManagerWrapper())` | `keystore: this.keysWrapper` | ✅ **ALIGNED** |
-| **CLI Flow** | Load/create config with keys | Load/create config with keys | ✅ **ALIGNED** |
+| **CLI Flow**              | Load/create config with keys        | Load/create config with keys | ✅ **ALIGNED** |
 
 The TypeScript implementation now **exactly matches the Rust implementation** in terms of:
+
 - Data flow and architecture
 - Method names and signatures
 - Error handling patterns
@@ -303,4 +309,3 @@ The TypeScript implementation now **exactly matches the Rust implementation** in
 - Wrapper implementation for serializer integration
 
 This ensures that the TypeScript codebase can be maintained in parallel with the Rust codebase, with changes in one easily reflected in the other.
-

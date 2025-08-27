@@ -4,24 +4,33 @@ import { NodeConfig, Node } from '../src';
 
 describe('NodeConfig', () => {
   it('builds config with defaults and overrides', () => {
-    const cfg = NodeConfig.new('net-1')
-      .withNetworkIds(['x', 'y'])
-      .withRequestTimeoutMs(10_000)
-      .withTransportOptions({ a: 1 })
-      .withDiscoveryOptions({ b: 2 });
+    const cfg = new NodeConfig('net-1')
+      .withAdditionalNetworks(['x', 'y'])
+      .withRequestTimeout(10_000);
     assert.equal(cfg.defaultNetworkId, 'net-1');
     assert.deepEqual(cfg.networkIds, ['x', 'y']);
     assert.equal(cfg.requestTimeoutMs, 10_000);
-    assert.deepEqual(cfg.transportOptions, { a: 1 });
-    assert.deepEqual(cfg.discoveryOptions, { b: 2 });
   });
 
-  it('instantiates Node from config without keys', () => {
-    const cfg = NodeConfig.new('net-2').withTransportOptions({});
-    const n = Node.fromConfig({
-      defaultNetworkId: cfg.defaultNetworkId,
-      transportOptions: cfg.transportOptions,
-    });
+  it('instantiates Node from config with keys', () => {
+    // Create a mock keys manager for testing
+    const mockKeys = {
+      initAsNode() {},
+      nodeEncryptWithEnvelope: (data: Buffer) => data,
+      nodeDecryptEnvelope: (data: Buffer) => data,
+      ensureSymmetricKey: (name: string) => Buffer.from(name),
+      setLabelMapping: () => {},
+      setLocalNodeInfo: () => {},
+      setPersistenceDir: () => {},
+      enableAutoPersist: () => {},
+      wipePersistence: async () => {},
+      flushState: async () => {},
+      nodeGetKeystoreState: () => 1,
+      getKeystoreCaps: () => ({}),
+    };
+
+    const cfg = new NodeConfig('net-2').withKeyManager(mockKeys as any);
+    const n = new Node(cfg);
     assert.ok(n);
   });
 });

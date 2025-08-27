@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { Node } from '../src';
+import { Node, NodeConfig } from '../src';
 import { AbstractService, LifecycleContext } from '../src/core';
 
 class DummyService implements AbstractService {
@@ -29,7 +29,22 @@ class DummyService implements AbstractService {
 
 describe('RegistryService', () => {
   it('lists services', async () => {
-    const node = new Node('net');
+    const mockKeys = {
+      initAsNode() {},
+      nodeEncryptWithEnvelope: (data: Buffer) => data,
+      nodeDecryptEnvelope: (data: Buffer) => data,
+      ensureSymmetricKey: (name: string) => Buffer.from(name),
+      setLabelMapping: () => {},
+      setLocalNodeInfo: () => {},
+      setPersistenceDir: () => {},
+      enableAutoPersist: () => {},
+      wipePersistence: async () => {},
+      flushState: async () => {},
+      nodeGetKeystoreState: () => 1,
+      getKeystoreCaps: () => ({}),
+    };
+    const config = new NodeConfig('net').withKeyManager(mockKeys as any);
+    const node = new Node(config);
     node.addService(new DummyService());
     await node.start();
     console.log('Node started, about to make request');
@@ -50,7 +65,22 @@ describe('RegistryService', () => {
   });
 
   it('gets service info', async () => {
-    const node = new Node('net');
+    const mockKeys = {
+      initAsNode() {},
+      nodeEncryptWithEnvelope: (data: Buffer) => data,
+      nodeDecryptEnvelope: (data: Buffer) => data,
+      ensureSymmetricKey: (name: string) => Buffer.from(name),
+      setLabelMapping: () => {},
+      setLocalNodeInfo: () => {},
+      setPersistenceDir: () => {},
+      enableAutoPersist: () => {},
+      wipePersistence: async () => {},
+      flushState: async () => {},
+      nodeGetKeystoreState: () => 1,
+      getKeystoreCaps: () => ({}),
+    };
+    const config = new NodeConfig('net').withKeyManager(mockKeys as any);
+    const node = new Node(config);
     node.addService(new DummyService());
     await node.start();
     const res = await node.request<undefined, any>('$registry/services/dummy', undefined as any);
@@ -62,7 +92,22 @@ describe('RegistryService', () => {
   });
 
   it('gets service state', async () => {
-    const node = new Node('net');
+    const mockKeys = {
+      initAsNode() {},
+      nodeEncryptWithEnvelope: (data: Buffer) => data,
+      nodeDecryptEnvelope: (data: Buffer) => data,
+      ensureSymmetricKey: (name: string) => Buffer.from(name),
+      setLabelMapping: () => {},
+      setLocalNodeInfo: () => {},
+      setPersistenceDir: () => {},
+      enableAutoPersist: () => {},
+      wipePersistence: async () => {},
+      flushState: async () => {},
+      nodeGetKeystoreState: () => 1,
+      getKeystoreCaps: () => ({}),
+    };
+    const config = new NodeConfig('net').withKeyManager(mockKeys as any);
+    const node = new Node(config);
     node.addService(new DummyService());
     await node.start();
     const res = await node.request<undefined, any>(
@@ -77,7 +122,22 @@ describe('RegistryService', () => {
   });
 
   it('pauses and resumes a service via registry actions', async () => {
-    const node = new Node('net');
+    const mockKeys = {
+      initAsNode() {},
+      nodeEncryptWithEnvelope: (data: Buffer) => data,
+      nodeDecryptEnvelope: (data: Buffer) => data,
+      ensureSymmetricKey: (name: string) => Buffer.from(name),
+      setLabelMapping: () => {},
+      setLocalNodeInfo: () => {},
+      setPersistenceDir: () => {},
+      enableAutoPersist: () => {},
+      wipePersistence: async () => {},
+      flushState: async () => {},
+      nodeGetKeystoreState: () => 1,
+      getKeystoreCaps: () => ({}),
+    };
+    const config = new NodeConfig('net').withKeyManager(mockKeys as any);
+    const node = new Node(config);
     node.addService(new DummyService());
     await node.start();
     const paused = await node.request<undefined, any>(
