@@ -1,6 +1,9 @@
 import { v4 as uuidv4 } from 'uuid';
 import { AnyValue } from 'runar-ts-serializer';
 import { PathTrie, TopicPath } from 'runar-ts-common';
+import type { Keys } from 'runar-nodejs-api';
+import { KeysManagerWrapper } from './keys_manager_wrapper';
+import { SerializationContext } from 'runar-ts-serializer';
 
 import {
   ActionHandler,
@@ -23,6 +26,7 @@ import { SubscriptionMetadata } from 'runar-ts-schemas';
 // REMOVED: RemoteAdapter - not in Rust API
 import { isOk, unwrap, unwrapErr, Result, ok, err } from 'runar-ts-common';
 export { NodeConfig } from './config';
+import { NodeConfig } from './config';
 // REMOVED: RemoteAdapter export - not in Rust API
 import { RegistryService } from './registry_service';
 export { RegistryService } from './registry_service';
@@ -32,6 +36,7 @@ export type { RegistryDelegate } from './registry_delegate';
 import { KeysService } from './keys_service';
 export { KeysService } from './keys_service';
 export { NapiKeysDelegate } from './keys_delegate';
+import { KeysManagerDelegate, CommonKeysInterface } from './keys_manager_delegate';
 
 type SubscriberKind = 'Local' | 'Remote';
 type FullSubscriptionEntry = {
@@ -156,6 +161,9 @@ export class Node {
   private readonly networkId: string;
   private readonly registry = new ServiceRegistry();
   private readonly logger: Logger;
+  private readonly keysManager: Keys; // Store the extracted keys manager
+  private readonly keysWrapper: KeysManagerWrapper; // Wrapper for serializer
+  private readonly config: NodeConfig;
   private running = false;
   private retainedEvents = new Map<
     string,
@@ -164,16 +172,40 @@ export class Node {
   private retainedIndex = new PathTrie<string>();
   private retainedKeyToTopic = new Map<string, TopicPath>();
   private readonly maxRetainedPerTopic = 100;
-  // REMOVED: remoteAdapter - not in Rust API
 
-  constructor(networkId = 'default') {
-    this.networkId = networkId;
+  constructor(config: NodeConfig) {
+    // Extract the key manager from config (matching Rust)
+    const keysManager = config.getKeyManager();
+    if (!keysManager) {
+      throw new Error('Failed to load node credentials. Use withKeyManager() method.');
+    }
+
+    this.config = config;
+    this.networkId = config.defaultNetworkId;
+    this.keysManager = keysManager;
+    
+    // Create wrapper for serializer (matching Rust NodeKeyManagerWrapper)
+    this.keysWrapper = new KeysManagerWrapper(this.keysManager);
+    
     try {
-      this.logger = LoggerClass.newRoot(ComponentEnum.Node).setNodeId(networkId) as any;
+      this.logger = LoggerClass.newRoot(ComponentEnum.Node).setNodeId(this.networkId) as any;
     } catch (error) {
       console.error('Failed to create logger:', error);
       this.logger = console as any; // fallback
     }
+  }
+
+  // Method to get keys wrapper for serializer (matching Rust pattern)
+  getKeysWrapper(): KeysManagerWrapper {
+    return this.keysWrapper;
+  }
+
+  // Method to create serialization context (matching Rust pattern)
+  createSerializationContext(): SerializationContext {
+    return {
+      keystore: this.keysWrapper,
+      resolver: undefined // Would need to implement this
+    };
   }
 
   static fromConfig(cfg: {
@@ -182,8 +214,16 @@ export class Node {
     discoveryOptions?: unknown;
     keys?: unknown;
   }): Node {
-    const n = new Node(cfg.defaultNetworkId);
-    return n;
+    // This method is kept for backward compatibility but should be updated
+    // to use the new NodeConfig structure
+    // For now, we'll create a temporary config with default values
+    // TODO: Update this to use proper NodeConfig when keys are available
+    const tempConfig = new NodeConfig(cfg.defaultNetworkId)
+      .withKeyManager(cfg.keys as any || null)
+      .withAdditionalNetworks([])
+      .withRequestTimeout(30000);
+    
+    return new Node(tempConfig);
   }
 
   private getLocalServicesSnapshot = (): ServiceEntry[] => {

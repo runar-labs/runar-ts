@@ -1,5 +1,34 @@
 import { Result, ok, err } from './result.js';
 
+// Common interface for serialization and functionality that should NOT be aware of platform differences
+export interface CommonKeysInterface {
+  // === ENVELOPE ENCRYPTION (WORKS ON BOTH) ===
+  encryptWithEnvelope(
+    data: Buffer, 
+    networkId: string | null, 
+    profilePublicKeys: Buffer[]
+  ): Buffer;
+  
+  decryptEnvelope(eedCbor: Buffer): Buffer;
+  
+  // === UTILITY METHODS (BOTH PLATFORMS) ===
+  ensureSymmetricKey(keyName: string): Buffer;
+  setLabelMapping(mappingCbor: Buffer): void;
+  setLocalNodeInfo(nodeInfoCbor: Buffer): void;
+  
+  // === CONFIGURATION (BOTH PLATFORMS) ===
+  setPersistenceDir(dir: string): void;
+  enableAutoPersist(enabled: boolean): void;
+  wipePersistence(): Promise<void>;
+  flushState(): Promise<void>;
+  
+  // === STATE QUERIES (BOTH PLATFORMS) ===
+  getKeystoreState(): number; // Common method, not platform-specific
+  
+  // === CAPABILITIES ===
+  getKeystoreCaps(): any; // DeviceKeystoreCaps type
+}
+
 // Value categories exactly matching Rust runar-serializer
 export enum ValueCategory {
   Null = 0,
@@ -11,10 +40,16 @@ export enum ValueCategory {
   Json = 6,
 }
 
+export interface SerializationContext {
+  keystore?: CommonKeysInterface;
+  resolver?: any;
+}
+
 export interface DeserializationContext {
   // Placeholder for label resolver, key info, etc.
   // Actual fields will be aligned with Rust serializer context once FFI is wired
   labelResolverName?: string;
+  keystore?: CommonKeysInterface;
   decryptEnvelope?: (eed: Uint8Array) => Result<Uint8Array>;
 }
 

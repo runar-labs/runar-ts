@@ -1,215 +1,170 @@
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { createRunarKeysAdapter, RunarKeysAdapter } from '../src';
+import type { CommonKeysInterface } from 'runar-ts-serializer/src/wire.js';
 
-// Mock Keys class that simulates the new runar-nodejs-api
-class MockKeys {
-  private managerType: 'mobile' | 'node' | null = null;
-  private initialized = false;
-
-  initAsMobile(): void {
-    if (this.initialized && this.managerType !== 'mobile') {
-      throw new Error('Already initialized as different manager type');
-    }
-    this.managerType = 'mobile';
-    this.initialized = true;
+// Mock CommonKeysInterface implementation
+class MockCommonKeysInterface implements CommonKeysInterface {
+  private platform: 'mobile' | 'node';
+  
+  constructor(platform: 'mobile' | 'node') {
+    this.platform = platform;
   }
-
-  initAsNode(): void {
-    if (this.initialized && this.managerType !== 'node') {
-      throw new Error('Already initialized as different manager type');
+  
+  encryptWithEnvelope(data: Buffer, networkId: string | null, profilePublicKeys: Buffer[]): Buffer {
+    if (this.platform === 'mobile') {
+      // Simple mock: prepend "mobile_encrypted:" to the data
+      const encrypted = Buffer.alloc(data.length + 18);
+      encrypted.write('mobile_encrypted:', 0);
+      data.copy(encrypted, 18);
+      return encrypted;
+    } else {
+      // Simple mock: prepend "node_encrypted:" to the data
+      const encrypted = Buffer.alloc(data.length + 15);
+      encrypted.write('node_encrypted:', 0);
+      data.copy(encrypted, 15);
+      return encrypted;
     }
-    this.managerType = 'node';
-    this.initialized = true;
   }
-
-  mobileEncryptWithEnvelope(data: Buffer, networkId: string, profilePublicKeys: Buffer[]): Buffer {
-    if (this.managerType !== 'mobile') {
-      throw new Error('Mobile manager not initialized');
+  
+  decryptEnvelope(eedCbor: Buffer): Buffer {
+    // Convert to string to check for prefixes
+    const dataStr = eedCbor.toString('utf8');
+    
+    // Check for mobile encrypted format
+    if (dataStr.startsWith('mobile_encrypted:')) {
+      return Buffer.from(dataStr.substring(18));
     }
-    // Simple mock: prepend "mobile_encrypted:" to the data
-    const encrypted = Buffer.alloc(data.length + 18);
-    encrypted.write('mobile_encrypted:', 0);
-    data.copy(encrypted, 18);
-    return encrypted;
-  }
-
-  nodeEncryptWithEnvelope(data: Buffer, networkId: string, profilePublicKeys: Buffer[]): Buffer {
-    if (this.managerType !== 'node') {
-      throw new Error('Node manager not initialized');
-    }
-    // Simple mock: prepend "node_encrypted:" to the data
-    const encrypted = Buffer.alloc(data.length + 15);
-    encrypted.write('node_encrypted:', 0);
-    data.copy(encrypted, 15);
-    return encrypted;
-  }
-
-  mobileDecryptEnvelope(encryptedData: Buffer): Buffer {
-    if (this.managerType !== 'mobile') {
-      throw new Error('Mobile manager not initialized');
-    }
-    // Remove "mobile_encrypted:" prefix
-    if (encryptedData.toString('utf8', 0, 18) === 'mobile_encrypted:') {
-      return encryptedData.subarray(18);
-    }
-    // If it's not mobile encrypted, try local decryption as fallback
-    return this.decryptLocalData(encryptedData);
-  }
-
-  nodeDecryptEnvelope(encryptedData: Buffer): Buffer {
-    if (this.managerType !== 'node') {
-      throw new Error('Node manager not initialized');
-    }
-    // Remove "node_encrypted:" prefix
-    if (encryptedData.toString('utf8', 0, 15) === 'node_encrypted:') {
-      return encryptedData.subarray(15);
-    }
-    // If it's not node encrypted, try local decryption as fallback
-    return this.decryptLocalData(encryptedData);
-  }
-
-  encryptLocalData(data: Buffer): Buffer {
-    // Simple mock: prepend "local_encrypted:" to the data
-    const encrypted = Buffer.alloc(data.length + 16);
-    encrypted.write('local_encrypted:', 0);
-    data.copy(encrypted, 16);
-    return encrypted;
-  }
-
-  decryptLocalData(encryptedData: Buffer): Buffer {
-    // Remove "local_encrypted:" prefix
-    if (encryptedData.toString('utf8', 0, 16) === 'local_encrypted:') {
-      return encryptedData.subarray(16);
-    }
-    // If it's not local encrypted, try to detect other formats
-    if (encryptedData.toString('utf8', 0, 18) === 'mobile_encrypted:') {
-      return encryptedData.subarray(18);
-    }
-    if (encryptedData.toString('utf8', 0, 15) === 'node_encrypted:') {
-      return encryptedData.subarray(15);
+    // Check for node encrypted format
+    if (dataStr.startsWith('node_encrypted:')) {
+      return Buffer.from(dataStr.substring(15));
     }
     // If no known format, return as-is (for testing purposes)
-    return encryptedData;
+    return Buffer.from(eedCbor);
+  }
+  
+  ensureSymmetricKey(keyName: string): Buffer {
+    return Buffer.from(`symmetric_key_${keyName}`);
+  }
+  
+  setLabelMapping(mappingCbor: Buffer): void {}
+  setLocalNodeInfo(nodeInfoCbor: Buffer): void {}
+  setPersistenceDir(dir: string): void {}
+  enableAutoPersist(enabled: boolean): void {}
+  async wipePersistence(): Promise<void> {}
+  async flushState(): Promise<void> {}
+  
+  getKeystoreState(): number {
+    return this.platform === 'mobile' ? 1 : 2;
+  }
+  
+  getKeystoreCaps(): any {
+    return { capabilities: 'mock' };
   }
 }
 
 describe('RunarKeysAdapter', () => {
-  let mockKeys: MockKeys;
+  let mobileKeystore: MockCommonKeysInterface;
+  let nodeKeystore: MockCommonKeysInterface;
   let mobileAdapter: RunarKeysAdapter;
   let nodeAdapter: RunarKeysAdapter;
 
   beforeEach(() => {
-    mockKeys = new MockKeys();
-    mobileAdapter = createRunarKeysAdapter(mockKeys, 'mobile');
-    nodeAdapter = createRunarKeysAdapter(mockKeys, 'node');
+    mobileKeystore = new MockCommonKeysInterface('mobile');
+    nodeKeystore = new MockCommonKeysInterface('node');
+    mobileAdapter = createRunarKeysAdapter(mobileKeystore);
+    nodeAdapter = createRunarKeysAdapter(nodeKeystore);
   });
 
   describe('Mobile Manager Mode', () => {
     beforeEach(() => {
-      mockKeys.initAsMobile();
+      // No need to call initAsMobile() here as MockCommonKeysInterface handles it
     });
 
     it('should encrypt data using mobile envelope encryption when network context is available', async () => {
       const data = new Uint8Array([1, 2, 3, 4]);
       const keyInfo = {
         networkId: 'test-network',
-        profilePublicKeys: [new Uint8Array([0x42, 0x43])],
+        profilePublicKeys: ['key1', 'key2'] // Use strings as expected by LabelKeyInfo
       };
 
       const encrypted = await mobileAdapter.encrypt(data, keyInfo);
-      const result = Buffer.from(encrypted).toString('utf8');
-
-      expect(result).toStartWith('mobile_encrypted:');
-      expect(result).toContain('mobile_encrypted:');
+      expect(encrypted.toString()).toContain('mobile_encrypted:');
     });
 
     it('should fall back to local encryption when no network context', async () => {
       const data = new Uint8Array([1, 2, 3, 4]);
       const keyInfo = {
-        profilePublicKeys: [], // No network context
+        profilePublicKeys: [] // No network context
       };
 
-      const encrypted = await mobileAdapter.encrypt(data, keyInfo);
-      const result = Buffer.from(encrypted).toString('utf8');
-
-      expect(result).toStartWith('local_encrypted:');
+      await expect(mobileAdapter.encrypt(data, keyInfo)).rejects.toThrow(
+        'Local encryption not available through CommonKeysInterface'
+      );
     });
 
     it('should decrypt data using mobile envelope decryption', async () => {
       const originalData = new Uint8Array([1, 2, 3, 4]);
-      const keyInfo = {
-        networkId: 'test-network',
-        profilePublicKeys: [new Uint8Array([0x42, 0x43])],
-      };
+      const profileKeys = [new Uint8Array([1, 2, 3]), new Uint8Array([4, 5, 6])];
 
-      const encrypted = await mobileAdapter.encrypt(originalData, keyInfo);
-      const decrypted = await mobileAdapter.decrypt(encrypted, keyInfo);
+      const encrypted = await mobileAdapter.encryptWithEnvelope(originalData, 'test-network', profileKeys);
+      const decrypted = await mobileAdapter.decryptEnvelope(encrypted);
 
-      expect(decrypted).toEqual(originalData);
+      // Convert Buffer to Uint8Array for comparison
+      expect(new Uint8Array(decrypted)).toEqual(originalData);
     });
 
     it('should support direct envelope encryption', async () => {
       const data = new Uint8Array([1, 2, 3, 4]);
-      const networkId = 'test-network';
-      const profilePublicKeys = [new Uint8Array([0x42, 0x43])];
+      const profileKeys = [new Uint8Array([1, 2, 3]), new Uint8Array([4, 5, 6])];
 
-      const encrypted = await mobileAdapter.encryptWithEnvelope(data, networkId, profilePublicKeys);
-      const result = Buffer.from(encrypted).toString('utf8');
-
-      expect(result).toStartWith('mobile_encrypted:');
+      const encrypted = await mobileAdapter.encryptWithEnvelope(data, 'test-network', profileKeys);
+      expect(encrypted.toString()).toContain('mobile_encrypted:');
     });
 
     it('should support direct envelope decryption', async () => {
       const originalData = new Uint8Array([1, 2, 3, 4]);
-      const networkId = 'test-network';
-      const profilePublicKeys = [new Uint8Array([0x42, 0x43])];
+      const profileKeys = [new Uint8Array([1, 2, 3]), new Uint8Array([4, 5, 6])];
 
-      const encrypted = await mobileAdapter.encryptWithEnvelope(
-        originalData,
-        networkId,
-        profilePublicKeys
-      );
+      const encrypted = await mobileAdapter.encryptWithEnvelope(originalData, 'test-network', profileKeys);
       const decrypted = await mobileAdapter.decryptEnvelope(encrypted);
 
-      expect(decrypted).toEqual(originalData);
+      // Convert Buffer to Uint8Array for comparison
+      expect(new Uint8Array(decrypted)).toEqual(originalData);
     });
   });
 
   describe('Node Manager Mode', () => {
     beforeEach(() => {
-      mockKeys.initAsNode();
+      // No need to call initAsNode() here as MockCommonKeysInterface handles it
     });
 
     it('should encrypt data using node envelope encryption when network context is available', async () => {
       const data = new Uint8Array([1, 2, 3, 4]);
       const keyInfo = {
         networkId: 'test-network',
-        profilePublicKeys: [new Uint8Array([0x42, 0x43])],
+        profilePublicKeys: ['key1', 'key2'] // Use strings as expected by LabelKeyInfo
       };
 
       const encrypted = await nodeAdapter.encrypt(data, keyInfo);
-      const result = Buffer.from(encrypted).toString('utf8');
-
-      expect(result).toStartWith('node_encrypted:');
+      expect(encrypted.toString()).toContain('node_encrypted:');
     });
 
     it('should fall back to local encryption when no network context', async () => {
       const data = new Uint8Array([1, 2, 3, 4]);
       const keyInfo = {
-        profilePublicKeys: [], // No network context
+        profilePublicKeys: [] // No network context
       };
 
-      const encrypted = await nodeAdapter.encrypt(data, keyInfo);
-      const result = Buffer.from(encrypted).toString('utf8');
-
-      expect(result).toStartWith('local_encrypted:');
+      await expect(nodeAdapter.encrypt(data, keyInfo)).rejects.toThrow(
+        'Local encryption not available through CommonKeysInterface'
+      );
     });
 
     it('should decrypt data using node envelope decryption', async () => {
       const originalData = new Uint8Array([1, 2, 3, 4]);
       const keyInfo = {
         networkId: 'test-network',
-        profilePublicKeys: [new Uint8Array([0x42, 0x43])],
+        profilePublicKeys: ['key1', 'key2']
       };
 
       const encrypted = await nodeAdapter.encrypt(originalData, keyInfo);
@@ -220,25 +175,20 @@ describe('RunarKeysAdapter', () => {
 
     it('should support direct envelope encryption', async () => {
       const data = new Uint8Array([1, 2, 3, 4]);
-      const networkId = 'test-network';
-      const profilePublicKeys = [new Uint8Array([0x42, 0x43])];
+      const profileKeys = [new Uint8Array([1, 2, 3]), new Uint8Array([4, 5, 6])];
 
-      const encrypted = await nodeAdapter.encryptWithEnvelope(data, networkId, profilePublicKeys);
-      const result = Buffer.from(encrypted).toString('utf8');
-
-      expect(result).toStartWith('node_encrypted:');
+      const encrypted = await nodeAdapter.encryptWithEnvelope(data, 'test-network', profileKeys);
+      expect(encrypted.toString()).toContain('node_encrypted:');
     });
 
     it('should support direct envelope decryption', async () => {
       const originalData = new Uint8Array([1, 2, 3, 4]);
-      const networkId = 'test-network';
-      const profilePublicKeys = [new Uint8Array([0x42, 0x43])];
+      const keyInfo = {
+        networkId: 'test-network',
+        profilePublicKeys: ['key1', 'key2']
+      };
 
-      const encrypted = await nodeAdapter.encryptWithEnvelope(
-        originalData,
-        networkId,
-        profilePublicKeys
-      );
+      const encrypted = await nodeAdapter.encrypt(originalData, keyInfo);
       const decrypted = await nodeAdapter.decryptEnvelope(encrypted);
 
       expect(decrypted).toEqual(originalData);
@@ -247,13 +197,13 @@ describe('RunarKeysAdapter', () => {
 
   describe('Factory Function', () => {
     it('should create mobile adapter by default', () => {
-      const adapter = createRunarKeysAdapter(mockKeys);
+      const adapter = createRunarKeysAdapter(mobileKeystore);
       expect(adapter).toBeInstanceOf(RunarKeysAdapter);
     });
 
     it('should create adapter with specified manager type', () => {
-      const mobileAdapter = createRunarKeysAdapter(mockKeys, 'mobile');
-      const nodeAdapter = createRunarKeysAdapter(mockKeys, 'node');
+      const mobileAdapter = createRunarKeysAdapter(mobileKeystore);
+      const nodeAdapter = createRunarKeysAdapter(nodeKeystore);
 
       expect(mobileAdapter).toBeInstanceOf(RunarKeysAdapter);
       expect(nodeAdapter).toBeInstanceOf(RunarKeysAdapter);

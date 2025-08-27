@@ -350,6 +350,9 @@ export interface EncryptedLabelGroup {
 // NEW: RUNAR NODEJS API INTEGRATION
 // ============================================================================
 
+// Import the CommonKeysInterface from the serializer
+import type { CommonKeysInterface } from 'runar-ts-serializer';
+
 /**
  * Adapter interface for the new runar-nodejs-api Keys class
  * This provides envelope encryption capabilities for the decorators
@@ -369,15 +372,13 @@ export interface RunarKeysAdapter {
 }
 
 /**
- * Implementation of RunarKeysAdapter that wraps the new Keys class
+ * Implementation of RunarKeysAdapter that wraps the CommonKeysInterface
  */
 export class RunarKeysAdapter implements RunarKeysAdapter {
-  private keys: any; // The actual Keys instance from runar-nodejs-api
-  private managerType: 'mobile' | 'node';
+  private keystore: CommonKeysInterface;
 
-  constructor(keys: any, managerType: 'mobile' | 'node' = 'node') {
-    this.keys = keys;
-    this.managerType = managerType;
+  constructor(keystore: CommonKeysInterface) {
+    this.keystore = keystore;
   }
 
   async encrypt(data: Uint8Array, keyInfo: LabelKeyInfo): Promise<Uint8Array> {
@@ -385,18 +386,16 @@ export class RunarKeysAdapter implements RunarKeysAdapter {
     if (keyInfo.networkId && keyInfo.profilePublicKeys.length > 0) {
       const profileKeys = keyInfo.profilePublicKeys.map(pk => Buffer.from(pk));
 
-      if (this.managerType === 'mobile') {
-        return this.keys.mobileEncryptWithEnvelope(
-          Buffer.from(data),
-          keyInfo.networkId,
-          profileKeys
-        );
-      } else {
-        return this.keys.nodeEncryptWithEnvelope(Buffer.from(data), keyInfo.networkId, profileKeys);
-      }
+      return this.keystore.encryptWithEnvelope(
+        Buffer.from(data),
+        keyInfo.networkId,
+        profileKeys
+      );
     } else {
-      // Fall back to local encryption
-      return this.keys.encryptLocalData(Buffer.from(data));
+      // For local encryption, we need to use a different approach
+      // since CommonKeysInterface doesn't have local encryption methods
+      // This would need to be handled by the specific platform implementation
+      throw new Error('Local encryption not available through CommonKeysInterface');
     }
   }
 
@@ -404,19 +403,16 @@ export class RunarKeysAdapter implements RunarKeysAdapter {
     // Try envelope decryption first if we have network context
     if (keyInfo.networkId && keyInfo.profilePublicKeys.length > 0) {
       try {
-        if (this.managerType === 'mobile') {
-          return this.keys.mobileDecryptEnvelope(Buffer.from(data));
-        } else {
-          return this.keys.nodeDecryptEnvelope(Buffer.from(data));
-        }
+        return this.keystore.decryptEnvelope(Buffer.from(data));
       } catch (error) {
         // Fall back to local decryption if envelope decryption fails
         console.warn('Envelope decryption failed, falling back to local decryption:', error);
+        throw new Error('Local decryption not available through CommonKeysInterface');
       }
     }
 
     // Fall back to local decryption
-    return this.keys.decryptLocalData(Buffer.from(data));
+    throw new Error('Local decryption not available through CommonKeysInterface');
   }
 
   async encryptWithEnvelope(
@@ -426,30 +422,19 @@ export class RunarKeysAdapter implements RunarKeysAdapter {
   ): Promise<Uint8Array> {
     const profileKeys = profilePublicKeys.map(pk => Buffer.from(pk));
 
-    if (this.managerType === 'mobile') {
-      return this.keys.mobileEncryptWithEnvelope(Buffer.from(data), networkId, profileKeys);
-    } else {
-      return this.keys.nodeEncryptWithEnvelope(Buffer.from(data), networkId, profileKeys);
-    }
+    return this.keystore.encryptWithEnvelope(Buffer.from(data), networkId, profileKeys);
   }
 
   async decryptEnvelope(encryptedData: Uint8Array): Promise<Uint8Array> {
-    if (this.managerType === 'mobile') {
-      return this.keys.mobileDecryptEnvelope(Buffer.from(encryptedData));
-    } else {
-      return this.keys.nodeDecryptEnvelope(Buffer.from(encryptedData));
-    }
+    return this.keystore.decryptEnvelope(Buffer.from(encryptedData));
   }
 }
 
 /**
- * Factory function to create a RunarKeysAdapter from a Keys instance
+ * Factory function to create a RunarKeysAdapter from a CommonKeysInterface
  */
-export function createRunarKeysAdapter(
-  keys: any,
-  managerType: 'mobile' | 'node' = 'node'
-): RunarKeysAdapter {
-  return new RunarKeysAdapter(keys, managerType);
+export function createRunarKeysAdapter(keystore: CommonKeysInterface): RunarKeysAdapter {
+  return new RunarKeysAdapter(keystore);
 }
 
 // ============================================================================

@@ -1,48 +1,35 @@
 import type { Keys } from 'runar-nodejs-api';
 
 export class NodeConfig {
-  readonly defaultNetworkId: string;
-  networkIds: string[] = [];
-  requestTimeoutMs = 30000;
-  transportOptions?: unknown;
-  discoveryOptions?: unknown;
-  keys?: Keys;
+  public defaultNetworkId: string;
+  public networkIds: string[];
+  public requestTimeoutMs: number;
+  private keyManager?: Keys; // Already initialized Keys instance from FFI
 
-  private constructor(defaultNetworkId: string) {
+  constructor(defaultNetworkId: string) {
     this.defaultNetworkId = defaultNetworkId;
+    this.networkIds = [];
+    this.requestTimeoutMs = 30000;
   }
 
-  static new(defaultNetworkId: string): NodeConfig {
-    return new NodeConfig(defaultNetworkId);
+  // Match Rust with_key_manager() method
+  withKeyManager(keyManager: Keys): this {
+    this.keyManager = keyManager;
+    return this;
   }
 
-  withNetworkIds(networkIds: string[]): this {
+  withAdditionalNetworks(networkIds: string[]): this {
     this.networkIds = [...networkIds];
     return this;
   }
 
-  addNetworkId(networkId: string): this {
-    this.networkIds.push(networkId);
+  withRequestTimeout(timeoutMs: number): this {
+    this.requestTimeoutMs = timeoutMs;
     return this;
   }
 
-  withRequestTimeoutMs(ms: number): this {
-    this.requestTimeoutMs = ms;
-    return this;
-  }
-
-  withTransportOptions(options: unknown): this {
-    this.transportOptions = options;
-    return this;
-  }
-
-  withDiscoveryOptions(options: unknown): this {
-    this.discoveryOptions = options;
-    return this;
-  }
-
-  withKeys(keys: Keys): this {
-    this.keys = keys;
-    return this;
+  // Getter for key manager (used by Node constructor)
+  getKeyManager(): Keys | undefined {
+    return this.keyManager;
   }
 }

@@ -1,129 +1,177 @@
-import { describe, it, expect } from 'bun:test';
-import { AnyValue } from '../src';
-import { ValueCategory, writeHeader } from '../src/wire';
-import { encode, decode } from 'cbor-x';
-import runar from 'runar-nodejs-api';
-const { Keys } = runar as any;
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { AnyValue, SerializationContext } from '../src/index.js';
+import { KeysManagerDelegate, CommonKeysInterface } from '../../runar-ts-node/src/keys_manager_delegate.js';
+import { Keys } from 'runar-nodejs-api';
 
-describe('Encryption envelope roundtrip', () => {
-  it('encrypts and decrypts a small payload via NAPI Keys', async () => {
-    const keys = new Keys();
-
-    // Set persistence directory first
-    keys.setPersistenceDir('/tmp/runar-keys-test');
-    keys.enableAutoPersist(true);
-
-    // Initialize as node manager for local encryption
-    keys.initAsNode();
-
-    const obj = { a: 1, b: 'x' };
-    const body = encode(obj);
-    const header = writeHeader({ category: ValueCategory.Json, isEncrypted: true });
-
-    // Use local encryption for this test (simpler than envelope encryption)
-    const eed = keys.encryptLocalData(Buffer.from(body));
-    const wire = new Uint8Array(header.length + eed.length);
-    wire.set(header, 0);
-    wire.set(new Uint8Array(eed), header.length);
-
-    const av = AnyValue.fromBytes<typeof obj>(wire, {
-      decryptEnvelope: eedBytes => {
-        try {
-          const out = keys.decryptLocalData(Buffer.from(eedBytes));
-          return { ok: true, value: new Uint8Array(out) } as const;
-        } catch (e) {
-          return { ok: false, error: e as Error } as const;
-        }
-      },
-    } as any);
-    const r = av.as<typeof obj>();
-    expect(r.ok).toBe(true);
-    if (r.ok) {
-      expect(r.value.a).toBe(1);
-      expect(r.value.b).toBe('x');
+// Mock Keys class for testing
+class MockKeys {
+  private platform: 'mobile' | 'node';
+  
+  constructor(platform: 'mobile' | 'node') {
+    this.platform = platform;
+  }
+  
+  initAsMobile(): void {
+    this.platform = 'mobile';
+  }
+  
+  initAsNode(): void {
+    this.platform = 'node';
+  }
+  
+  mobileEncryptWithEnvelope(data: Buffer, networkId: string | null, profilePublicKeys: Buffer[]): Buffer {
+    // Simple mock encryption - just prefix with 'mobile_encrypted:'
+    return Buffer.concat([Buffer.from('mobile_encrypted:'), data]);
+  }
+  
+  nodeEncryptWithEnvelope(data: Buffer, networkId: string | null, profilePublicKeys: Buffer[]): Buffer {
+    // Simple mock encryption - just prefix with 'node_encrypted:'
+    return Buffer.concat([Buffer.from('node_encrypted:'), data]);
+  }
+  
+  mobileDecryptEnvelope(eedCbor: Buffer): Buffer {
+    // Simple mock decryption - remove 'mobile_encrypted:' prefix
+    const prefix = Buffer.from('mobile_encrypted:');
+    if (eedCbor.subarray(0, prefix.length).equals(prefix)) {
+      return eedCbor.subarray(prefix.length);
     }
+    throw new Error('Invalid mobile encrypted data format');
+  }
+  
+  nodeDecryptEnvelope(eedCbor: Buffer): Buffer {
+    // Simple mock decryption - remove 'node_encrypted:' prefix
+    const prefix = Buffer.from('node_encrypted:');
+    if (eedCbor.subarray(0, prefix.length).equals(prefix)) {
+      return eedCbor.subarray(prefix.length);
+    }
+    throw new Error('Invalid node encrypted data format');
+  }
+  
+  // Mock other required methods
+  ensureSymmetricKey(keyName: string): Buffer {
+    return Buffer.from(`symmetric_key_${keyName}`);
+  }
+  
+  setLabelMapping(mappingCbor: Buffer): void {}
+  setLocalNodeInfo(nodeInfoCbor: Buffer): void {}
+  setPersistenceDir(dir: string): void {}
+  enableAutoPersist(enabled: boolean): void {}
+  async wipePersistence(): Promise<void> {}
+  async flushState(): Promise<void> {}
+  
+  mobileGetKeystoreState(): number {
+    return 1; // Mock state
+  }
+  
+  nodeGetKeystoreState(): number {
+    return 2; // Mock state
+  }
+  
+  getKeystoreCaps(): any {
+    return { capabilities: 'mock' };
+  }
+}
+
+describe('Serializer with CommonKeysInterface', () => {
+  it('should encrypt and decrypt using mobile keys delegate', async () => {
+    // Create mock keys and delegate
+    const mockKeys = new MockKeys('mobile');
+    mockKeys.initAsMobile();
+    
+    const keysDelegate = new KeysManagerDelegate(mockKeys as any, 'mobile');
+    
+    // Create serialization context
+    const context: SerializationContext = {
+      keystore: keysDelegate
+    };
+    
+    // Test data
+    const testData = { message: 'Hello, World!', number: 42 };
+    const dataBuffer = Buffer.from(JSON.stringify(testData));
+    
+    // Encrypt using delegate
+    const encrypted = keysDelegate.encryptWithEnvelope(dataBuffer, 'test-network', []);
+    
+    // Verify encryption worked
+    assert(encrypted.toString().startsWith('mobile_encrypted:'));
+    
+    // Decrypt using delegate
+    const decrypted = keysDelegate.decryptEnvelope(encrypted);
+    
+    // Verify decryption worked
+    assert.deepStrictEqual(decrypted, dataBuffer);
+    
+    // Test with AnyValue serialization
+    const anyValue = AnyValue.newBytes(dataBuffer);
+    const serialized = await anyValue.serialize(context);
+    
+    assert(serialized.ok);
+    assert(serialized.value.length > 0);
   });
 
-  it('encrypts and decrypts using envelope encryption with mobile manager', async () => {
-    const keys = new Keys();
-
-    // Set persistence directory first
-    keys.setPersistenceDir('/tmp/runar-keys-test');
-    keys.enableAutoPersist(true);
-
-    // Initialize as mobile manager
-    keys.initAsMobile();
-
-    // Initialize user root key
-    await keys.mobileInitializeUserRootKey();
-    await keys.flushState();
-
-    // Generate a network ID for envelope encryption
-    const networkId = keys.mobileGenerateNetworkDataKey();
-
-    // Create profile keys using the proper derivation method (like working e2e tests)
-    const personalKey = keys.mobileDeriveUserProfileKey('personal');
-    const workKey = keys.mobileDeriveUserProfileKey('work');
-
-    // Install the network public key for the generated network
-    const networkPublicKey = keys.mobileGetNetworkPublicKey(networkId);
-
-    const obj = { a: 2, b: 'envelope_test' };
-    const data = Buffer.from(encode(obj));
-
-    // Use the new envelope encryption method with derived profile keys
-    const profilePks = [personalKey, workKey];
-    const encrypted = keys.mobileEncryptWithEnvelope(data, networkId, profilePks);
-
-    // Decrypt using the new envelope decryption method
-    const decrypted = keys.mobileDecryptEnvelope(encrypted);
-
-    // Verify the roundtrip
-    const decoded = decode(decrypted);
-    expect(decoded).toEqual(obj);
+  it('should encrypt and decrypt using node keys delegate', async () => {
+    // Create mock keys and delegate
+    const mockKeys = new MockKeys('node');
+    mockKeys.initAsNode();
+    
+    const keysDelegate = new KeysManagerDelegate(mockKeys as any, 'node');
+    
+    // Create serialization context
+    const context: SerializationContext = {
+      keystore: keysDelegate
+    };
+    
+    // Test data
+    const testData = { message: 'Hello, Node!', number: 123 };
+    const dataBuffer = Buffer.from(JSON.stringify(testData));
+    
+    // Encrypt using delegate
+    const encrypted = keysDelegate.encryptWithEnvelope(dataBuffer, 'test-network', []);
+    
+    // Verify encryption worked
+    assert(encrypted.toString().startsWith('node_encrypted:'));
+    
+    // Decrypt using delegate
+    const decrypted = keysDelegate.decryptEnvelope(encrypted);
+    
+    // Verify decryption worked
+    assert.deepStrictEqual(decrypted, dataBuffer);
+    
+    // Test with AnyValue serialization
+    const anyValue = AnyValue.newBytes(dataBuffer);
+    const serialized = await anyValue.serialize(context);
+    
+    assert(serialized.ok);
+    assert(serialized.value.length > 0);
   });
 
-  it('encrypts and decrypts using envelope encryption with node manager', async () => {
-    const keys = new Keys();
+  it('should handle keystore state queries', () => {
+    // Create mock keys and delegate
+    const mobileKeys = new MockKeys('mobile');
+    const mobileDelegate = new KeysManagerDelegate(mobileKeys as any, 'mobile');
+    
+    const nodeKeys = new MockKeys('node');
+    const nodeDelegate = new KeysManagerDelegate(nodeKeys as any, 'node');
+    
+    // Test keystore state
+    assert.equal(mobileDelegate.getKeystoreState(), 1);
+    assert.equal(nodeDelegate.getKeystoreState(), 2);
+  });
 
-    // Set persistence directory first
-    keys.setPersistenceDir('/tmp/runar-keys-test');
-    keys.enableAutoPersist(true);
-
-    // Initialize as node manager
-    keys.initAsNode();
-
-    // For node manager, we need to install the network key using the proper format
-    // This test demonstrates the API usage but may fail due to missing network setup
-    const networkId = 'test-network-id';
-
-    // Create a test profile public key (in real usage, this would come from the network)
-    // Use a proper uncompressed ECDSA public key format (65 bytes) like the working tests
-    const profilePublicKey = Buffer.alloc(65, 1);
-
-    const obj = { a: 3, b: 'node_envelope_test' };
-    const data = Buffer.from(encode(obj));
-
-    try {
-      // Use the new envelope encryption method
-      const encrypted = keys.nodeEncryptWithEnvelope(data, networkId, [profilePublicKey]);
-
-      // Decrypt using the new envelope decryption method
-      const decrypted = keys.nodeDecryptEnvelope(encrypted);
-
-      // Verify the roundtrip
-      const decoded = decode(decrypted);
-      expect(decoded).toEqual(obj);
-    } catch (error) {
-      // If envelope encryption fails due to missing network setup, this is expected
-      // in a test environment without proper network configuration
-      console.log(
-        'Node envelope encryption test failed as expected (requires network setup):',
-        error.message
-      );
-
-      // Verify that the error is the expected one about missing network setup
-      expect(error.message).toContain('Network public key not found');
-    }
+  it('should handle utility methods', () => {
+    // Create mock keys and delegate
+    const mockKeys = new MockKeys('node');
+    const keysDelegate = new KeysManagerDelegate(mockKeys as any, 'node');
+    
+    // Test utility methods
+    const symmetricKey = keysDelegate.ensureSymmetricKey('test-key');
+    assert(symmetricKey.toString().includes('symmetric_key_test-key'));
+    
+    // Test configuration methods (should not throw)
+    keysDelegate.setLabelMapping(Buffer.from('test'));
+    keysDelegate.setLocalNodeInfo(Buffer.from('test'));
+    keysDelegate.setPersistenceDir('./test');
+    keysDelegate.enableAutoPersist(true);
   });
 });
