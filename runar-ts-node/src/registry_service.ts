@@ -57,7 +57,6 @@ export class RegistryService implements AbstractService {
     const result2 = await context.registerAction(
       'services/{service_path}',
       async (payload, context) => {
-
         const services = this.getLocalServices();
         // Extract service path from the actual topic path
         const fullPath = context.topicPath.asString();
@@ -66,8 +65,6 @@ export class RegistryService implements AbstractService {
         // For '$registry/services/dummy', we want 'dummy' (the last part)
         // The actionPath includes the service path, so we take the last segment
         const servicePath = pathParts.length >= 1 ? pathParts[pathParts.length - 1] : null;
-
-
 
         const match = this.findServiceByPath(servicePath, services);
         let meta = null;

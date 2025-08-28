@@ -10,14 +10,43 @@ export class KeysManagerWrapper implements CommonKeysInterface {
 
   // === ENVELOPE ENCRYPTION (AUTOMATIC ROUTING) ===
   encryptWithEnvelope(data: Buffer, networkId: string | null, profilePublicKeys: Buffer[]): Buffer {
-    // Use the original working approach: nodes only support network-wide encryption
-    // This matches Rust: keys_manager.create_envelope_for_network(data, network_id)
-    return this.keys.nodeEncryptWithEnvelope(data, networkId, profilePublicKeys);
+    // Handle both mobile and node platforms
+    if ('mobileEncryptWithEnvelope' in this.keys && 'initAsMobile' in this.keys) {
+      // Check if it's initialized as mobile
+      try {
+        return (this.keys as any).mobileEncryptWithEnvelope(data, networkId, profilePublicKeys);
+      } catch (error) {
+        // If mobile method fails, try node method
+        if ('nodeEncryptWithEnvelope' in this.keys) {
+          return (this.keys as any).nodeEncryptWithEnvelope(data, networkId, profilePublicKeys);
+        }
+        throw error;
+      }
+    } else if ('nodeEncryptWithEnvelope' in this.keys) {
+      return (this.keys as any).nodeEncryptWithEnvelope(data, networkId, profilePublicKeys);
+    } else {
+      throw new Error('No encryption method available on this platform');
+    }
   }
 
   decryptEnvelope(eedCbor: Buffer): Buffer {
-    // This matches Rust: keys_manager.decrypt_envelope_data(env)
-    return this.keys.nodeDecryptEnvelope(eedCbor);
+    // Handle both mobile and node platforms
+    if ('mobileDecryptEnvelope' in this.keys && 'initAsMobile' in this.keys) {
+      // Check if it's initialized as mobile
+      try {
+        return (this.keys as any).mobileDecryptEnvelope(eedCbor);
+      } catch (error) {
+        // If mobile method fails, try node method
+        if ('nodeDecryptEnvelope' in this.keys) {
+          return (this.keys as any).nodeDecryptEnvelope(eedCbor);
+        }
+        throw error;
+      }
+    } else if ('nodeDecryptEnvelope' in this.keys) {
+      return (this.keys as any).nodeDecryptEnvelope(eedCbor);
+    } else {
+      throw new Error('No decryption method available on this platform');
+    }
   }
 
   // === UTILITY METHODS (BOTH PLATFORMS) ===
@@ -52,7 +81,24 @@ export class KeysManagerWrapper implements CommonKeysInterface {
 
   // === STATE QUERIES (BOTH PLATFORMS) ===
   getKeystoreState(): number {
-    return this.keys.nodeGetKeystoreState();
+    // Handle both mobile and node platforms
+    if ('mobileGetKeystoreState' in this.keys && 'initAsMobile' in this.keys) {
+      // Check if it's initialized as mobile
+      try {
+        return (this.keys as any).mobileGetKeystoreState();
+      } catch (error) {
+        // If mobile method fails, try node method
+        if ('nodeGetKeystoreState' in this.keys) {
+          return (this.keys as any).nodeGetKeystoreState();
+        }
+        throw error;
+      }
+    } else if ('nodeGetKeystoreState' in this.keys) {
+      return (this.keys as any).nodeGetKeystoreState();
+    } else {
+      // Fallback for unknown platform
+      return 0;
+    }
   }
 
   getKeystoreCaps(): any {

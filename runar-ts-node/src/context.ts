@@ -1,6 +1,12 @@
 import { AnyValue } from 'runar-ts-serializer';
 import { Result, err, ok, Logger, TopicPath } from 'runar-ts-common';
-import { ActionHandler, NodeLifecycleContext, RequestContext, EventContext, NodeDelegate } from './service';
+import {
+  ActionHandler,
+  NodeLifecycleContext,
+  RequestContext,
+  EventContext,
+  NodeDelegate,
+} from './service';
 
 // Implementation of NodeLifecycleContext
 export class NodeLifecycleContextImpl implements NodeLifecycleContext {

@@ -25,6 +25,9 @@ class MockKeys {
     networkId: string | null,
     profilePublicKeys: Buffer[]
   ): Buffer {
+    if (this.platform !== 'mobile') {
+      throw new Error('mobileEncryptWithEnvelope called on non-mobile platform');
+    }
     // Simple mock encryption - just prefix with 'mobile_encrypted:'
     return Buffer.concat([Buffer.from('mobile_encrypted:'), data]);
   }
@@ -34,11 +37,17 @@ class MockKeys {
     networkId: string | null,
     profilePublicKeys: Buffer[]
   ): Buffer {
+    if (this.platform !== 'node') {
+      throw new Error('nodeEncryptWithEnvelope called on non-node platform');
+    }
     // Simple mock encryption - just prefix with 'node_encrypted:'
     return Buffer.concat([Buffer.from('node_encrypted:'), data]);
   }
 
   mobileDecryptEnvelope(eedCbor: Buffer): Buffer {
+    if (this.platform !== 'mobile') {
+      throw new Error('mobileDecryptEnvelope called on non-mobile platform');
+    }
     // Simple mock decryption - remove 'mobile_encrypted:' prefix
     const prefix = Buffer.from('mobile_encrypted:');
     if (eedCbor.subarray(0, prefix.length).equals(prefix)) {
@@ -48,6 +57,9 @@ class MockKeys {
   }
 
   nodeDecryptEnvelope(eedCbor: Buffer): Buffer {
+    if (this.platform !== 'node') {
+      throw new Error('nodeDecryptEnvelope called on non-node platform');
+    }
     // Simple mock decryption - remove 'node_encrypted:' prefix
     const prefix = Buffer.from('node_encrypted:');
     if (eedCbor.subarray(0, prefix.length).equals(prefix)) {
@@ -69,10 +81,16 @@ class MockKeys {
   async flushState(): Promise<void> {}
 
   mobileGetKeystoreState(): number {
+    if (this.platform !== 'mobile') {
+      throw new Error('mobileGetKeystoreState called on non-mobile platform');
+    }
     return 1; // Mock state
   }
 
   nodeGetKeystoreState(): number {
+    if (this.platform !== 'node') {
+      throw new Error('nodeGetKeystoreState called on non-node platform');
+    }
     return 2; // Mock state
   }
 

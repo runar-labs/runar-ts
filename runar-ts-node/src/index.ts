@@ -26,8 +26,4 @@ export type {
 } from './events';
 
 // Re-export context implementations
-export {
-  NodeLifecycleContextImpl,
-  RequestContextImpl,
-  EventContextImpl,
-} from './context';
+export { NodeLifecycleContextImpl, RequestContextImpl, EventContextImpl } from './context';

@@ -14,21 +14,11 @@ import {
   ServiceState,
   NodeDelegate,
   RequestContext,
-  EventContext
+  EventContext,
 } from './service';
-import {
-  EventMessage,
-  EventSubscriber
-} from './events';
-import {
-  NodeLifecycleContextImpl,
-  RequestContextImpl,
-  EventContextImpl
-} from './context';
-import {
-  PublishOptions,
-  EventRegistrationOptions
-} from './events';
+import { EventMessage, EventSubscriber } from './events';
+import { NodeLifecycleContextImpl, RequestContextImpl, EventContextImpl } from './context';
+import { PublishOptions, EventRegistrationOptions } from './events';
 import { SubscriptionMetadata } from 'runar-ts-schemas';
 import { Result, err, ok } from 'runar-ts-common';
 
@@ -132,10 +122,10 @@ export class Node {
   }
 
   async start(): Promise<void> {
-    this.logger?.info?.("Starting node...");
+    this.logger?.info?.('Starting node...');
 
     if (this.running) {
-      this.logger?.warn?.("Node already running");
+      this.logger?.warn?.('Node already running');
       return;
     }
 
@@ -148,8 +138,12 @@ export class Node {
     const localServices = this.registry.getLocalServices();
 
     // Categorize services into internal and non-internal
-    const internalServices = localServices.filter(entry => this.isInternalService(entry.service.path()));
-    const nonInternalServices = localServices.filter(entry => !this.isInternalService(entry.service.path()));
+    const internalServices = localServices.filter(entry =>
+      this.isInternalService(entry.service.path())
+    );
+    const nonInternalServices = localServices.filter(
+      entry => !this.isInternalService(entry.service.path())
+    );
 
     // Start internal services first
     for (const serviceEntry of internalServices) {
@@ -164,7 +158,7 @@ export class Node {
     //   }
     // }
 
-    this.logger?.info?.("Node started successfully - it will start all services now");
+    this.logger?.info?.('Node started successfully - it will start all services now');
     this.running = true;
 
     // Start non-internal services in parallel to avoid blocking the loop
@@ -172,7 +166,11 @@ export class Node {
     const serviceTasks: Array<{ serviceTopic: TopicPath; task: Promise<void> }> = [];
 
     for (const serviceEntry of nonInternalServices) {
-      const task = this.startServiceWithTimeout(serviceEntry.serviceTopic, serviceEntry, serviceStartTimeout);
+      const task = this.startServiceWithTimeout(
+        serviceEntry.serviceTopic,
+        serviceEntry,
+        serviceStartTimeout
+      );
       serviceTasks.push({ serviceTopic: serviceEntry.serviceTopic, task });
     }
 
@@ -189,8 +187,12 @@ export class Node {
       await Promise.race([
         this.startService(serviceTopic, serviceEntry, true),
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error(`Service start timed out after ${timeoutMs}ms: ${serviceTopic}`)), timeoutMs)
-        )
+          setTimeout(
+            () =>
+              reject(new Error(`Service start timed out after ${timeoutMs}ms: ${serviceTopic}`)),
+            timeoutMs
+          )
+        ),
       ]);
     } catch (error) {
       this.logger?.error?.(`Service start failed for ${serviceTopic}: ${error}`);
@@ -225,7 +227,7 @@ export class Node {
 
   private isInternalService(servicePath: string): boolean {
     // Internal services are $registry and $keys (matching Rust INTERNAL_SERVICES)
-    const internalServices = ["$registry", "$keys"];
+    const internalServices = ['$registry', '$keys'];
 
     // Check if it starts with an internal service directly (exact match or followed by /)
     for (const internal of internalServices) {
@@ -249,10 +251,10 @@ export class Node {
   }
 
   async stop(): Promise<void> {
-    this.logger?.info?.("Stopping node...");
+    this.logger?.info?.('Stopping node...');
 
     if (!this.running) {
-      this.logger?.warn?.("Node already stopped");
+      this.logger?.warn?.('Node already stopped');
       return;
     }
 
@@ -261,7 +263,7 @@ export class Node {
     // Get services directly and stop them
     const localServices = this.registry.getLocalServices();
 
-    this.logger?.info?.("Stopping services...");
+    this.logger?.info?.('Stopping services...');
     // Stop each service
     for (const serviceEntry of localServices) {
       this.logger?.info?.(`Stopping service: ${serviceEntry.serviceTopic}`);
@@ -279,7 +281,9 @@ export class Node {
         await serviceEntry.service.stop(stopContext);
         this.registry.updateServiceState(serviceEntry.service.path(), ServiceState.Stopped);
       } catch (error) {
-        this.logger?.error?.(`Failed to stop service: ${serviceEntry.serviceTopic}, error: ${error}`);
+        this.logger?.error?.(
+          `Failed to stop service: ${serviceEntry.serviceTopic}, error: ${error}`
+        );
       }
     }
 
@@ -294,7 +298,7 @@ export class Node {
     //   task.abort();
     // }
 
-    this.logger?.info?.("Node stopped successfully");
+    this.logger?.info?.('Node stopped successfully');
   }
 
   // Helper method to get retained events for a topic
@@ -579,10 +583,6 @@ export class Node {
     }
   }
 
-
-
-
-
   /**
    * Rust-compatible publish method - matches Rust API exactly
    */
@@ -629,10 +629,6 @@ export class Node {
       return err(error instanceof Error ? error.message : String(error));
     }
   }
-
-
-
-
 
   /**
    * Rust-compatible subscribe method - matches Rust API exactly
