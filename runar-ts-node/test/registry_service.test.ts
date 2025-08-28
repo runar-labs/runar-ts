@@ -85,7 +85,11 @@ describe('RegistryService', () => {
     await node.start();
     const res = await node.request<undefined, any>('$registry/services/dummy', undefined as any);
     expect(res.ok).toBe(true);
+
+    // Check if the response has the expected data structure
     const serviceInfo = res.value.as<any>();
+
+    expect(serviceInfo).not.toBeNull();
     expect(serviceInfo.ok).toBe(true);
     expect(serviceInfo.value.service_path).toBe('dummy');
     expect(serviceInfo.value.name).toBe('Dummy');

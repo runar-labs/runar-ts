@@ -53,20 +53,23 @@ export class RegistryService implements AbstractService {
     }
 
     // services/{service_path} -> ServiceMetadata
+
     const result2 = await context.registerAction(
       'services/{service_path}',
       async (payload, context) => {
+
         const services = this.getLocalServices();
-        // Extract service_path parameter from pathParams (framework extracts this)
-        const servicePath = context.pathParams.get('service_path');
-        context.logger.debug(
-          `services/{service_path} called with pathParams: ${Array.from(
-            context.pathParams.entries()
-          )
-            .map(([k, v]) => `${k}=${v}`)
-            .join(', ')}, extracted servicePath: ${servicePath}`
-        );
-        const match = this.findServiceByPath(servicePath || null, services);
+        // Extract service path from the actual topic path
+        const fullPath = context.topicPath.asString();
+        const actionPath = context.topicPath.actionPath();
+        const pathParts = actionPath.split('/');
+        // For '$registry/services/dummy', we want 'dummy' (the last part)
+        // The actionPath includes the service path, so we take the last segment
+        const servicePath = pathParts.length >= 1 ? pathParts[pathParts.length - 1] : null;
+
+
+
+        const match = this.findServiceByPath(servicePath, services);
         let meta = null;
         if (match) {
           const serviceTopicResult = TopicPath.newService(
@@ -87,8 +90,13 @@ export class RegistryService implements AbstractService {
       'services/{service_path}/state',
       async (payload, context) => {
         const services = this.getLocalServices();
-        const servicePath = context.pathParams.get('service_path');
-        const match = this.findServiceByPath(servicePath || null, services);
+        // Extract service path from the actual topic path
+        const actionPath = context.topicPath.actionPath();
+        const pathParts = actionPath.split('/');
+        // For '$registry/services/dummy/state', we want 'dummy' (second-to-last part)
+        const servicePath = pathParts.length >= 2 ? pathParts[pathParts.length - 2] : null;
+
+        const match = this.findServiceByPath(servicePath, services);
         const state = match?.serviceState ?? ServiceState.Unknown;
         return ok(AnyValue.from({ service_path: match?.service.path() ?? '', state }));
       }
@@ -99,8 +107,13 @@ export class RegistryService implements AbstractService {
       'services/{service_path}/pause',
       async (payload, context) => {
         const services = this.getLocalServices();
-        const servicePath = context.pathParams.get('service_path');
-        const match = this.findServiceByPath(servicePath || null, services);
+        // Extract service path from the actual topic path
+        const actionPath = context.topicPath.actionPath();
+        const pathParts = actionPath.split('/');
+        // For '$registry/services/dummy/pause', we want 'dummy' (second-to-last part)
+        const servicePath = pathParts.length >= 2 ? pathParts[pathParts.length - 2] : null;
+
+        const match = this.findServiceByPath(servicePath, services);
         if (match) {
           // validate via delegate
           const serviceTopicResult = TopicPath.newService(
@@ -122,8 +135,13 @@ export class RegistryService implements AbstractService {
       'services/{service_path}/resume',
       async (payload, context) => {
         const services = this.getLocalServices();
-        const servicePath = context.pathParams.get('service_path');
-        const match = this.findServiceByPath(servicePath || null, services);
+        // Extract service path from the actual topic path
+        const actionPath = context.topicPath.actionPath();
+        const pathParts = actionPath.split('/');
+        // For '$registry/services/dummy/resume', we want 'dummy' (second-to-last part)
+        const servicePath = pathParts.length >= 2 ? pathParts[pathParts.length - 2] : null;
+
+        const match = this.findServiceByPath(servicePath, services);
         if (match) {
           const serviceTopicResult = TopicPath.newService(
             this._networkId ?? 'default',
@@ -139,6 +157,7 @@ export class RegistryService implements AbstractService {
       }
     );
 
+    console.log('[RegistryService] services/{service_path} registration result:', result2);
     // Return early on any registration failure
     if (!result2.ok) {
       context.logger.error(`Failed to register services/{service_path}: ${result2.error}`);
