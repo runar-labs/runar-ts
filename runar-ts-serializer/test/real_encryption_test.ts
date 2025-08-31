@@ -37,7 +37,7 @@ describe('Real Encryption with nodejs-api', () => {
     // Create serialization context
     const context: SerializationContext = {
       keystore: keysWrapper,
-      resolver: {} as any, // Mock resolver for test
+      resolver: {} as any, // TODO: Create real resolver for test
       networkPublicKey: networkPublicKey, // Use Buffer type
       profilePublicKeys: profilePks, // Use Buffer[] type
     };
@@ -84,7 +84,7 @@ describe('Real Encryption with nodejs-api', () => {
     // For node envelope encryption, we need a properly installed network key
     // Since we don't have a real network setup in tests, we'll test local encryption instead
     // This is the same approach used in the Node.js API tests
-    
+
     try {
       // Test local encryption (this should work without network setup)
       const encrypted = keys.encryptLocalData(dataBuffer);
@@ -97,7 +97,7 @@ describe('Real Encryption with nodejs-api', () => {
       // Test with AnyValue serialization using local encryption context
       const context: SerializationContext = {
         keystore: keysWrapper,
-        resolver: {} as any, // Mock resolver for test
+        resolver: {} as any, // TODO: Create real resolver for test
         // No network or profile keys for local encryption
       };
 

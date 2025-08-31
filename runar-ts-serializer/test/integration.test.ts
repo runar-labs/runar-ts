@@ -9,53 +9,73 @@ import {
   AnyValue,
   SerializationContext,
 } from '../src/index.js';
+import { Keys } from 'runar-nodejs-api';
+import { KeysManagerWrapper } from '../../runar-ts-node/src/keys_manager_wrapper.js';
 
-// Mock keystore for testing
-class MockKeystore {
+// REAL keystore for testing - NO MOCKS ALLOWED
+class RealTestKeystore {
+  private keys: Keys;
+  private wrapper: KeysManagerWrapper;
+  private _networkPublicKey: Buffer;
+  private _profilePublicKeys: Buffer[];
+
+  constructor() {
+    this.keys = new Keys();
+    this.keys.setPersistenceDir('/tmp/runar-integration-test');
+    this.keys.enableAutoPersist(true);
+    this.keys.initAsMobile();
+    this.wrapper = new KeysManagerWrapper(this.keys);
+    
+    // Initialize with real keys
+    this._networkPublicKey = Buffer.alloc(32, 0x01);
+    this._profilePublicKeys = [Buffer.alloc(32, 0x02), Buffer.alloc(32, 0x03)];
+  }
+
+  async initialize(): Promise<void> {
+    await this.keys.mobileInitializeUserRootKey();
+    await this.keys.flushState();
+    
+    // Generate real network and profile keys
+    const networkId = this.keys.mobileGenerateNetworkDataKey();
+    this._networkPublicKey = this.keys.mobileGetNetworkPublicKey(networkId);
+    
+    const personalKey = this.keys.mobileDeriveUserProfileKey('personal');
+    const workKey = this.keys.mobileDeriveUserProfileKey('work');
+    this._profilePublicKeys = [personalKey, workKey];
+  }
+
+  get networkPublicKey(): Buffer { return this._networkPublicKey; }
+  get profilePublicKeys(): Buffer[] { return this._profilePublicKeys; }
+
   encryptWithEnvelope(data: Buffer, networkId: string | null, profilePublicKeys: Buffer[]): Buffer {
-    // Simple mock that returns the data wrapped in a mock envelope
-    const mockEnvelope = {
-      encryptedData: data,
-      networkId: networkId || 'test-network',
-      networkEncryptedKey: Buffer.from('mock-network-key'),
-      profileEncryptedKeys: { 'test-profile': Buffer.from('mock-profile-key') },
-    };
-
-    const { encode } = require('cbor-x');
-    return Buffer.from(encode(mockEnvelope));
+    // Use REAL native API encryption
+    const networkPk = networkId ? this._networkPublicKey : null;
+    return this.wrapper.encryptWithEnvelope(data, networkPk, profilePublicKeys);
   }
 
   decryptEnvelope(eedCbor: Buffer): Buffer {
-    // Simple mock that extracts the data from the mock envelope
-    const { decode } = require('cbor-x');
-    const envelope = decode(eedCbor);
-    return envelope.encryptedData;
+    // Use REAL native API decryption
+    return this.wrapper.decryptEnvelope(eedCbor);
   }
 
-  ensureSymmetricKey(keyName: string): Buffer {
-    return Buffer.from('mock-key');
-  }
-  setLabelMapping(mappingCbor: Buffer): void {}
-  setLocalNodeInfo(nodeInfoCbor: Buffer): void {}
-  setPersistenceDir(dir: string): void {}
-  enableAutoPersist(enabled: boolean): void {}
-  async wipePersistence(): Promise<void> {}
-  async flushState(): Promise<void> {}
-  getKeystoreState(): number {
-    return 1;
-  }
-  getKeystoreCaps(): any {
-    return {};
-  }
+  ensureSymmetricKey(keyName: string): Buffer { return this.keys.ensureSymmetricKey(keyName); }
+  setLabelMapping(mappingCbor: Buffer): void { this.keys.setLabelMapping(mappingCbor); }
+  setLocalNodeInfo(nodeInfoCbor: Buffer): void { this.keys.setLocalNodeInfo(nodeInfoCbor); }
+  setPersistenceDir(dir: string): void { this.keys.setPersistenceDir(dir); }
+  enableAutoPersist(enabled: boolean): void { this.keys.enableAutoPersist(enabled); }
+  async wipePersistence(): Promise<void> { await this.keys.wipePersistence(); }
+  async flushState(): Promise<void> { await this.keys.flushState(); }
+  getKeystoreState(): number { return this.keys.getKeystoreState(); }
+  getKeystoreCaps(): any { return this.keys.getKeystoreCaps(); }
 }
 
 describe('Integration Tests', () => {
   let config: LabelResolverConfig;
   let resolver: LabelResolver;
   let cache: ResolverCache;
-  let keystore: MockKeystore;
+  let keystore: RealTestKeystore;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     // Create test configuration
     config = {
       labelMappings: new Map([
@@ -94,8 +114,9 @@ describe('Integration Tests', () => {
     // Create cache
     cache = ResolverCache.newDefault();
 
-    // Create keystore
-    keystore = new MockKeystore();
+    // Create and initialize REAL keystore
+    keystore = new RealTestKeystore();
+    await keystore.initialize();
   });
 
   describe('LabelResolver', () => {
@@ -128,31 +149,37 @@ describe('Integration Tests', () => {
         new Uint8Array([14, 15, 16, 17]),
       ]);
     });
+
+    it('should handle unknown labels correctly', () => {
+      const info = resolver.resolveLabelInfo('unknown');
+      expect(info.ok).toBe(true);
+      expect(info.value).toBeUndefined();
+    });
   });
 
   describe('ResolverCache', () => {
-    it('should cache and retrieve resolvers', () => {
-      const userKeys = [new Uint8Array([1, 2, 3])];
-
+    it('should cache and retrieve resolvers correctly', () => {
+      const userKeys = [new Uint8Array([1, 2, 3]), new Uint8Array([4, 5, 6])];
+      
       // First call should create new resolver
       const result1 = cache.getOrCreate(config, userKeys);
       expect(result1.ok).toBe(true);
-
+      
       // Second call should return cached resolver
       const result2 = cache.getOrCreate(config, userKeys);
       expect(result2.ok).toBe(true);
-
+      
       // Should be the same instance
       expect(result1.value).toBe(result2.value);
     });
 
-    it('should handle different user key sets separately', () => {
+    it('should handle different user keys correctly', () => {
       const userKeys1 = [new Uint8Array([1, 2, 3])];
       const userKeys2 = [new Uint8Array([4, 5, 6])];
-
+      
       const result1 = cache.getOrCreate(config, userKeys1);
       const result2 = cache.getOrCreate(config, userKeys2);
-
+      
       expect(result1.ok).toBe(true);
       expect(result2.ok).toBe(true);
       expect(result1.value).not.toBe(result2.value);
@@ -160,28 +187,71 @@ describe('Integration Tests', () => {
   });
 
   describe('Encryption Integration', () => {
-    it('should encrypt and decrypt label groups', async () => {
-      // Skip encryption test for now due to cbor-x dependency issues in test environment
-      // TODO: Fix cbor-x import in test environment
-      expect(true).toBe(true);
+    it('should encrypt and decrypt label groups correctly', () => {
+      const testData = { message: 'Hello World', number: 42 };
+      const label = 'system';
+      
+      // Encrypt
+      const encrypted = encryptLabelGroupSync(label, testData, keystore, resolver);
+      expect(encrypted.ok).toBe(true);
+      
+      // Decrypt
+      const decrypted = decryptLabelGroupSync(encrypted.value, keystore);
+      expect(decrypted.ok).toBe(true);
+      expect(decrypted.value).toEqual(testData);
+    });
+
+    it('should handle user-only labels correctly', () => {
+      const testData = { message: 'User Data', number: 123 };
+      const label = 'user';
+      
+      const encrypted = encryptLabelGroupSync(label, testData, keystore, resolver);
+      expect(encrypted.ok).toBe(true);
+      
+      const decrypted = decryptLabelGroupSync(encrypted.value, keystore);
+      expect(decrypted.ok).toBe(true);
+      expect(decrypted.value).toEqual(testData);
     });
   });
 
   describe('AnyValue Integration', () => {
-    it('should create and serialize AnyValue with context', () => {
-      const testData = { test: 'data' };
-      const av = AnyValue.newStruct(testData);
+    it('should serialize and deserialize primitive values', () => {
+      const value = AnyValue.newPrimitive('test string');
+      const serialized = value.serialize();
+      expect(serialized.ok).toBe(true);
+      
+      const deserialized = AnyValue.deserialize(serialized.value);
+      expect(deserialized.ok).toBe(true);
+      expect(deserialized.value.getCategory()).toBe(1); // ValueCategory.Primitive
+      const result = deserialized.value.as<string>();
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe('test string');
+    });
 
+    it('should handle encrypted serialization with context', async () => {
+      const testData = { message: 'Encrypted Data', number: 999 };
+      const value = AnyValue.newStruct(testData);
+      
       const context: SerializationContext = {
         keystore,
         resolver,
-        networkPublicKey: new Uint8Array([1, 2, 3, 4]),
-        profilePublicKeys: [new Uint8Array([10, 11, 12, 13])],
+        networkPublicKey: keystore.networkPublicKey,
+        profilePublicKeys: keystore.profilePublicKeys,
       };
-
-      const serialized = av.serialize(context);
+      
+      const serialized = await value.serialize(context);
       expect(serialized.ok).toBe(true);
-      expect(serialized.value.length).toBeGreaterThan(0);
+      expect(serialized.value.length > 0).toBe(true);
+      
+      // Deserialize with keystore
+      const deserialized = AnyValue.deserialize(serialized.value, { keystore });
+      expect(deserialized.ok).toBe(true);
+      expect(deserialized.value.getCategory()).toBe(4); // ValueCategory.Struct
+      
+      // Test lazy deserialization
+      const result = deserialized.value.as<typeof testData>();
+      expect(result.ok).toBe(true);
+      expect(result.value).toEqual(testData);
     });
   });
 });
