@@ -38,14 +38,14 @@ export enum ValueCategory {
 
 export interface SerializationContext {
   keystore?: CommonKeysInterface;
-  resolver?: any;
+  resolver: import('./label_resolver.js').LabelResolver; // Now required and properly typed
+  networkPublicKey?: Uint8Array; // Pre-resolved network public key
+  profilePublicKeys?: Uint8Array[]; // Multiple profile keys
 }
 
 export interface DeserializationContext {
-  // Placeholder for label resolver, key info, etc.
-  // Actual fields will be aligned with Rust serializer context once FFI is wired
-  labelResolverName?: string;
   keystore?: CommonKeysInterface;
+  resolver?: import('./label_resolver.js').LabelResolver; // Now properly typed
   decryptEnvelope?: (eed: Uint8Array) => Result<Uint8Array>;
 }
 

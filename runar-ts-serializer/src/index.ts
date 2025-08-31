@@ -16,6 +16,31 @@ import { resolveType, initWirePrimitives, registerType, clearRegistry } from './
 import { getTypeName } from 'runar-ts-decorators';
 import { CBORUtils } from './cbor_utils.js';
 
+// Export LabelResolver types and functions
+export type {
+  LabelKeyInfo,
+  LabelValue,
+  LabelKeyword,
+  LabelResolverConfig,
+  KeyMappingConfig,
+} from './label_resolver.js';
+export { LabelResolver, createContextLabelResolver } from './label_resolver.js';
+
+// Export ResolverCache
+export type { CacheStats } from './resolver_cache.js';
+export { ResolverCache } from './resolver_cache.js';
+
+// Export encryption functions
+export type {
+  EnvelopeEncryptedData,
+  EncryptedLabelGroup,
+} from './encryption.js';
+export {
+  encryptLabelGroup,
+  decryptLabelGroup,
+  decryptBytes,
+} from './encryption.js';
+
 // Re-export registry functions
 export { registerType, clearRegistry, resolveType } from './registry.js';
 
