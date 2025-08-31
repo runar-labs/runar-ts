@@ -79,7 +79,7 @@ export function lookupDecryptorByTypeName(rustTypeName: string): DecryptFn | und
 // JSON converter registration
 export function registerToJson<T>(rustTypeName: string, toJsonFn: ToJsonFn<T>): void {
   jsonRegistryByRustName.set(rustTypeName, toJsonFn);
-  
+
   // If a wire name exists for this type, also bind under wire name
   const wireName = lookupWireName(rustTypeName);
   if (wireName) {

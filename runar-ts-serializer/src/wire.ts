@@ -3,7 +3,11 @@ import { Result, ok, err } from './result.js';
 // Common interface for serialization and functionality that should NOT be aware of platform differences
 export interface CommonKeysInterface {
   // === ENVELOPE ENCRYPTION (WORKS ON BOTH) ===
-  encryptWithEnvelope(data: Buffer, networkId: string | null, profilePublicKeys: Buffer[]): Buffer;
+  encryptWithEnvelope(
+    data: Buffer,
+    networkPublicKey: Buffer | undefined | null,
+    profilePublicKeys: Buffer[]
+  ): Buffer;
 
   decryptEnvelope(eedCbor: Buffer): Buffer;
 

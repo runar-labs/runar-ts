@@ -107,14 +107,14 @@ export class Node {
       this.config.getLabelResolverConfig(),
       userProfileKeys ?? []
     );
-    
+
     if (!resolverResult.ok) {
       throw new Error(`Failed to create label resolver: ${resolverResult.error.message}`);
     }
 
     // Get network public key from keystore for the node's default network
     const networkPublicKey = this.keysWrapper.getNetworkPublicKey(this.networkId);
-    
+
     return {
       keystore: this.keysWrapper,
       resolver: resolverResult.value,

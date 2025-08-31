@@ -18,9 +18,9 @@ class MockKeystore {
       encryptedData: data,
       networkId: networkId || 'test-network',
       networkEncryptedKey: Buffer.from('mock-network-key'),
-      profileEncryptedKeys: { 'test-profile': Buffer.from('mock-profile-key') }
+      profileEncryptedKeys: { 'test-profile': Buffer.from('mock-profile-key') },
     };
-    
+
     // Return CBOR-encoded EnvelopeEncryptedData as required by the design
     return Buffer.from(encode(mockEnvelope));
   }
@@ -251,7 +251,7 @@ describe('Encryption Functions', () => {
         encryptedData: originalData,
         networkId: 'test-network',
         networkEncryptedKey: new Uint8Array([4, 5, 6]),
-        profileEncryptedKeys: { 'test-profile': new Uint8Array([7, 8, 9]) }
+        profileEncryptedKeys: { 'test-profile': new Uint8Array([7, 8, 9]) },
       };
       const testData = encode(testEnvelope);
 
@@ -285,7 +285,7 @@ describe('Encryption Functions', () => {
         encryptedData: new Uint8Array([1, 2, 3]),
         networkId: 'test-network',
         networkEncryptedKey: new Uint8Array([4, 5, 6]),
-        profileEncryptedKeys: { 'test-profile': new Uint8Array([7, 8, 9]) }
+        profileEncryptedKeys: { 'test-profile': new Uint8Array([7, 8, 9]) },
       };
       const testData = encode(testEnvelope);
 

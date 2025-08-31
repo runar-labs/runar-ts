@@ -1,11 +1,11 @@
 import 'reflect-metadata';
 import { getFieldsByLabel, getOrderedLabels, getDefaultValue } from './helpers';
-import { 
-  registerEncrypt, 
-  registerDecrypt, 
+import {
+  registerEncrypt,
+  registerDecrypt,
   registerWireName,
   lookupEncryptorByTypeName,
-  lookupDecryptorByTypeName
+  lookupDecryptorByTypeName,
 } from 'runar-ts-serializer';
 
 // ============================================================================
@@ -137,7 +137,11 @@ export function Encrypt(options?: EncryptOptions) {
       }
 
       // Registration method for serializer registry
-      private static registerWithSerializer(className: string, typeName: string, decoratedClass: any) {
+      private static registerWithSerializer(
+        className: string,
+        typeName: string,
+        decoratedClass: any
+      ) {
         // Register wire name
         registerWireName(className, typeName);
 

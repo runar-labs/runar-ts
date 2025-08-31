@@ -9,21 +9,33 @@ export class KeysManagerWrapper implements CommonKeysInterface {
   constructor(private keys: Keys) {}
 
   // === ENVELOPE ENCRYPTION (AUTOMATIC ROUTING) ===
-  encryptWithEnvelope(data: Buffer, networkId: string | null, profilePublicKeys: Buffer[]): Buffer {
+  encryptWithEnvelope(
+    data: Buffer,
+    networkPublicKey: Buffer | undefined | null,
+    profilePublicKeys: Buffer[]
+  ): Buffer {
     // Handle both mobile and node platforms
     if ('mobileEncryptWithEnvelope' in this.keys && 'initAsMobile' in this.keys) {
       // Check if it's initialized as mobile
       try {
-        return (this.keys as any).mobileEncryptWithEnvelope(data, networkId, profilePublicKeys);
+        return (this.keys as any).mobileEncryptWithEnvelope(
+          data,
+          networkPublicKey,
+          profilePublicKeys
+        );
       } catch (error) {
         // If mobile method fails, try node method
         if ('nodeEncryptWithEnvelope' in this.keys) {
-          return (this.keys as any).nodeEncryptWithEnvelope(data, networkId, profilePublicKeys);
+          return (this.keys as any).nodeEncryptWithEnvelope(
+            data,
+            networkPublicKey,
+            profilePublicKeys
+          );
         }
         throw error;
       }
     } else if ('nodeEncryptWithEnvelope' in this.keys) {
-      return (this.keys as any).nodeEncryptWithEnvelope(data, networkId, profilePublicKeys);
+      return (this.keys as any).nodeEncryptWithEnvelope(data, networkPublicKey, profilePublicKeys);
     } else {
       throw new Error('No encryption method available on this platform');
     }

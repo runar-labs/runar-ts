@@ -23,6 +23,9 @@ describe('Real Encryption with nodejs-api', () => {
     // Generate a network ID for envelope encryption
     const networkId = keys.mobileGenerateNetworkDataKey();
 
+    // Get the actual network public key for encryption
+    const networkPublicKey = keys.mobileGetNetworkPublicKey(networkId);
+
     // Create profile keys using the proper derivation method
     const personalKey = keys.mobileDeriveUserProfileKey('personal');
     const workKey = keys.mobileDeriveUserProfileKey('work');
@@ -39,9 +42,9 @@ describe('Real Encryption with nodejs-api', () => {
     const testData = { message: 'Hello, Mobile World!', number: 42 };
     const dataBuffer = Buffer.from(encode(testData));
 
-    // Encrypt using wrapper
+    // Encrypt using wrapper - pass networkPublicKey as Buffer, not networkId as string
     const profilePks = [personalKey, workKey];
-    const encrypted = keysWrapper.encryptWithEnvelope(dataBuffer, networkId, profilePks);
+    const encrypted = keysWrapper.encryptWithEnvelope(dataBuffer, networkPublicKey, profilePks);
 
     // Decrypt using wrapper
     const decrypted = keysWrapper.decryptEnvelope(encrypted);
@@ -80,16 +83,19 @@ describe('Real Encryption with nodejs-api', () => {
     const testData = { message: 'Hello, Node World!', number: 123 };
     const dataBuffer = Buffer.from(encode(testData));
 
-    // For node manager, we need to install the network key using the proper format
-    const networkId = 'test-network-id';
+    // For node manager, we need to create a proper network public key buffer
+    // In real usage, this would come from the network configuration
+    const networkPublicKey = Buffer.alloc(65, 1); // Simulate network public key
 
     // Create a test profile public key (in real usage, this would come from the network)
     // Use a proper uncompressed ECDSA public key format (65 bytes)
     const profilePublicKey = Buffer.alloc(65, 1);
 
     try {
-      // Encrypt using wrapper
-      const encrypted = keysWrapper.encryptWithEnvelope(dataBuffer, networkId, [profilePublicKey]);
+      // Encrypt using wrapper - pass networkPublicKey as Buffer, not networkId as string
+      const encrypted = keysWrapper.encryptWithEnvelope(dataBuffer, networkPublicKey, [
+        profilePublicKey,
+      ]);
 
       // Decrypt using wrapper
       const decrypted = keysWrapper.decryptEnvelope(encrypted);

@@ -63,11 +63,11 @@ export function encryptLabelGroupSync<T>(
 
     // Convert to Buffer for CommonKeysInterface compatibility
     const dataBuffer = Buffer.from(plainBytes);
-    const networkId = info.networkPublicKey ? 'network' : null; // Use string ID for native module
+    const networkPublicKey = info.networkPublicKey ? Buffer.from(info.networkPublicKey) : null;
     const profileKeys = info.profilePublicKeys.map(pk => Buffer.from(pk));
 
     // Encrypt using envelope encryption (synchronous)
-    const encryptedBytes = keystore.encryptWithEnvelope(dataBuffer, networkId, profileKeys);
+    const encryptedBytes = keystore.encryptWithEnvelope(dataBuffer, networkPublicKey, profileKeys);
 
     // Parse the CBOR-encoded EnvelopeEncryptedData returned by native module
     const envelopeData = decode(encryptedBytes);
@@ -79,10 +79,19 @@ export function encryptLabelGroupSync<T>(
 
     // Convert to our interface format
     const envelope: EnvelopeEncryptedData = {
-      encryptedData: envelopeData.encryptedData ? new Uint8Array(envelopeData.encryptedData) : new Uint8Array(),
+      encryptedData: envelopeData.encryptedData
+        ? new Uint8Array(envelopeData.encryptedData)
+        : new Uint8Array(),
       networkId: envelopeData.networkId,
-      networkEncryptedKey: envelopeData.networkEncryptedKey ? new Uint8Array(envelopeData.networkEncryptedKey) : new Uint8Array(),
-      profileEncryptedKeys: new Map(Object.entries(envelopeData.profileEncryptedKeys || {}).map(([k, v]) => [k, new Uint8Array(v as any)])),
+      networkEncryptedKey: envelopeData.networkEncryptedKey
+        ? new Uint8Array(envelopeData.networkEncryptedKey)
+        : new Uint8Array(),
+      profileEncryptedKeys: new Map(
+        Object.entries(envelopeData.profileEncryptedKeys || {}).map(([k, v]) => [
+          k,
+          new Uint8Array(v as any),
+        ])
+      ),
     };
 
     return ok({

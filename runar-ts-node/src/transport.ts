@@ -52,7 +52,9 @@ export class NativeQuicTransport implements QuicTransport {
     // Convert Uint8Array to Buffer for native API compatibility
     const payloadBuffer = Buffer.from(payload);
     const networkPkBuffer = networkPublicKey ? Buffer.from(networkPublicKey) : null;
-    const profileKeysBuffers = profilePublicKeys ? profilePublicKeys.map(pk => Buffer.from(pk)) : [];
+    const profileKeysBuffers = profilePublicKeys
+      ? profilePublicKeys.map(pk => Buffer.from(pk))
+      : [];
 
     const responseBuffer = await this.nativeTransport.request(
       path,
