@@ -104,4 +104,14 @@ export class KeysManagerWrapper implements CommonKeysInterface {
   getKeystoreCaps(): any {
     return this.keys.getKeystoreCaps();
   }
+
+  // === NETWORK KEY MANAGEMENT ===
+  getNetworkPublicKey(networkId: string): Uint8Array {
+    // According to the design plan, this should retrieve the network public key
+    // from the native Keys instance for the specified network ID
+    // For now, return a placeholder - this will be implemented when we have
+    // the proper native API integration
+    // TODO: Implement proper network key retrieval from the native Keys instance
+    return new Uint8Array(32); // Placeholder 32-byte key
+  }
 }

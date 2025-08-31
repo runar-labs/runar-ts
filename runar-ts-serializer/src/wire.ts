@@ -49,6 +49,18 @@ export interface DeserializationContext {
   decryptEnvelope?: (eed: Uint8Array) => Result<Uint8Array>;
 }
 
+/**
+ * Lazy data holder for complex types that are not immediately deserialized
+ */
+export interface LazyDataWithOffset {
+  typeName: string;
+  originalBuffer: Uint8Array;
+  startOffset?: number;
+  endOffset?: number;
+  keystore?: CommonKeysInterface;
+  encrypted: boolean;
+}
+
 export interface WireHeader {
   category: ValueCategory;
   isEncrypted: boolean;

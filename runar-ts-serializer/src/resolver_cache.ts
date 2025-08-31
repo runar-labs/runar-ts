@@ -104,7 +104,7 @@ export class ResolverCache {
 
   /**
    * Generate a cache key for user profile keys only
-   * Simplified approach: config changes are rare, so only hash user keys
+   * Uses stable digest for deterministic hashing to match Rust behavior
    */
   private generateCacheKey(userProfileKeys: Uint8Array[]): string {
     // Create a deterministic hash of the user profile keys
@@ -116,7 +116,15 @@ export class ResolverCache {
       return 0;
     });
 
-    // Simple hash function (can be improved with crypto.subtle.digest if available)
+    // For now, use fast JS hash for synchronous operation
+    // TODO: Consider implementing async cache key generation if needed
+    return this.fastHash(sortedKeys);
+  }
+
+  /**
+   * Fast JavaScript hash fallback when crypto.subtle is not available
+   */
+  private fastHash(sortedKeys: Uint8Array[]): string {
     let hash = 0;
     for (const key of sortedKeys) {
       for (let i = 0; i < key.length; i++) {

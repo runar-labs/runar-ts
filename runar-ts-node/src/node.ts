@@ -1,13 +1,14 @@
 import { v4 as uuidv4 } from 'uuid';
-import { AnyValue } from 'runar-ts-serializer';
+import { AnyValue, SerializationContext, ResolverCache } from 'runar-ts-serializer';
 import { PathTrie, TopicPath, Logger } from 'runar-ts-common';
 import type { Keys } from 'runar-nodejs-api';
 import { KeysManagerWrapper } from './keys_manager_wrapper';
-import { SerializationContext } from 'runar-ts-serializer';
 import { KeysService } from './keys_service';
 import { RegistryService } from './registry_service';
 import { NodeConfig } from './config';
 import { ServiceRegistry } from './registry';
+import { QuicTransport } from './transport';
+import { NodeDiscovery } from './discovery';
 import {
   AbstractService,
   ServiceEntry,
@@ -58,6 +59,10 @@ export class Node {
   private readonly keysManager: Keys; // Store the extracted keys manager
   private readonly keysWrapper: KeysManagerWrapper; // Wrapper for serializer
   private readonly config: NodeConfig;
+  private readonly resolverCache: ResolverCache; // Cache for label resolvers
+  private readonly supportsNetworking: boolean;
+  private networkTransport?: QuicTransport;
+  private networkDiscovery?: NodeDiscovery;
   private running = false;
   private retainedEvents = new Map<
     string,
@@ -81,6 +86,12 @@ export class Node {
     // Create wrapper for serializer (matching Rust NodeKeyManagerWrapper)
     this.keysWrapper = new KeysManagerWrapper(this.keysManager);
 
+    // Initialize resolver cache (matching Rust)
+    this.resolverCache = ResolverCache.newDefault();
+
+    // Check if networking is supported based on config
+    this.supportsNetworking = !!this.config.networkConfig;
+
     this.logger = LoggerClass.newRoot(ComponentEnum.Node).setNodeId(this.networkId) as any;
   }
 
@@ -90,11 +101,80 @@ export class Node {
   }
 
   // Method to create serialization context (matching Rust pattern)
-  createSerializationContext(): SerializationContext {
+  createSerializationContext(userProfileKeys?: Uint8Array[]): SerializationContext {
+    // Get or create a label resolver from cache
+    const resolverResult = this.resolverCache.getOrCreate(
+      this.config.getLabelResolverConfig(),
+      userProfileKeys ?? []
+    );
+    
+    if (!resolverResult.ok) {
+      throw new Error(`Failed to create label resolver: ${resolverResult.error.message}`);
+    }
+
+    // Get network public key from keystore for the node's default network
+    const networkPublicKey = this.keysWrapper.getNetworkPublicKey(this.networkId);
+    
     return {
       keystore: this.keysWrapper,
-      resolver: undefined, // Would need to implement this
+      resolver: resolverResult.value,
+      networkPublicKey,
+      profilePublicKeys: userProfileKeys ?? [],
     };
+  }
+
+  // Method to start networking (matching Rust pattern)
+  async startNetworking(): Promise<Result<void, Error>> {
+    if (!this.supportsNetworking) {
+      return err(new Error('Networking not configured for this node'));
+    }
+
+    try {
+      // Initialize transport and discovery if not already done
+      if (!this.networkTransport || !this.networkDiscovery) {
+        // TODO: Initialize transport and discovery from config
+        // This will be implemented when we have the native API integration
+        return err(new Error('Transport and discovery initialization not yet implemented'));
+      }
+
+      // Start transport
+      await this.networkTransport.start();
+
+      // Initialize discovery
+      await this.networkDiscovery.init(new Uint8Array()); // TODO: Proper options
+
+      // Bind discovery events to transport
+      await this.networkDiscovery.bindEventsToTransport(this.networkTransport);
+
+      // Start announcing presence
+      await this.networkDiscovery.startAnnouncing();
+
+      return ok(undefined);
+    } catch (error) {
+      return err(error instanceof Error ? error : new Error(String(error)));
+    }
+  }
+
+  // Method to handle network messages (matching Rust pattern)
+  async handleNetworkMessage(message: any): Promise<Result<void, Error>> {
+    if (!this.supportsNetworking) {
+      return err(new Error('Networking not supported on this node'));
+    }
+
+    try {
+      // TODO: Implement full network message handling according to design plan
+      // This includes:
+      // 1. Parse message, extract path, payload_bytes, correlation_id, profile_public_keys
+      // 2. Build LabelResolver from cache via createUserLabelResolver(profile_public_keys)
+      // 3. Build DeserializationContext with keystore and resolver, then AnyValue.deserialize(payload)
+      // 4. Route to local service/action and obtain AnyValue result
+      // 5. Build SerializationContext with same profile keys; result.serialize(context)
+      // 6. Reply via transport.sendResponse
+
+      return err(new Error('Network message handling not yet implemented'));
+    } catch (error) {
+      return err(error instanceof Error ? error : new Error(String(error)));
+    }
   }
 
   private getLocalServicesSnapshot = (): ServiceEntry[] => {

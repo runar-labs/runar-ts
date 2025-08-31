@@ -8,19 +8,27 @@ import {
   EncryptedLabelGroup,
 } from '../src/encryption.js';
 import { LabelResolver, LabelResolverConfig, LabelKeyword } from '../src/label_resolver.js';
+import { encode, decode } from 'cbor-x';
 
 // Mock CommonKeysInterface for testing
 class MockKeystore {
   encryptWithEnvelope(data: Buffer, networkId: string | null, profilePublicKeys: Buffer[]): Buffer {
-    // Simple mock encryption - just reverse the data
-    const reversed = Buffer.from(data).reverse();
-    return reversed;
+    // Create mock EnvelopeEncryptedData structure as expected by the design
+    const mockEnvelope = {
+      encryptedData: data,
+      networkId: networkId || 'test-network',
+      networkEncryptedKey: Buffer.from('mock-network-key'),
+      profileEncryptedKeys: { 'test-profile': Buffer.from('mock-profile-key') }
+    };
+    
+    // Return CBOR-encoded EnvelopeEncryptedData as required by the design
+    return Buffer.from(encode(mockEnvelope));
   }
 
   decryptEnvelope(eedCbor: Buffer): Buffer {
-    // Simple mock decryption - reverse the data back
-    const reversed = Buffer.from(eedCbor).reverse();
-    return reversed;
+    // Parse CBOR-encoded EnvelopeEncryptedData and extract the data
+    const envelope = decode(eedCbor);
+    return Buffer.from(envelope.encryptedData);
   }
 
   // Mock other required methods
@@ -82,6 +90,9 @@ describe('Encryption Functions', () => {
       const testData = { message: 'Hello, World!', number: 42 };
 
       const result = await encryptLabelGroup('system', testData, keystore, resolver);
+      if (!result.ok) {
+        console.log('Encryption failed:', result.error.message);
+      }
       assert(result.ok, 'Encryption should succeed');
 
       const encryptedGroup = result.value;
@@ -233,20 +244,32 @@ describe('Encryption Functions', () => {
   describe('decryptBytes', () => {
     it('should decrypt bytes successfully', async () => {
       const keystore = new MockKeystore();
-      const testData = new Uint8Array([1, 2, 3, 4, 5]);
+      const originalData = new Uint8Array([1, 2, 3, 4, 5]);
+
+      // Create valid CBOR-encoded EnvelopeEncryptedData for testing
+      const testEnvelope = {
+        encryptedData: originalData,
+        networkId: 'test-network',
+        networkEncryptedKey: new Uint8Array([4, 5, 6]),
+        profileEncryptedKeys: { 'test-profile': new Uint8Array([7, 8, 9]) }
+      };
+      const testData = encode(testEnvelope);
 
       // Mock the keystore to return the original data
       const mockKeystore = {
         ...keystore,
         decryptEnvelope: (data: Buffer) => {
           // Return the original data for testing
-          return Buffer.from(testData);
+          return Buffer.from(originalData);
         },
       };
 
       const result = await decryptBytes(testData, mockKeystore);
+      if (!result.ok) {
+        console.log('decryptBytes failed:', result.error.message);
+      }
       assert(result.ok, 'Decryption should succeed');
-      assert.deepStrictEqual(result.value, testData, 'Decrypted bytes should match original');
+      assert.deepStrictEqual(result.value, originalData, 'Decrypted bytes should match original');
     });
 
     it('should handle keystore errors gracefully', async () => {
@@ -257,7 +280,14 @@ describe('Encryption Functions', () => {
         },
       };
 
-      const testData = new Uint8Array([1, 2, 3]);
+      // Create valid CBOR-encoded EnvelopeEncryptedData for testing
+      const testEnvelope = {
+        encryptedData: new Uint8Array([1, 2, 3]),
+        networkId: 'test-network',
+        networkEncryptedKey: new Uint8Array([4, 5, 6]),
+        profileEncryptedKeys: { 'test-profile': new Uint8Array([7, 8, 9]) }
+      };
+      const testData = encode(testEnvelope);
 
       const result = await decryptBytes(testData, failingKeystore);
       assert(!result.ok, 'Decryption should fail when keystore fails');

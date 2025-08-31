@@ -1,5 +1,12 @@
 import 'reflect-metadata';
 import { getFieldsByLabel, getOrderedLabels, getDefaultValue } from './helpers';
+import { 
+  registerEncrypt, 
+  registerDecrypt, 
+  registerWireName,
+  lookupEncryptorByTypeName,
+  lookupDecryptorByTypeName
+} from 'runar-ts-serializer';
 
 // ============================================================================
 // INTERFACES & TYPES
@@ -92,86 +99,28 @@ export function Encrypt(options?: EncryptOptions) {
       static encryptedClassName = `Encrypted${className}`;
       static fieldEncryptions = (constructor as any).fieldEncryptions || [];
 
-      // Encryption method
-      async encryptWithKeystore(keystore: any, resolver: any) {
-        // Create a simple encrypted representation
-        const encrypted: any = {};
-
-        // Copy plaintext fields (fields without encryption decorators)
-        const plaintextFields = this.getPlaintextFields();
-        for (const field of plaintextFields) {
-          encrypted[field] = this[field];
+      // Encryption method - now synchronous and uses serializer registry
+      encryptWithKeystore(keystore: any, resolver: any) {
+        // Get the encryptor from the serializer registry
+        const encryptor = lookupEncryptorByTypeName(className);
+        if (!encryptor) {
+          throw new Error(`No encryptor registered for type: ${className}`);
         }
 
-        // Group fields by label and encrypt each group
-        const fieldsByLabel = getFieldsByLabel(this.constructor);
-        const orderedLabels = getOrderedLabels(this.constructor);
-
-        for (const label of orderedLabels) {
-          if (resolver.canResolve(label)) {
-            const fieldNames = fieldsByLabel.get(label) || [];
-
-            // Create sub-struct for this label group
-            const labelGroupData: any = {};
-            for (const fieldName of fieldNames) {
-              labelGroupData[fieldName] = this[fieldName];
-            }
-
-            const encryptedGroup = await encryptLabelGroup(
-              label,
-              labelGroupData,
-              keystore,
-              resolver
-            );
-            encrypted[`${label}_encrypted`] = encryptedGroup;
-          } else {
-            encrypted[`${label}_encrypted`] = null;
-          }
-        }
-
-        // Add metadata to identify this as an encrypted instance
-        encrypted._encryptedType = this.constructor.name;
-
-        return encrypted;
+        // Use the registry encryptor which handles label-group encryption
+        return encryptor(this, keystore, resolver);
       }
 
-      // Decryption method (for encrypted instances)
-      async decryptWithKeystore(keystore: any) {
-        const decrypted = new constructor();
-
-        // Copy plaintext fields (these are already in plain form)
-        const plaintextFields = this.getPlaintextFields();
-        for (const field of plaintextFields) {
-          decrypted[field] = this[field];
+      // Decryption method - now synchronous and uses serializer registry
+      decryptWithKeystore(keystore: any) {
+        // Get the decryptor from the serializer registry
+        const decryptor = lookupDecryptorByTypeName(className);
+        if (!decryptor) {
+          throw new Error(`No decryptor registered for type: ${className}`);
         }
 
-        // Decrypt labeled field groups
-        const orderedLabels = getOrderedLabels(this.constructor);
-
-        for (const label of orderedLabels) {
-          const encryptedField = `${label}_encrypted`;
-          if (this[encryptedField]) {
-            try {
-              const decryptedGroup = await decryptLabelGroup(this[encryptedField], keystore);
-
-              // Distribute decrypted fields back to the object
-              if (decryptedGroup && typeof decryptedGroup === 'object') {
-                for (const [fieldName, fieldValue] of Object.entries(decryptedGroup)) {
-                  decrypted[fieldName] = fieldValue;
-                }
-              }
-            } catch (e) {
-              // Fields remain as default values if decryption fails
-              const fieldsByLabel = getFieldsByLabel(this.constructor);
-              const fieldNames = fieldsByLabel.get(label) || [];
-              for (const fieldName of fieldNames) {
-                decrypted[fieldName] = getDefaultValue(fieldName);
-              }
-            }
-          }
-        }
-
-        return decrypted;
+        // Use the registry decryptor which handles label-group decryption
+        return decryptor(this, keystore);
       }
 
       // Helper methods
@@ -186,10 +135,35 @@ export function Encrypt(options?: EncryptOptions) {
           field => !encryptedFieldNames.has(field) && field !== 'constructor'
         );
       }
+
+      // Registration method for serializer registry
+      private static registerWithSerializer(className: string, typeName: string, decoratedClass: any) {
+        // Register wire name
+        registerWireName(className, typeName);
+
+        // Register encryptor function
+        registerEncrypt(className, (value: any, keystore: any, resolver: any) => {
+          // This will be called by AnyValue.serialize when encrypting
+          // The actual encryption logic is handled by the serializer
+          return value.encryptWithKeystore(keystore, resolver);
+        });
+
+        // Register decryptor function
+        registerDecrypt(className, (bytes: Uint8Array, keystore: any) => {
+          // This will be called by AnyValue.deserialize when decrypting
+          // The actual decryption logic is handled by the serializer
+          const { decode } = require('cbor-x');
+          const encryptedInstance = decode(bytes);
+          return encryptedInstance.decryptWithKeystore(keystore);
+        });
+      }
     };
 
     // Set the name property so that metadata lookup works
     Object.defineProperty(decoratedClass, 'name', { value: className });
+
+    // Register with serializer registry for encryption/decryption
+    decoratedClass.registerWithSerializer(className, typeName, decoratedClass);
 
     return decoratedClass;
   };

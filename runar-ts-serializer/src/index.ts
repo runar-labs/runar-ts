@@ -5,14 +5,16 @@ import {
   DeserializationContext,
   SerializationContext,
   CommonKeysInterface,
+  LazyDataWithOffset,
 } from './wire.js';
 export type {
   DeserializationContext,
   WireHeader,
   SerializationContext,
   CommonKeysInterface,
+  LazyDataWithOffset,
 } from './wire.js';
-import { resolveType, initWirePrimitives, registerType, clearRegistry } from './registry.js';
+import { resolveType, initWirePrimitives, registerType, clearRegistry, lookupDecryptorByTypeName, lookupEncryptorByTypeName } from './registry.js';
 import { getTypeName } from 'runar-ts-decorators';
 import { CBORUtils } from './cbor_utils.js';
 
@@ -20,11 +22,10 @@ import { CBORUtils } from './cbor_utils.js';
 export type {
   LabelKeyInfo,
   LabelValue,
-  LabelKeyword,
   LabelResolverConfig,
   KeyMappingConfig,
 } from './label_resolver.js';
-export { LabelResolver, createContextLabelResolver } from './label_resolver.js';
+export { LabelResolver, createContextLabelResolver, LabelKeyword } from './label_resolver.js';
 
 // Export ResolverCache
 export type { CacheStats } from './resolver_cache.js';
@@ -32,10 +33,31 @@ export { ResolverCache } from './resolver_cache.js';
 
 // Export encryption functions
 export type { EnvelopeEncryptedData, EncryptedLabelGroup } from './encryption.js';
-export { encryptLabelGroup, decryptLabelGroup, decryptBytes } from './encryption.js';
+export { 
+  encryptLabelGroup, 
+  decryptLabelGroup, 
+  decryptBytes,
+  encryptLabelGroupSync,
+  decryptLabelGroupSync,
+  decryptBytesSync
+} from './encryption.js';
 
 // Re-export registry functions
-export { registerType, clearRegistry, resolveType } from './registry.js';
+export { 
+  registerType, 
+  clearRegistry, 
+  resolveType,
+  registerEncrypt,
+  registerDecrypt,
+  registerToJson,
+  lookupEncryptorByTypeName,
+  lookupDecryptorByTypeName,
+  getJsonConverterByWireName,
+  getJsonConverterByRustName,
+  registerWireName,
+  lookupWireName,
+  lookupRustName
+} from './registry.js';
 
 // Create a TypeRegistry class for compatibility
 export class TypeRegistry {
@@ -78,6 +100,7 @@ export class AnyValue<T = unknown> {
   private value: T | null;
   private serializeFn: SerializeFn | null;
   private typeName: string | null;
+  private lazyData?: LazyDataWithOffset;
 
   private constructor(
     cat: ValueCategory,
@@ -118,7 +141,40 @@ export class AnyValue<T = unknown> {
   static newList<T>(list: T[]): AnyValue<T[]> {
     const serializeFn: SerializeFn = (value, keystore, resolver) => {
       try {
-        // Check if elements are AnyValue objects that need individual serialization
+        // Check if we have encryption context for element-level encryption
+        if (keystore && resolver && Array.isArray(value) && value.length > 0) {
+          // Attempt element-level encryption using registry
+          const encryptedElements: Uint8Array[] = [];
+          let allElementsEncrypted = true;
+          
+          for (const element of value) {
+            // Check if element type has an encryptor in registry
+            const elementTypeName = AnyValue.getTypeName(element);
+            const encryptor = lookupEncryptorByTypeName(elementTypeName);
+            
+            if (encryptor) {
+              // Encrypt element using registry
+              const encryptedResult = encryptor(element, keystore, resolver);
+              if (encryptedResult.ok) {
+                encryptedElements.push(encryptedResult.value);
+              } else {
+                allElementsEncrypted = false;
+                break;
+              }
+            } else {
+              allElementsEncrypted = false;
+              break;
+            }
+          }
+          
+          if (allElementsEncrypted) {
+            // All elements encrypted - encode as Vec<bytes>
+            const bytes = encode(encryptedElements);
+            return ok(bytes);
+          }
+        }
+        
+        // Fallback to regular serialization
         if (Array.isArray(value) && value.length > 0 && value[0] instanceof AnyValue) {
           // Elements are AnyValue objects - use CBORUtils to create array of structures
           const anyValueStructures: any[] = [];
@@ -139,25 +195,9 @@ export class AnyValue<T = unknown> {
           const cborBytes = CBORUtils.encodeAnyValueArray(anyValueStructures);
           return ok(new Uint8Array(cborBytes));
         } else {
-          // Regular array of primitive values - but we need to handle strings specially
-          // for container serialization compatibility with Rust
-          if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'string') {
-            // Convert string array to AnyValue structures for proper CBOR encoding
-            const stringStructures = value.map(str => ({
-              category: ValueCategory.Primitive,
-              typename: 'string',
-              value: str, // The CBORUtils.encodeValue method will handle string conversion
-            }));
-
-            // Use CBORUtils to encode the array of string structures
-            const cborBytes = CBORUtils.encodeAnyValueArray(stringStructures);
-            return ok(new Uint8Array(cborBytes));
-          } else {
-            console.log(`Encoding regular array: ${JSON.stringify(value)}`);
-            // Regular array of non-string primitive values
-            const bytes = encode(value);
-            return ok(bytes);
-          }
+          // Regular array of primitive values
+          const bytes = encode(value);
+          return ok(bytes);
         }
       } catch (e) {
         return err(e as Error);
@@ -171,6 +211,40 @@ export class AnyValue<T = unknown> {
     const serializeFn: SerializeFn = (value, keystore, resolver) => {
       try {
         if (value instanceof Map && value.size > 0) {
+          // Check if we have encryption context for element-level encryption
+          if (keystore && resolver) {
+            // Attempt element-level encryption using registry
+            const encryptedMap = new Map<string, Uint8Array>();
+            let allValuesEncrypted = true;
+            
+            for (const [key, val] of value) {
+              // Check if value type has an encryptor in registry
+              const valueTypeName = AnyValue.getTypeName(val);
+              const encryptor = lookupEncryptorByTypeName(valueTypeName);
+              
+              if (encryptor) {
+                // Encrypt value using registry
+                const encryptedResult = encryptor(val, keystore, resolver);
+                if (encryptedResult.ok) {
+                  encryptedMap.set(key, encryptedResult.value);
+                } else {
+                  allValuesEncrypted = false;
+                  break;
+                }
+              } else {
+                allValuesEncrypted = false;
+                break;
+              }
+            }
+            
+            if (allValuesEncrypted) {
+              // All values encrypted - encode as Map<String, bytes>
+              const bytes = encode(Object.fromEntries(encryptedMap));
+              return ok(bytes);
+            }
+          }
+          
+          // Fallback to regular serialization
           const firstValue = value.values().next().value;
           if (firstValue instanceof AnyValue) {
             // Values are AnyValue objects - use CBORUtils to create map of structures
@@ -382,6 +456,30 @@ export class AnyValue<T = unknown> {
         // If decryption fails, keep the encrypted value but log the error
         console.warn(`Failed to decrypt instance: ${e}`);
       }
+    }
+
+    // For complex types (Struct, List, Map, Json), create lazy holders if encrypted
+    // According to the design plan, this should only happen for specific cases
+    if (isEncrypted && ctx?.keystore && 
+        (category === ValueCategory.Struct || category === ValueCategory.List || category === ValueCategory.Map || category === ValueCategory.Json)) {
+      
+      // Create lazy data holder according to design plan
+      const lazyData: LazyDataWithOffset = {
+        typeName,
+        originalBuffer: bytes,
+        startOffset: dataStart,
+        endOffset: bytes.length,
+        keystore: ctx.keystore,
+        encrypted: true
+      };
+      
+      // Create AnyValue with lazy data
+      const lazyAv = new AnyValue(category, null, null, typeName);
+      lazyAv.lazyData = lazyData;
+      
+
+      
+      return ok(lazyAv);
     }
 
     // Create a basic serialize function for deserialized values
@@ -755,6 +853,55 @@ export class AnyValue<T = unknown> {
 
   // Type conversion methods
   as<U = T>(): Result<U> {
+    if (this.value === null) {
+      return err(new Error('No value to convert'));
+    }
+    return ok(this.value as unknown as U);
+  }
+
+  // Lazy deserialization accessors according to design plan
+  asTypeRef<U>(): Result<U> {
+    if (this.lazyData && this.lazyData.originalBuffer) {
+      // Lazy data exists - attempt to deserialize
+      if (this.lazyData.encrypted && this.lazyData.keystore) {
+        try {
+          // Decrypt the outer envelope first
+          const decryptedBytes = this.lazyData.keystore.decryptEnvelope(
+            Buffer.from(this.lazyData.originalBuffer.subarray(this.lazyData.startOffset || 0, this.lazyData.endOffset))
+          );
+          
+          // Attempt direct CBOR decode into target type
+          const decoded = decode(decryptedBytes);
+          return ok(decoded as U);
+        } catch (error) {
+          // If direct decode fails, try registry decryptor
+          const decryptor = lookupDecryptorByTypeName(this.lazyData.typeName);
+          if (decryptor && this.lazyData.keystore) {
+            try {
+              // Re-decrypt for registry decryptor
+              const decryptedBytesForRegistry = this.lazyData.keystore.decryptEnvelope(
+                Buffer.from(this.lazyData.originalBuffer.subarray(this.lazyData.startOffset || 0, this.lazyData.endOffset))
+              );
+              const result = decryptor(decryptedBytesForRegistry, this.lazyData.keystore);
+              return result;
+            } catch (e) {
+              return err(new Error(`Registry decryptor failed: ${e}`));
+            }
+          }
+          return err(new Error(`Failed to deserialize lazy data: ${error}`));
+        }
+      } else {
+        // Plain data - attempt direct decode
+        try {
+          const decoded = decode(this.lazyData.originalBuffer.subarray(this.lazyData.startOffset || 0, this.lazyData.endOffset));
+          return ok(decoded as U);
+        } catch (error) {
+          return err(new Error(`Failed to decode plain lazy data: ${error}`));
+        }
+      }
+    }
+    
+    // No lazy data - use regular value
     if (this.value === null) {
       return err(new Error('No value to convert'));
     }
