@@ -61,10 +61,10 @@ export function encryptLabelGroupSync<T>(
       return err(new Error(`Label '${label}' not available in current context`));
     }
 
-    // Convert to Buffer for CommonKeysInterface compatibility
+    // Use Buffer directly - no conversion needed since we're already using Buffer throughout
     const dataBuffer = Buffer.from(plainBytes);
-    const networkPublicKey = info.networkPublicKey ? Buffer.from(info.networkPublicKey) : null;
-    const profileKeys = info.profilePublicKeys.map(pk => Buffer.from(pk));
+    const networkPublicKey = info.networkPublicKey || null; // Already Buffer type
+    const profileKeys = info.profilePublicKeys; // Already Buffer[] type
 
     // Encrypt using envelope encryption (synchronous)
     const encryptedBytes = keystore.encryptWithEnvelope(dataBuffer, networkPublicKey, profileKeys);

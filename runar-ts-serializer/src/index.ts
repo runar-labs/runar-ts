@@ -478,7 +478,7 @@ export class AnyValue<T = unknown> {
       // Create lazy data holder according to design plan
       const lazyData: LazyDataWithOffset = {
         typeName,
-        originalBuffer: bytes,
+        originalBuffer: Buffer.from(bytes), // Convert Uint8Array to Buffer to match native API
         startOffset: dataStart,
         endOffset: bytes.length,
         keystore: ctx.keystore,

@@ -9,9 +9,9 @@ import { Result, ok, err } from './result.js';
  */
 export interface LabelKeyInfo {
   /** Profile public keys for user-specific encryption */
-  profilePublicKeys: Uint8Array[];
+  profilePublicKeys: Buffer[]; // Use Buffer to match native API
   /** Pre-resolved network public key (optional for user-only labels) */
-  networkPublicKey?: Uint8Array;
+  networkPublicKey?: Buffer; // Use Buffer to match native API
 }
 
 /**
@@ -19,7 +19,7 @@ export interface LabelKeyInfo {
  */
 export interface LabelValue {
   /** Optional network public key for this label */
-  networkPublicKey?: Uint8Array;
+  networkPublicKey?: Buffer; // Use Buffer to match native API
   /** Optional user key specification for dynamic resolution */
   userKeySpec?: LabelKeyword;
 }
@@ -92,16 +92,16 @@ export class LabelResolver {
    */
   static createContextLabelResolver(
     systemConfig: LabelResolverConfig,
-    userProfileKeys: Uint8Array[] // From request context - empty array means no profile keys
+    userProfileKeys: Buffer[] // From request context - empty array means no profile keys - use Buffer to match native API
   ): Result<LabelResolver> {
     const mappings = new Map<string, LabelKeyInfo>();
 
     // Process system label mappings
     for (const [label, labelValue] of systemConfig.labelMappings) {
-      let profilePublicKeys: Uint8Array[] = [];
+      let profilePublicKeys: Buffer[] = [];
 
       // Get network key if specified, or use empty for user-only labels
-      const networkPublicKey = labelValue.networkPublicKey ?? new Uint8Array();
+      const networkPublicKey = labelValue.networkPublicKey ?? Buffer.alloc(0);
 
       // Process user key specification
       if (labelValue.userKeySpec) {
@@ -191,7 +191,7 @@ export class LabelResolver {
  */
 export function createContextLabelResolver(
   systemConfig: LabelResolverConfig,
-  userProfileKeys: Uint8Array[] // From request context - empty array means no profile keys
+  userProfileKeys: Buffer[] // From request context - empty array means no profile keys - use Buffer to match native API
 ): Result<LabelResolver> {
   return LabelResolver.createContextLabelResolver(systemConfig, userProfileKeys);
 }

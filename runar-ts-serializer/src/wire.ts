@@ -43,8 +43,8 @@ export enum ValueCategory {
 export interface SerializationContext {
   keystore?: CommonKeysInterface;
   resolver: import('./label_resolver.js').LabelResolver; // Now required and properly typed
-  networkPublicKey?: Uint8Array; // Pre-resolved network public key
-  profilePublicKeys?: Uint8Array[]; // Multiple profile keys
+  networkPublicKey?: Buffer; // Pre-resolved network public key - use Buffer to match native API
+  profilePublicKeys?: Buffer[]; // Multiple profile keys - use Buffer to match native API
 }
 
 export interface DeserializationContext {
@@ -58,7 +58,7 @@ export interface DeserializationContext {
  */
 export interface LazyDataWithOffset {
   typeName: string;
-  originalBuffer: Uint8Array;
+  originalBuffer: Buffer; // Use Buffer to match native API
   startOffset?: number;
   endOffset?: number;
   keystore?: CommonKeysInterface;
