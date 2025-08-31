@@ -51,7 +51,9 @@ export async function encryptLabelGroup<T>(
     // Resolve the label to key info (public key + scope)
     const infoResult = resolver.resolveLabelInfo(label);
     if (!infoResult.ok) {
-      return err(new Error(`Failed to resolve label info for '${label}': ${infoResult.error.message}`));
+      return err(
+        new Error(`Failed to resolve label info for '${label}': ${infoResult.error.message}`)
+      );
     }
 
     const info = infoResult.value;

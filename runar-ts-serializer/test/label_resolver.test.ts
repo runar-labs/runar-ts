@@ -39,16 +39,13 @@ describe('LabelResolver', () => {
       const emptyProfileKeys: Uint8Array[] = [];
       const resolverResult = createContextLabelResolver(config, emptyProfileKeys);
       assert(resolverResult.ok, 'Resolver creation should succeed');
-      
+
       const resolver = resolverResult.value;
       assert(resolver.canResolve('system'), 'Should resolve system label');
       assert(resolver.canResolve('current_user'), 'Should resolve current_user label');
 
       // Test resolver creation with user context
-      const userKeys = [
-        new Uint8Array([10, 11, 12]),
-        new Uint8Array([13, 14, 15]),
-      ];
+      const userKeys = [new Uint8Array([10, 11, 12]), new Uint8Array([13, 14, 15])];
       const resolverWithUserResult = createContextLabelResolver(config, userKeys);
       assert(resolverWithUserResult.ok, 'Resolver creation with user keys should succeed');
 
@@ -57,7 +54,7 @@ describe('LabelResolver', () => {
       // Verify current_user label gets user keys
       const currentUserInfoResult = resolverWithUser.resolveLabelInfo('current_user');
       assert(currentUserInfoResult.ok, 'Should resolve current_user label info');
-      
+
       const currentUserInfo = currentUserInfoResult.value;
       assert(currentUserInfo, 'current_user info should exist');
       assert.deepStrictEqual(
@@ -94,7 +91,9 @@ describe('LabelResolver', () => {
       const invalidValidationResult = LabelResolver.validateLabelConfig(invalidConfig);
       assert(!invalidValidationResult.ok, 'Invalid config validation should fail');
       assert(
-        invalidValidationResult.error.message.includes('must specify either network_public_key or user_key_spec'),
+        invalidValidationResult.error.message.includes(
+          'must specify either network_public_key or user_key_spec'
+        ),
         'Should have appropriate error message'
       );
 
@@ -231,7 +230,7 @@ describe('LabelResolver', () => {
       // Test resolveLabelInfo
       const infoResult = resolver.resolveLabelInfo('test_label');
       assert(infoResult.ok, 'Should resolve label info');
-      
+
       const info = infoResult.value;
       assert(info, 'Label info should exist');
       assert.deepStrictEqual(
@@ -239,11 +238,7 @@ describe('LabelResolver', () => {
         new Uint8Array([1, 2, 3]),
         'Network public key should match'
       );
-      assert.deepStrictEqual(
-        info.profilePublicKeys,
-        userKeys,
-        'Profile public keys should match'
-      );
+      assert.deepStrictEqual(info.profilePublicKeys, userKeys, 'Profile public keys should match');
 
       // Test non-existent label
       const nonExistentResult = resolver.resolveLabelInfo('non_existent');
@@ -327,7 +322,9 @@ describe('LabelResolver', () => {
       const resolverResult = createContextLabelResolver(config, []);
       assert(!resolverResult.ok, 'Resolver creation should fail with empty network key');
       assert(
-        resolverResult.error.message.includes('must specify either network_public_key or user_key_spec'),
+        resolverResult.error.message.includes(
+          'must specify either network_public_key or user_key_spec'
+        ),
         'Should have appropriate error message'
       );
     });
@@ -348,7 +345,9 @@ describe('LabelResolver', () => {
       const resolverResult = createContextLabelResolver(config, []);
       assert(!resolverResult.ok, 'Resolver creation should fail with no keys');
       assert(
-        resolverResult.error.message.includes('must specify either network_public_key or user_key_spec'),
+        resolverResult.error.message.includes(
+          'must specify either network_public_key or user_key_spec'
+        ),
         'Should have appropriate error message'
       );
     });

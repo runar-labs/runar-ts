@@ -31,15 +31,8 @@ export type { CacheStats } from './resolver_cache.js';
 export { ResolverCache } from './resolver_cache.js';
 
 // Export encryption functions
-export type {
-  EnvelopeEncryptedData,
-  EncryptedLabelGroup,
-} from './encryption.js';
-export {
-  encryptLabelGroup,
-  decryptLabelGroup,
-  decryptBytes,
-} from './encryption.js';
+export type { EnvelopeEncryptedData, EncryptedLabelGroup } from './encryption.js';
+export { encryptLabelGroup, decryptLabelGroup, decryptBytes } from './encryption.js';
 
 // Re-export registry functions
 export { registerType, clearRegistry, resolveType } from './registry.js';

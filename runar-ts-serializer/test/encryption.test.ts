@@ -24,15 +24,21 @@ class MockKeystore {
   }
 
   // Mock other required methods
-  ensureSymmetricKey(keyName: string): Buffer { return Buffer.from([]); }
+  ensureSymmetricKey(keyName: string): Buffer {
+    return Buffer.from([]);
+  }
   setLabelMapping(mappingCbor: Buffer): void {}
   setLocalNodeInfo(nodeInfoCbor: Buffer): void {}
   setPersistenceDir(dir: string): void {}
   enableAutoPersist(enabled: boolean): void {}
   async wipePersistence(): Promise<void> {}
   async flushState(): Promise<void> {}
-  getKeystoreState(): number { return 0; }
-  getKeystoreCaps(): any { return {}; }
+  getKeystoreState(): number {
+    return 0;
+  }
+  getKeystoreCaps(): any {
+    return {};
+  }
 }
 
 describe('Encryption Functions', () => {

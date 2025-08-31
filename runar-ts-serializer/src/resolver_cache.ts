@@ -35,7 +35,7 @@ class CacheEntryImpl implements CacheEntry {
    * Get the age of this entry in seconds
    */
   get age(): number {
-    return (Date.now() / 1000) - this.createdAt;
+    return Date.now() / 1000 - this.createdAt;
   }
 }
 
@@ -69,10 +69,7 @@ export class ResolverCache {
    * Get or create a label resolver, using cache if available
    * Simplified cache key: only user_profile_keys since config changes are rare
    */
-  getOrCreate(
-    config: LabelResolverConfig,
-    userProfileKeys: Uint8Array[]
-  ): Result<LabelResolver> {
+  getOrCreate(config: LabelResolverConfig, userProfileKeys: Uint8Array[]): Result<LabelResolver> {
     const cacheKey = this.generateCacheKey(userProfileKeys);
 
     // Try to get from cache first
@@ -149,10 +146,9 @@ export class ResolverCache {
     const targetEvictions = Math.max(1, Math.floor(this.maxSize / 4)); // Evict at least 1, or 25% of entries
 
     // Collect entries with their access info for sorting
-    const entries: Array<[string, number]> = Array.from(this.cache.entries()).map(([key, entry]) => [
-      key,
-      entry.lastAccessed
-    ]);
+    const entries: Array<[string, number]> = Array.from(this.cache.entries()).map(
+      ([key, entry]) => [key, entry.lastAccessed]
+    );
 
     // Sort by last accessed time (oldest first)
     entries.sort(([, a], [, b]) => a - b);

@@ -77,7 +77,9 @@ describe('Serializer with CommonKeysInterface', () => {
 
     try {
       // Encrypt using wrapper
-      const encrypted = keysWrapper.encryptWithEnvelope(dataBuffer, 'test-network', [profilePublicKey]);
+      const encrypted = keysWrapper.encryptWithEnvelope(dataBuffer, 'test-network', [
+        profilePublicKey,
+      ]);
 
       // Decrypt using wrapper
       const decrypted = keysWrapper.decryptEnvelope(encrypted);

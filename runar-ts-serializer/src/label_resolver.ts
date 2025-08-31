@@ -31,7 +31,7 @@ export enum LabelKeyword {
   /** Maps to current user's profile public keys from request context */
   CurrentUser = 'CurrentUser',
   /** Reserved for future custom resolution functions */
-  Custom = 'Custom'
+  Custom = 'Custom',
 }
 
 /**
@@ -120,9 +120,11 @@ export class LabelResolver {
       // Validation: Label must have either network key OR user keys OR both
       // Empty network key + empty profile keys = invalid label
       if (networkPublicKey.length === 0 && profilePublicKeys.length === 0) {
-        return err(new Error(
-          `Label '${label}' must specify either network_public_key or user_key_spec (or both)`
-        ));
+        return err(
+          new Error(
+            `Label '${label}' must specify either network_public_key or user_key_spec (or both)`
+          )
+        );
       }
 
       mappings.set(label, {
@@ -150,16 +152,20 @@ export class LabelResolver {
       const hasUserSpec = labelValue.userKeySpec !== undefined;
 
       if (!hasNetworkKey && !hasUserSpec) {
-        return err(new Error(
-          `Label '${label}' must specify either network_public_key or user_key_spec (or both)`
-        ));
+        return err(
+          new Error(
+            `Label '${label}' must specify either network_public_key or user_key_spec (or both)`
+          )
+        );
       }
 
       // If network key is provided, validate it's not empty
       if (labelValue.networkPublicKey && labelValue.networkPublicKey.length === 0) {
-        return err(new Error(
-          `Label '${label}' has empty network_public_key - use undefined for user-only labels`
-        ));
+        return err(
+          new Error(
+            `Label '${label}' has empty network_public_key - use undefined for user-only labels`
+          )
+        );
       }
 
       // Validate user key spec if provided

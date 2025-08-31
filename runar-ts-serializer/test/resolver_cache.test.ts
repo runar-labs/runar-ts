@@ -49,7 +49,7 @@ describe('ResolverCache', () => {
 
       const result = cache.getOrCreate(config, userKeys);
       assert(result.ok, 'Should create resolver successfully');
-      
+
       const stats = cache.stats();
       assert.strictEqual(stats.totalEntries, 1);
     });
@@ -71,7 +71,7 @@ describe('ResolverCache', () => {
 
       // Should be the same resolver instance
       assert.strictEqual(resolver1, resolver2, 'Should return cached resolver');
-      
+
       const stats = cache.stats();
       assert.strictEqual(stats.totalEntries, 1);
     });
@@ -85,7 +85,7 @@ describe('ResolverCache', () => {
       // Create resolvers with different user keys
       const result1 = cache.getOrCreate(config, userKeys1);
       const result2 = cache.getOrCreate(config, userKeys2);
-      
+
       assert(result1.ok, 'First resolver creation should succeed');
       assert(result2.ok, 'Second resolver creation should succeed');
       assert.notStrictEqual(result1.value, result2.value, 'Should create different resolvers');
@@ -101,7 +101,7 @@ describe('ResolverCache', () => {
 
       const result = cache.getOrCreate(config, emptyUserKeys);
       assert(result.ok, 'Should create resolver with empty user keys');
-      
+
       const stats = cache.stats();
       assert.strictEqual(stats.totalEntries, 1);
     });
@@ -116,18 +116,22 @@ describe('ResolverCache', () => {
       // Create resolver
       const result1 = cache.getOrCreate(config, userKeys);
       assert(result1.ok, 'Should create resolver');
-      
+
       // Wait for TTL to expire
-      return new Promise<void>((resolve) => {
+      return new Promise<void>(resolve => {
         setTimeout(() => {
           // Try to get from cache - should create new resolver
           const result2 = cache.getOrCreate(config, userKeys);
           assert(result2.ok, 'Should create new resolver after TTL expiration');
-          assert.notStrictEqual(result1.value, result2.value, 'Should be different resolver instances');
-          
+          assert.notStrictEqual(
+            result1.value,
+            result2.value,
+            'Should be different resolver instances'
+          );
+
           const stats = cache.stats();
           assert.strictEqual(stats.totalEntries, 1); // Old entry should be removed
-          
+
           resolve();
         }, 1100); // Wait slightly more than 1 second
       });
@@ -141,17 +145,17 @@ describe('ResolverCache', () => {
       // Create resolver
       const result1 = cache.getOrCreate(config, userKeys);
       assert(result1.ok, 'Should create resolver');
-      
+
       // Wait for TTL to expire
-      return new Promise<void>((resolve) => {
+      return new Promise<void>(resolve => {
         setTimeout(() => {
           // Access expired entry - should be removed and new one created
           const result2 = cache.getOrCreate(config, userKeys);
           assert(result2.ok, 'Should create new resolver after TTL expiration');
-          
+
           const stats = cache.stats();
           assert.strictEqual(stats.totalEntries, 1); // Only new entry should remain
-          
+
           resolve();
         }, 1100);
       });
@@ -162,16 +166,16 @@ describe('ResolverCache', () => {
     it('should evict least recently used entries when cache is full', () => {
       const cache = new ResolverCache(3, 60); // Small cache size
       const config = createTestConfig();
-      
+
       // Fill the cache
       const userKeys1 = [new Uint8Array([1])];
       const userKeys2 = [new Uint8Array([2])];
       const userKeys3 = [new Uint8Array([3])];
-      
+
       const result1 = cache.getOrCreate(config, userKeys1);
       const result2 = cache.getOrCreate(config, userKeys2);
       const result3 = cache.getOrCreate(config, userKeys3);
-      
+
       assert(result1.ok && result2.ok && result3.ok, 'All resolvers should be created');
       assert.strictEqual(cache.stats().totalEntries, 3);
 
@@ -179,7 +183,7 @@ describe('ResolverCache', () => {
       const userKeys4 = [new Uint8Array([4])];
       const result4 = cache.getOrCreate(config, userKeys4);
       assert(result4.ok, 'Fourth resolver should be created');
-      
+
       // Should have evicted some entries (at least 1, or 25% of entries)
       const stats = cache.stats();
       assert(stats.totalEntries <= 3, 'Cache should not exceed max size');
@@ -193,15 +197,15 @@ describe('ResolverCache', () => {
       // Create resolver
       const result1 = cache.getOrCreate(config, userKeys);
       assert(result1.ok, 'Should create resolver');
-      
+
       // Wait a bit
-      return new Promise<void>((resolve) => {
+      return new Promise<void>(resolve => {
         setTimeout(() => {
           // Access again - should update last accessed time
           const result2 = cache.getOrCreate(config, userKeys);
           assert(result2.ok, 'Should return cached resolver');
           assert.strictEqual(result1.value, result2.value, 'Should be same resolver');
-          
+
           resolve();
         }, 100);
       });
@@ -220,13 +224,13 @@ describe('ResolverCache', () => {
       assert.strictEqual(cache.stats().totalEntries, 1);
 
       // Wait for TTL to expire
-      return new Promise<void>((resolve) => {
+      return new Promise<void>(resolve => {
         setTimeout(() => {
           // Cleanup expired entries
           const removedCount = cache.cleanupExpired();
           assert.strictEqual(removedCount, 1, 'Should remove 1 expired entry');
           assert.strictEqual(cache.stats().totalEntries, 0, 'Cache should be empty');
-          
+
           resolve();
         }, 1100);
       });
@@ -241,7 +245,7 @@ describe('ResolverCache', () => {
       // Add some entries
       cache.getOrCreate(config, userKeys1);
       cache.getOrCreate(config, userKeys2);
-      
+
       assert.strictEqual(cache.stats().totalEntries, 2, 'Should have 2 entries');
 
       // Clear cache
@@ -253,7 +257,7 @@ describe('ResolverCache', () => {
       const maxSize = 50;
       const ttl = 120;
       const cache = new ResolverCache(maxSize, ttl);
-      
+
       const stats = cache.stats();
       assert.strictEqual(stats.maxSize, maxSize);
       assert.strictEqual(stats.ttlSeconds, ttl);
@@ -263,7 +267,7 @@ describe('ResolverCache', () => {
       const config = createTestConfig();
       const userKeys = [new Uint8Array([1, 2, 3])];
       cache.getOrCreate(config, userKeys);
-      
+
       const statsAfter = cache.stats();
       assert.strictEqual(statsAfter.totalEntries, 1);
       assert.strictEqual(statsAfter.maxSize, maxSize);
@@ -281,7 +285,7 @@ describe('ResolverCache', () => {
       // Create resolvers with same user keys
       const result1 = cache.getOrCreate(config, userKeys1);
       const result2 = cache.getOrCreate(config, userKeys2);
-      
+
       assert(result1.ok && result2.ok, 'Both resolvers should be created');
       assert.strictEqual(result1.value, result2.value, 'Should return cached resolver');
       assert.strictEqual(cache.stats().totalEntries, 1, 'Should have only 1 cache entry');
@@ -296,7 +300,7 @@ describe('ResolverCache', () => {
       // Create resolvers with different user keys
       const result1 = cache.getOrCreate(config, userKeys1);
       const result2 = cache.getOrCreate(config, userKeys2);
-      
+
       assert(result1.ok && result2.ok, 'Both resolvers should be created');
       assert.notStrictEqual(result1.value, result2.value, 'Should be different resolvers');
       assert.strictEqual(cache.stats().totalEntries, 2, 'Should have 2 cache entries');
@@ -311,7 +315,7 @@ describe('ResolverCache', () => {
       // Create resolvers with empty user keys
       const result1 = cache.getOrCreate(config, emptyKeys1);
       const result2 = cache.getOrCreate(config, emptyKeys2);
-      
+
       assert(result1.ok && result2.ok, 'Both resolvers should be created');
       assert.strictEqual(result1.value, result2.value, 'Should return cached resolver');
       assert.strictEqual(cache.stats().totalEntries, 1, 'Should have only 1 cache entry');
