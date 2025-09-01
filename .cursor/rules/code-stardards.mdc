@@ -5,6 +5,9 @@ alwaysApply: false
 
  NO FALLBACKS, NO MOCKS, NO STUBS, NO shortcuts, no simplifications, no worikarounds. Always stick to the design and if u find an issue with the design STOP and ask for guidenance.
 
+ Use bun as our TS toolchain.. no npm and not node.. always use bun
+
+
 *Logging*
 When developing runar framework core code NEVER use console.log(). use our proper logger mechanism
 It shuold be available in most components, if not ou need to add.

@@ -22,7 +22,7 @@ import {
   lookupDecryptorByTypeName,
   lookupEncryptorByTypeName,
 } from './registry.js';
-import { getTypeName } from 'runar-ts-decorators';
+// Import getTypeName conditionally to avoid circular dependencies
 import { CBORUtils } from './cbor_utils.js';
 import {
   encryptLabelGroupSync,
@@ -528,9 +528,13 @@ export class AnyValue<T = unknown> {
       // Check for decorator metadata first
       if (value.constructor && value.constructor.name) {
         try {
-          const decoratorTypeName = getTypeName(value.constructor);
-          if (decoratorTypeName) {
-            return decoratorTypeName;
+          // Try to get decorator type name if available
+          const decoratorModule = require('runar-ts-decorators');
+          if (decoratorModule && decoratorModule.getTypeName) {
+            const decoratorTypeName = decoratorModule.getTypeName(value.constructor);
+            if (decoratorTypeName) {
+              return decoratorTypeName;
+            }
           }
         } catch (e) {
           // If decorator module is not available, fall back to default
@@ -763,6 +767,11 @@ export class AnyValue<T = unknown> {
       return err(new Error('No value to convert'));
     }
     return ok(this.value as unknown as U);
+  }
+
+  // Alias for backward compatibility
+  as<U = T>(): Result<U> {
+    return this.asType<U>();
   }
 
   // Perform lazy decrypt-on-access logic exactly like Rust

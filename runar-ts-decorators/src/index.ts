@@ -316,6 +316,17 @@ function registerFieldEncryption(
   });
 }
 
+// Utility function to get type name from constructor (for serializer integration)
+export function getTypeName(constructor: Function): string | undefined {
+  const classMeta = classMetaRegistry.get(constructor);
+  if (classMeta) {
+    return classMeta.wireName;
+  }
+  
+  // Fallback to constructor name
+  return constructor.name || undefined;
+}
+
 // Design Section 18.4: Lazy registration function with {T}{Label}Fields generation
 export function ensureClassRegistered<T extends Constructor>(cls: T): void {
   const classMeta = classMetaRegistry.get(cls);
@@ -425,5 +436,4 @@ export {
   type LabelKeyInfo,
   type EncryptedLabelGroup,
   type EnvelopeEncryptedData,
-  type RunarFieldOptions,
 };

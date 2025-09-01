@@ -7,21 +7,7 @@ import { encode, decode } from 'cbor-x';
 // Envelope Encryption Types
 // ---------------------------------------------------------------------------
 
-/**
- * Envelope encrypted data structure - matches Rust exactly
- */
-export class EnvelopeEncryptedData {
-  constructor(
-    /** The encrypted data payload */
-    public encryptedData: Uint8Array,
-    /** Envelope key encrypted with network key (always required) */
-    public networkEncryptedKey: Uint8Array,
-    /** Envelope key encrypted with each profile key */
-    public profileEncryptedKeys: Map<string, Uint8Array>,
-    /** Network ID this data belongs to */
-    public networkId?: string
-  ) {}
-}
+
 
 /**
  * Container for label-grouped encryption (one per label)
@@ -30,8 +16,8 @@ export class EncryptedLabelGroup {
   constructor(
     /** The label this group was encrypted with */
     public label: string,
-    /** Envelope-encrypted payload produced by runar-keys */
-    public envelope: EnvelopeEncryptedData
+    /** Original CBOR bytes from native API */
+    public envelopeCbor: Uint8Array
   ) {}
 }
 
@@ -71,33 +57,11 @@ export function encryptLabelGroupSync<T>(
     const profileKeys = info.profilePublicKeys; // Already Uint8Array[] type
 
     // Encrypt using envelope encryption (synchronous)
-    // The native API returns a CBOR-encoded EnvelopeEncryptedData structure
+    // The native API returns CBOR-encoded bytes directly
     const encryptedBytes = keystore.encryptWithEnvelope(dataBuffer, networkPublicKey, profileKeys);
 
-    // Parse the CBOR-encoded EnvelopeEncryptedData returned by native module
-    const envelopeData = decode(encryptedBytes);
-
-    // Validate envelope structure
-    if (!envelopeData || typeof envelopeData !== 'object') {
-      return err(new Error('Invalid envelope data structure returned from native module'));
-    }
-
-    // Convert to our class format - the native API uses different field names
-    const envelope = new EnvelopeEncryptedData(
-      envelopeData.encrypted_data ? new Uint8Array(envelopeData.encrypted_data) : new Uint8Array(),
-      envelopeData.network_encrypted_key
-        ? new Uint8Array(envelopeData.network_encrypted_key)
-        : new Uint8Array(),
-      new Map(
-        Object.entries(envelopeData.profile_encrypted_keys || {}).map(([k, v]) => [
-          k,
-          new Uint8Array(v as any),
-        ])
-      ),
-      envelopeData.network_id
-    );
-
-    return ok(new EncryptedLabelGroup(label, envelope));
+    // Store the original CBOR bytes from native API
+    return ok(new EncryptedLabelGroup(label, encryptedBytes));
   } catch (error) {
     return err(error instanceof Error ? error : new Error(String(error)));
   }
@@ -111,20 +75,12 @@ export function decryptLabelGroupSync<T>(
   keystore: CommonKeysInterface
 ): Result<T> {
   try {
-    if (!encryptedGroup.envelope) {
-      return err(new Error('Empty encrypted group'));
+    if (!encryptedGroup.envelopeCbor) {
+      return err(new Error('Empty encrypted group - no envelope data'));
     }
 
-    // The native API expects the CBOR-encoded EnvelopeEncryptedData structure
-    // We need to re-encode our interface back to the native format
-    const envelopeCbor = encode({
-      encrypted_data: encryptedGroup.envelope.encryptedData,
-      network_id: encryptedGroup.envelope.networkId,
-      network_encrypted_key: encryptedGroup.envelope.networkEncryptedKey,
-      profile_encrypted_keys: Object.fromEntries(encryptedGroup.envelope.profileEncryptedKeys),
-    });
-
-    const encryptedBytes = new Uint8Array(envelopeCbor);
+    // Use original CBOR bytes from native API
+    const encryptedBytes = encryptedGroup.envelopeCbor;
 
     // Attempt decryption using the provided key manager (synchronous)
     const plaintext = keystore.decryptEnvelope(encryptedBytes);
