@@ -28,11 +28,11 @@ describe('Serializer with CommonKeysInterface', () => {
       await keys.mobileInitializeUserRootKey();
       await keys.flushState();
 
-      // Generate a network ID for envelope encryption
-      const networkId = keys.mobileGenerateNetworkDataKey();
+      // Generate a network public key for envelope encryption
+      const networkPublicKey = keys.mobileGenerateNetworkDataKey();
 
-      // Encrypt using wrapper
-      const encrypted = keysWrapper.encryptWithEnvelope(dataBuffer, networkId, []);
+      // Encrypt using wrapper with networkPublicKey directly
+      const encrypted = keysWrapper.encryptWithEnvelope(dataBuffer, networkPublicKey, []);
 
       // Decrypt using wrapper
       const decrypted = keysWrapper.decryptEnvelope(encrypted);
@@ -76,8 +76,11 @@ describe('Serializer with CommonKeysInterface', () => {
     const profilePublicKey = Buffer.alloc(65, 1);
 
     try {
-      // Encrypt using wrapper
-      const encrypted = keysWrapper.encryptWithEnvelope(dataBuffer, 'test-network', [
+      // Create a test network public key (32 bytes for network key)
+      const testNetworkPublicKey = Buffer.alloc(32, 2);
+      
+      // Encrypt using wrapper with networkPublicKey directly
+      const encrypted = keysWrapper.encryptWithEnvelope(dataBuffer, testNetworkPublicKey, [
         profilePublicKey,
       ]);
 

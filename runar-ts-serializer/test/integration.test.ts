@@ -36,8 +36,7 @@ class RealTestKeystore {
     await this.keys.flushState();
 
     // Generate real network and profile keys
-    const networkId = this.keys.mobileGenerateNetworkDataKey();
-    this._networkPublicKey = this.keys.mobileGetNetworkPublicKey(networkId);
+    this._networkPublicKey = this.keys.mobileGenerateNetworkDataKey();
 
     const personalKey = this.keys.mobileDeriveUserProfileKey('personal');
     const workKey = this.keys.mobileDeriveUserProfileKey('work');
@@ -51,10 +50,9 @@ class RealTestKeystore {
     return this._profilePublicKeys;
   }
 
-  encryptWithEnvelope(data: Buffer, networkId: string | null, profilePublicKeys: Buffer[]): Buffer {
-    // Use REAL native API encryption
-    const networkPk = networkId ? this._networkPublicKey : null;
-    return this.wrapper.encryptWithEnvelope(data, networkPk, profilePublicKeys);
+  encryptWithEnvelope(data: Buffer, networkPublicKey: Buffer | null, profilePublicKeys: Buffer[]): Buffer {
+    // Use REAL native API encryption with networkPublicKey directly
+    return this.wrapper.encryptWithEnvelope(data, networkPublicKey, profilePublicKeys);
   }
 
   decryptEnvelope(eedCbor: Buffer): Buffer {
@@ -98,13 +96,17 @@ describe('Integration Tests', () => {
   let keystore: RealTestKeystore;
 
   beforeEach(async () => {
-    // Create test configuration
+    // Create and initialize REAL keystore first to get actual keys
+    keystore = new RealTestKeystore();
+    await keystore.initialize();
+
+    // Create test configuration using actual keys from the keystore
     config = {
       labelMappings: new Map([
         [
           'system',
           {
-            networkPublicKey: new Uint8Array([1, 2, 3, 4]),
+            networkPublicKey: keystore.networkPublicKey,
             userKeySpec: undefined,
           },
         ],
@@ -118,27 +120,20 @@ describe('Integration Tests', () => {
         [
           'mixed',
           {
-            networkPublicKey: new Uint8Array([5, 6, 7, 8]),
+            networkPublicKey: keystore.networkPublicKey,
             userKeySpec: LabelKeyword.CurrentUser,
           },
         ],
       ]),
     };
 
-    // Create resolver
-    const resolverResult = LabelResolver.createContextLabelResolver(config, [
-      new Uint8Array([10, 11, 12, 13]),
-      new Uint8Array([14, 15, 16, 17]),
-    ]);
+    // Create resolver using actual profile keys from the keystore
+    const resolverResult = LabelResolver.createContextLabelResolver(config, keystore.profilePublicKeys);
     expect(resolverResult.ok).toBe(true);
     resolver = resolverResult.value!;
 
     // Create cache
     cache = ResolverCache.newDefault();
-
-    // Create and initialize REAL keystore
-    keystore = new RealTestKeystore();
-    await keystore.initialize();
   });
 
   describe('LabelResolver', () => {
@@ -146,7 +141,7 @@ describe('Integration Tests', () => {
       const info = resolver.resolveLabelInfo('system');
       expect(info.ok).toBe(true);
       expect(info.value).toBeDefined();
-      expect(info.value!.networkPublicKey).toEqual(new Uint8Array([1, 2, 3, 4]));
+      expect(info.value!.networkPublicKey).toEqual(keystore.networkPublicKey);
       expect(info.value!.profilePublicKeys).toEqual([]);
     });
 
@@ -155,21 +150,15 @@ describe('Integration Tests', () => {
       expect(info.ok).toBe(true);
       expect(info.value).toBeDefined();
       expect(info.value!.networkPublicKey).toBeUndefined();
-      expect(info.value!.profilePublicKeys).toEqual([
-        new Uint8Array([10, 11, 12, 13]),
-        new Uint8Array([14, 15, 16, 17]),
-      ]);
+      expect(info.value!.profilePublicKeys).toEqual(keystore.profilePublicKeys);
     });
 
     it('should resolve mixed labels correctly', () => {
       const info = resolver.resolveLabelInfo('mixed');
       expect(info.ok).toBe(true);
       expect(info.value).toBeDefined();
-      expect(info.value!.networkPublicKey).toEqual(new Uint8Array([5, 6, 7, 8]));
-      expect(info.value!.profilePublicKeys).toEqual([
-        new Uint8Array([10, 11, 12, 13]),
-        new Uint8Array([14, 15, 16, 17]),
-      ]);
+      expect(info.value!.networkPublicKey).toEqual(keystore.networkPublicKey);
+      expect(info.value!.profilePublicKeys).toEqual(keystore.profilePublicKeys);
     });
 
     it('should handle unknown labels correctly', () => {

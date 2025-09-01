@@ -20,11 +20,8 @@ describe('Real Encryption with nodejs-api', () => {
     await keys.mobileInitializeUserRootKey();
     await keys.flushState();
 
-    // Generate a network ID for envelope encryption
-    const networkId = keys.mobileGenerateNetworkDataKey();
-
-    // Get the actual network public key for encryption
-    const networkPublicKey = keys.mobileGetNetworkPublicKey(networkId);
+    // Generate a network public key for envelope encryption
+    const networkPublicKey = keys.mobileGenerateNetworkDataKey();
 
     // Create profile keys using the proper derivation method
     const personalKey = keys.mobileDeriveUserProfileKey('personal');

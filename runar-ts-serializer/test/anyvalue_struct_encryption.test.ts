@@ -96,10 +96,8 @@ class AnyValueTestEnvironment {
     this.nodeKeys.initAsNode();
 
     // Generate network and profile keys
-    this.networkId = this.mobileKeys.mobileGenerateNetworkDataKey();
-    this.networkPublicKey = new Uint8Array(
-      this.mobileKeys.mobileGetNetworkPublicKey(this.networkId)
-    );
+    this.networkPublicKey = this.mobileKeys.mobileGenerateNetworkDataKey();
+    this.networkId = 'generated-network'; // For logging purposes only
 
     const personalKey = new Uint8Array(this.mobileKeys.mobileDeriveUserProfileKey('personal'));
     const workKey = new Uint8Array(this.mobileKeys.mobileDeriveUserProfileKey('work'));
@@ -108,7 +106,7 @@ class AnyValueTestEnvironment {
     // Setup network key on node
     const token = this.nodeKeys.nodeGenerateCsr();
     const networkKeyMessage = this.mobileKeys.mobileCreateNetworkKeyMessage(
-      this.networkId,
+      this.networkPublicKey,
       token.nodeAgreementPublicKey
     );
     this.nodeKeys.nodeInstallNetworkKey(networkKeyMessage);

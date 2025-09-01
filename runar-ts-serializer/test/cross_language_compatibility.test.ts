@@ -52,12 +52,10 @@ class CrossLanguageRealKeystore {
     await this.frontendKeystore.flushState();
     console.log('State flushed');
 
-    // Generate a network ID for envelope encryption
-    this._networkId = this.frontendKeystore.mobileGenerateNetworkDataKey();
-    console.log('Network data key generated:', this._networkId);
-
-    // Get the actual network public key for encryption
-    this._networkPublicKey = this.frontendKeystore.mobileGetNetworkPublicKey(this._networkId);
+    // Generate a network public key for envelope encryption
+    this._networkPublicKey = this.frontendKeystore.mobileGenerateNetworkDataKey();
+    this._networkId = 'generated-network'; // For logging purposes only
+    console.log('Network data key generated, public key length:', this._networkPublicKey.length);
     console.log('Network public key retrieved, length:', this._networkPublicKey.length);
 
     // Create profile keys using the proper derivation method
@@ -77,7 +75,7 @@ class CrossLanguageRealKeystore {
     console.log('Installing network key in backend keystore...');
     const nodeAgreementPk = this.backendKeystore.nodeGetAgreementPublicKey();
     const networkKeyMessage = this.frontendKeystore.mobileCreateNetworkKeyMessage(
-      this._networkId,
+      this._networkPublicKey,
       nodeAgreementPk
     );
     this.backendKeystore.nodeInstallNetworkKey(networkKeyMessage);

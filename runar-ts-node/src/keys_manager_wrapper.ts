@@ -128,22 +128,7 @@ export class KeysManagerWrapper implements CommonKeysInterface {
   }
 
   // === NETWORK KEY MANAGEMENT ===
-  getNetworkPublicKey(networkId: string): Uint8Array {
-    // According to the design plan, this should retrieve the network public key
-    // from the native Keys instance for the specified network ID
-    try {
-      // Use the native API to get the network public key
-      if ('nodeGetPublicKey' in this.keys) {
-        const publicKeyBuffer = (this.keys as any).nodeGetPublicKey(networkId);
-        return new Uint8Array(publicKeyBuffer);
-      } else if ('getPublicKey' in this.keys) {
-        const publicKeyBuffer = (this.keys as any).getPublicKey(networkId);
-        return new Uint8Array(publicKeyBuffer);
-      } else {
-        throw new Error('No public key retrieval method available on this platform');
-      }
-    } catch (error) {
-      throw new Error(`Failed to retrieve network public key for ${networkId}: ${error}`);
-    }
-  }
+  // Note: Network public keys are now provided directly by the application
+  // The native API no longer uses network_id strings for key resolution
+  // Applications should use the networkPublicKey directly from their configuration
 }

@@ -100,10 +100,8 @@ class DecoratorTestContext {
     await this.mobileNetworkMaster.mobileInitializeUserRootKey();
 
     // Generate network
-    this.networkId = this.mobileNetworkMaster.mobileGenerateNetworkDataKey();
-    this.networkPub = new Uint8Array(
-      this.mobileNetworkMaster.mobileGetNetworkPublicKey(this.networkId)
-    );
+    this.networkPub = this.mobileNetworkMaster.mobileGenerateNetworkDataKey();
+    this.networkId = 'generated-network'; // For logging purposes only
 
     // Setup user mobile (has user keys but only network public key)
     this.userMobile.setPersistenceDir('/tmp/runar-decorator-test-user-mobile');
@@ -112,7 +110,7 @@ class DecoratorTestContext {
     await this.userMobile.mobileInitializeUserRootKey();
 
     this.profilePk = new Uint8Array(this.userMobile.mobileDeriveUserProfileKey('user'));
-    this.userMobile.installNetworkPublicKey(this.networkPub);
+    this.userMobile.mobileInstallNetworkPublicKey(this.networkPub);
 
     // Setup node keys
     this.nodeKeys.setPersistenceDir('/tmp/runar-decorator-test-node');
@@ -122,7 +120,7 @@ class DecoratorTestContext {
     // Install network key on node
     const token = this.nodeKeys.nodeGenerateCsr();
     const nkMsg = this.mobileNetworkMaster.mobileCreateNetworkKeyMessage(
-      this.networkId,
+      this.networkPub,
       token.nodeAgreementPublicKey
     );
     this.nodeKeys.nodeInstallNetworkKey(nkMsg);

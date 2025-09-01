@@ -61,12 +61,10 @@ class TestEnvironment {
     await this.mobileKeys.flushState();
 
     // Generate network data key (mirrors Rust network creation)
-    this.networkId = this.mobileKeys.mobileGenerateNetworkDataKey();
-    this.networkPublicKey = new Uint8Array(
-      this.mobileKeys.mobileGetNetworkPublicKey(this.networkId)
-    );
+    this.networkPublicKey = this.mobileKeys.mobileGenerateNetworkDataKey();
+    this.networkId = 'generated-network'; // For logging purposes only
 
-    console.log(`   ✅ Network created with ID: ${this.networkId}`);
+    console.log(`   ✅ Network created with public key length: ${this.networkPublicKey.length}`);
 
     // Generate profile keys (mirrors Rust profile key derivation)
     const personalKey = new Uint8Array(this.mobileKeys.mobileDeriveUserProfileKey('personal'));
@@ -78,7 +76,7 @@ class TestEnvironment {
     // Setup simple network key installation for testing
     const nodeAgreementPk = this.nodeKeys.nodeGetAgreementPublicKey();
     const networkKeyMessage = this.mobileKeys.mobileCreateNetworkKeyMessage(
-      this.networkId,
+      this.networkPublicKey,
       nodeAgreementPk
     );
     this.nodeKeys.nodeInstallNetworkKey(networkKeyMessage);

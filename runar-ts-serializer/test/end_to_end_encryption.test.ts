@@ -154,16 +154,14 @@ class EndToEndTestEnvironment {
     console.log('🌐 ENHANCED KEY MANAGEMENT TESTING');
 
     // Generate network data key (mirrors Rust step 5)
-    this.networkId = this.mobileKeys.mobileGenerateNetworkDataKey();
-    this.networkPublicKey = new Uint8Array(
-      this.mobileKeys.mobileGetNetworkPublicKey(this.networkId)
-    );
-    console.log(`   ✅ Network data key generated with ID: ${this.networkId}`);
+    this.networkPublicKey = this.mobileKeys.mobileGenerateNetworkDataKey();
+    this.networkId = 'generated-network'; // For logging purposes only
+    console.log(`   ✅ Network data key generated with public key length: ${this.networkPublicKey.length}`);
 
     // Create network key message for node (mirrors Rust step 6)
     const nodeAgreementPk = this.nodeKeys.nodeGetAgreementPublicKey();
     const networkKeyMessage = this.mobileKeys.mobileCreateNetworkKeyMessage(
-      this.networkId,
+      this.networkPublicKey,
       nodeAgreementPk
     );
 
