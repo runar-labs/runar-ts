@@ -50,7 +50,11 @@ class RealTestKeystore {
     return this._profilePublicKeys;
   }
 
-  encryptWithEnvelope(data: Buffer, networkPublicKey: Buffer | null, profilePublicKeys: Buffer[]): Buffer {
+  encryptWithEnvelope(
+    data: Buffer,
+    networkPublicKey: Buffer | null,
+    profilePublicKeys: Buffer[]
+  ): Buffer {
     // Use REAL native API encryption with networkPublicKey directly
     return this.wrapper.encryptWithEnvelope(data, networkPublicKey, profilePublicKeys);
   }
@@ -128,7 +132,10 @@ describe('Integration Tests', () => {
     };
 
     // Create resolver using actual profile keys from the keystore
-    const resolverResult = LabelResolver.createContextLabelResolver(config, keystore.profilePublicKeys);
+    const resolverResult = LabelResolver.createContextLabelResolver(
+      config,
+      keystore.profilePublicKeys
+    );
     expect(resolverResult.ok).toBe(true);
     resolver = resolverResult.value!;
 

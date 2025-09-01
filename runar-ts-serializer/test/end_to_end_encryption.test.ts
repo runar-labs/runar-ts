@@ -156,7 +156,9 @@ class EndToEndTestEnvironment {
     // Generate network data key (mirrors Rust step 5)
     this.networkPublicKey = this.mobileKeys.mobileGenerateNetworkDataKey();
     this.networkId = 'generated-network'; // For logging purposes only
-    console.log(`   ✅ Network data key generated with public key length: ${this.networkPublicKey.length}`);
+    console.log(
+      `   ✅ Network data key generated with public key length: ${this.networkPublicKey.length}`
+    );
 
     // Create network key message for node (mirrors Rust step 6)
     const nodeAgreementPk = this.nodeKeys.nodeGetAgreementPublicKey();

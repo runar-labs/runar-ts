@@ -1338,6 +1338,7 @@ const profile = anyValue.asType<Profile>(); // body is plain; decodes directly
 ### 23.5 Test Validation
 
 All comprehensive encryption tests (19/19) pass, confirming:
+
 - Basic envelope encryption roundtrips
 - Label group encryption (user, system, mixed)
 - Cross-keystore access control

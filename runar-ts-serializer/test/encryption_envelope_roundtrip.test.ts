@@ -78,7 +78,7 @@ describe('Serializer with CommonKeysInterface', () => {
     try {
       // Create a test network public key (32 bytes for network key)
       const testNetworkPublicKey = Buffer.alloc(32, 2);
-      
+
       // Encrypt using wrapper with networkPublicKey directly
       const encrypted = keysWrapper.encryptWithEnvelope(dataBuffer, testNetworkPublicKey, [
         profilePublicKey,
