@@ -10,8 +10,15 @@ export interface TypeEntry {
 }
 
 // Type definitions for registry functions
-export type EncryptFn<T = unknown> = (value: T, keystore: CommonKeysInterface, resolver: LabelResolver) => Result<Uint8Array>;
-export type DecryptFn<T = unknown> = (bytes: Uint8Array, keystore: CommonKeysInterface) => Result<T>;
+export type EncryptFn<T = unknown> = (
+  value: T,
+  keystore: CommonKeysInterface,
+  resolver: LabelResolver
+) => Result<Uint8Array>;
+export type DecryptFn<T = unknown> = (
+  bytes: Uint8Array,
+  keystore: CommonKeysInterface
+) => Result<T>;
 export type ToJsonFn<T = unknown> = (value: T) => unknown;
 
 // Registry for type resolution (matches Rust functionality)
@@ -85,7 +92,10 @@ export function lookupDecryptorByTypeName(rustTypeName: string): DecryptFn | und
 }
 
 // Encrypted companion registration and lookup (for asType<T> dual-mode semantics)
-export function registerEncryptedCompanion<T = unknown>(plainTypeName: string, encryptedCompanionCtor: Constructor): void {
+export function registerEncryptedCompanion<T = unknown>(
+  plainTypeName: string,
+  encryptedCompanionCtor: Constructor
+): void {
   plainTypeToEncryptedCompanion.set(plainTypeName, encryptedCompanionCtor);
   encryptedCompanionToPlainType.set(encryptedCompanionCtor.name, encryptedCompanionCtor);
 }

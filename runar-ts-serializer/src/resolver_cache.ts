@@ -127,7 +127,7 @@ export class ResolverCache {
         concatenated.set(key, offset);
         offset += key.length;
       }
-      
+
       // Create SHA-256 hash
       const hash = createHash('sha256');
       hash.update(concatenated);

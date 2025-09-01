@@ -24,7 +24,13 @@ import {
 } from './registry.js';
 import { getTypeName } from 'runar-ts-decorators';
 import { CBORUtils } from './cbor_utils.js';
-import { encryptLabelGroupSync, decryptLabelGroupSync, decryptBytesSync, EncryptedLabelGroup, EnvelopeEncryptedData } from './encryption.js';
+import {
+  encryptLabelGroupSync,
+  decryptLabelGroupSync,
+  decryptBytesSync,
+  EncryptedLabelGroup,
+  EnvelopeEncryptedData,
+} from './encryption.js';
 
 // Export LabelResolver types and functions
 export type {
@@ -41,11 +47,7 @@ export { ResolverCache } from './resolver_cache.js';
 
 // Export encryption functions
 export type { EnvelopeEncryptedData, EncryptedLabelGroup } from './encryption.js';
-export {
-  encryptLabelGroupSync,
-  decryptLabelGroupSync,
-  decryptBytesSync,
-} from './encryption.js';
+export { encryptLabelGroupSync, decryptLabelGroupSync, decryptBytesSync } from './encryption.js';
 
 // Re-export registry functions
 export {
@@ -63,8 +65,6 @@ export {
   lookupWireName,
   lookupRustName,
 } from './registry.js';
-
-
 
 initWirePrimitives();
 
@@ -717,39 +717,39 @@ export class AnyValue<T = unknown> {
       if (!bytesResult.ok) {
         return err(bytesResult.error);
       }
-          // Store the result for building the wire format
-    bytes = bytesResult;
-  } catch (e) {
-    return err(e as Error);
+      // Store the result for building the wire format
+      bytes = bytesResult;
+    } catch (e) {
+      return err(e as Error);
+    }
+
+    // Build the wire format: [category][is_encrypted][type_name_len][type_name_bytes...][data...]
+    // Apply outer envelope only for complex types (Struct, List, Map, Json) when context is provided
+    const shouldEncrypt =
+      context &&
+      (this.category === ValueCategory.Struct ||
+        this.category === ValueCategory.List ||
+        this.category === ValueCategory.Map ||
+        this.category === ValueCategory.Json);
+    const isEncryptedByte = shouldEncrypt ? 0x01 : 0x00;
+    mutBuf.push(isEncryptedByte);
+    mutBuf.push(typeNameBytes.length);
+    mutBuf.push(...typeNameBytes);
+
+    if (shouldEncrypt) {
+      // Outer-envelope the bytes exactly like Rust
+      const envelope = context.keystore.encryptWithEnvelope(
+        bytes.value,
+        context.networkPublicKey || null,
+        context.profilePublicKeys || []
+      );
+      mutBuf.push(...envelope);
+    } else {
+      mutBuf.push(...bytes.value);
+    }
+
+    return ok(new Uint8Array(mutBuf));
   }
-
-  // Build the wire format: [category][is_encrypted][type_name_len][type_name_bytes...][data...]
-  // Apply outer envelope only for complex types (Struct, List, Map, Json) when context is provided
-  const shouldEncrypt = context && (this.category === ValueCategory.Struct || 
-                                   this.category === ValueCategory.List || 
-                                   this.category === ValueCategory.Map || 
-                                   this.category === ValueCategory.Json);
-  const isEncryptedByte = shouldEncrypt ? 0x01 : 0x00;
-  mutBuf.push(isEncryptedByte);
-  mutBuf.push(typeNameBytes.length);
-  mutBuf.push(...typeNameBytes);
-  
-  if (shouldEncrypt) {
-    // Outer-envelope the bytes exactly like Rust
-    const envelope = context.keystore.encryptWithEnvelope(
-      bytes.value,
-      context.networkPublicKey || null,
-      context.profilePublicKeys || []
-    );
-    mutBuf.push(...envelope);
-  } else {
-    mutBuf.push(...bytes.value);
-  }
-
-  return ok(new Uint8Array(mutBuf));
-  }
-
-
 
   // Type conversion methods - TS semantic adjustment: single method for lazy decrypt-on-access
   asType<U = T>(): Result<U> {
@@ -757,15 +757,13 @@ export class AnyValue<T = unknown> {
     if (this.lazyData) {
       return this.performLazyDecrypt<U>();
     }
-    
+
     // Otherwise use the regular value
     if (this.value === null) {
       return err(new Error('No value to convert'));
     }
     return ok(this.value as unknown as U);
   }
-
-
 
   // Perform lazy decrypt-on-access logic exactly like Rust
   private performLazyDecrypt<U>(): Result<U> {
@@ -783,7 +781,7 @@ export class AnyValue<T = unknown> {
       try {
         // Decrypt outer envelope via keystore.decryptEnvelope(payload) to get inner bytes
         const decryptedBytes = this.lazyData.keystore.decryptEnvelope(payload);
-        
+
         // Try direct decode into requested T first
         try {
           const decoded = decode(decryptedBytes);

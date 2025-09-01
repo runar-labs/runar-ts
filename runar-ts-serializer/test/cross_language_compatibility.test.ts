@@ -156,16 +156,16 @@ describe('Cross-Language Compatibility Tests', () => {
 
     // Use the REAL generated keys from the keystore initialization
     // NO MOCKS - these are actual native API generated keys
-    
+
     // Create a real resolver for the context
     const config: LabelResolverConfig = {
       labelMappings: new Map([['system', { networkPublicKey: realKeystore.networkPublicKey }]]),
     };
-    
+
     const resolverResult = LabelResolver.createContextLabelResolver(config, []);
     expect(resolverResult.ok).toBe(true);
     const resolver = resolverResult.value;
-    
+
     context = {
       keystore: realKeystore,
       resolver: resolver,

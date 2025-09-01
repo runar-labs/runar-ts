@@ -18,28 +18,34 @@ export class KeysManagerWrapper implements CommonKeysInterface {
     if ('mobileEncryptWithEnvelope' in this.keys && 'initAsMobile' in this.keys) {
       // Check if it's initialized as mobile
       try {
-        return new Uint8Array((this.keys as any).mobileEncryptWithEnvelope(
-          Buffer.from(data),
-          networkPublicKey ? Buffer.from(networkPublicKey) : null,
-          profilePublicKeys.map(pk => Buffer.from(pk))
-        ));
-      } catch (error) {
-        // If mobile method fails, try node method
-        if ('nodeEncryptWithEnvelope' in this.keys) {
-          return new Uint8Array((this.keys as any).nodeEncryptWithEnvelope(
+        return new Uint8Array(
+          (this.keys as any).mobileEncryptWithEnvelope(
             Buffer.from(data),
             networkPublicKey ? Buffer.from(networkPublicKey) : null,
             profilePublicKeys.map(pk => Buffer.from(pk))
-          ));
+          )
+        );
+      } catch (error) {
+        // If mobile method fails, try node method
+        if ('nodeEncryptWithEnvelope' in this.keys) {
+          return new Uint8Array(
+            (this.keys as any).nodeEncryptWithEnvelope(
+              Buffer.from(data),
+              networkPublicKey ? Buffer.from(networkPublicKey) : null,
+              profilePublicKeys.map(pk => Buffer.from(pk))
+            )
+          );
         }
         throw error;
       }
     } else if ('nodeEncryptWithEnvelope' in this.keys) {
-      return new Uint8Array((this.keys as any).nodeEncryptWithEnvelope(
-        Buffer.from(data),
-        networkPublicKey ? Buffer.from(networkPublicKey) : null,
-        profilePublicKeys.map(pk => Buffer.from(pk))
-      ));
+      return new Uint8Array(
+        (this.keys as any).nodeEncryptWithEnvelope(
+          Buffer.from(data),
+          networkPublicKey ? Buffer.from(networkPublicKey) : null,
+          profilePublicKeys.map(pk => Buffer.from(pk))
+        )
+      );
     } else {
       throw new Error('No encryption method available on this platform');
     }

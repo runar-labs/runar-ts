@@ -136,15 +136,19 @@ export class Node {
         // Create transport and discovery instances from config
         const { NativeQuicTransport } = await import('./transport.js');
         const { NativeMulticastDiscovery } = await import('./discovery.js');
-        
+
         // Create transport instance (this would need to be created from native API)
         // For now, we'll need the native transport instance to be provided
         if (!this.config.networkConfig) {
           return err(new Error('Network configuration required for networking'));
         }
-        
+
         // Native transport and discovery instances must be provided via dependency injection
-        return err(new Error('Native transport and discovery instances must be provided via constructor or factory'));
+        return err(
+          new Error(
+            'Native transport and discovery instances must be provided via constructor or factory'
+          )
+        );
       }
 
       // Start transport
@@ -152,8 +156,9 @@ export class Node {
 
       // Initialize discovery
       // Initialize discovery with network configuration options
-      const discoveryOptions = this.config.networkConfig?.discovery ? 
-        encode(this.config.networkConfig.discovery) : new Uint8Array();
+      const discoveryOptions = this.config.networkConfig?.discovery
+        ? encode(this.config.networkConfig.discovery)
+        : new Uint8Array();
       await this.networkDiscovery.init(discoveryOptions);
 
       // Bind discovery events to transport
@@ -177,7 +182,7 @@ export class Node {
     try {
       // 1. Parse message, extract path, payload_bytes, correlation_id, profile_public_keys
       const { path, payload_bytes, correlation_id, profile_public_keys } = message;
-      
+
       if (!path || !payload_bytes || !correlation_id) {
         return err(new Error('Invalid network message: missing required fields'));
       }
@@ -188,7 +193,7 @@ export class Node {
         this.config.getLabelResolverConfig(),
         profilePublicKeys
       );
-      
+
       if (!resolverResult.ok) {
         return err(new Error(`Failed to create label resolver: ${resolverResult.error.message}`));
       }
@@ -307,7 +312,9 @@ export class Node {
     if (this.supportsNetworking) {
       const networkResult = await this.startNetworking();
       if (!networkResult.ok) {
-        this.logger?.error?.(`Failed to start networking components: ${networkResult.error.message}`);
+        this.logger?.error?.(
+          `Failed to start networking components: ${networkResult.error.message}`
+        );
         throw new Error(`Failed to start networking: ${networkResult.error.message}`);
       }
     }
@@ -574,7 +581,7 @@ export class Node {
    */
   async remote_request<P = unknown>(path: string, payload?: P): Promise<Result<AnyValue, string>> {
     this.logger?.debug?.(`remote_request called with path: ${path}`);
-    
+
     if (!this.supportsNetworking || !this.networkTransport) {
       return err('Remote requests require networking to be enabled');
     }

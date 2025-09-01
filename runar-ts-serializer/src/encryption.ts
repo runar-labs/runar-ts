@@ -157,5 +157,3 @@ export function decryptBytesSync(
     return err(error instanceof Error ? error : new Error(String(error)));
   }
 }
-
-
