@@ -136,6 +136,7 @@ Achieve 100% functional and API parity between the TypeScript LabelResolver ecos
 
 - NodeConfig additions:
   - Require `LabelResolverConfig` and provide `getLabelResolverConfig()`.
+  - Add `role: 'frontend' | 'backend'` field (defaults to 'backend' for TypeScript).
 - Node constructor:
   - Initialize `ResolverCache.newDefault()`.
   - Derive `networkPublicKey` via keys wrapper for the node’s default network when needed.
@@ -188,8 +189,9 @@ Achieve 100% functional and API parity between the TypeScript LabelResolver ecos
 ### Phase 4: Node Integration (3 weeks)
 
 - Extend `runar-ts-node`:
-  - `NodeConfig` to carry `LabelResolverConfig`.
+  - `NodeConfig` to carry `LabelResolverConfig` and add `role?: 'frontend' | 'backend'` field.
   - Add `ResolverCache` instance and `createSerializationContext()` that returns a fully populated context.
+  - Implement `KeystoreFactory` for role-based keystore creation.
   - Implement `RemoteService` that uses `SerializationContext` for requests/responses.
   - Integrate QUIC transport via `runar-nodejs-api` for remote routing.
 - Tests: Node config/serialization context, remote request encryption, integration with transport mocks.
@@ -290,7 +292,7 @@ Achieve 100% functional and API parity between the TypeScript LabelResolver ecos
   - Serializer core: `label_resolver.ts`, `resolver_cache.ts`, `encryption.ts`, `wire.ts`.
   - AnyValue: `any_value.ts` (new), integrate with `registry.ts`.
   - Decorators: `runar-ts-decorators` enhancements and auto-registration.
-  - Node integration: `runar-ts-node` (`config.ts`, `node.ts`, remote service module).
+  - Node integration: `runar-ts-node` (`config.ts`, `node.ts`, `keystore_factory.ts`, remote service module).
   - Native wrappers: typings and guards for `runar-nodejs-api`.
 
 ### 7.3 Validation Framework
@@ -352,6 +354,7 @@ Action: Create typed TS facades in `runar-ts-node`:
 
 - `transport.ts` with `QuicTransport` interface and a concrete `NativeQuicTransport` that calls native bindings.
 - `discovery.ts` with `NodeDiscovery` interface and a concrete `NativeMulticastDiscovery`.
+- `keystore_factory.ts` with `KeystoreFactory` for role-based keystore creation.
 
 Example typings (TS):
 
@@ -381,7 +384,7 @@ export interface QuicTransport {
 
 ### 10.2 Node Networking Capability
 
-- Node gains a `supportsNetworking` flag (from config) and optional `QuicTransport` + `NodeDiscovery` instances.
+- Node gains networking capability based on `networkConfig` and optional `QuicTransport` + `NodeDiscovery` instances.
 - On `start()`, if networking is enabled:
   - Create transport with options (bind address, node public key from keystore).
   - Start transport, initialize discovery, bind discovery events to transport.
@@ -390,19 +393,23 @@ export interface QuicTransport {
 Configuration additions in `NodeConfig`:
 
 ```typescript
-export interface NetworkConfig {
-  bindAddr?: string; // ip:port
-  discovery?: {
-    useMulticast: boolean;
-    localAddresses?: string[];
-    timeouts?: { announce?: number; discovery?: number; debounce?: number };
-  };
-}
-
-export class NodeConfig {
-  // ...
-  public networkConfig?: NetworkConfig;
-  public labelResolverConfig: LabelResolverConfig; // required
+export interface NodeConfig {
+  // REQUIRED: Label resolver configuration (matches Rust exactly)
+  labelResolverConfig: LabelResolverConfig;
+  
+  // Network configuration (matches Rust exactly)
+  defaultNetworkId: string;
+  networkIds?: string[];
+  networkConfig?: NetworkConfig;
+  
+  // Logging configuration (matches Rust exactly)
+  loggingConfig?: LoggingConfig;
+  
+  // Request timeout (matches Rust exactly)
+  requestTimeoutMs?: number; // defaults to 30000
+  
+  // NEW: Role configuration (TypeScript only - Rust doesn't need this)
+  role?: 'frontend' | 'backend'; // defaults to 'backend'
 }
 ```
 
@@ -454,7 +461,7 @@ export class RemoteService {
 
       const networkPk = req.networkPublicKey ?? undefined;
       const ctx: SerializationContext = {
-        keystore: req.node.getKeysWrapper(),
+        keystore: req.node.keystore,
         resolver: resolverResult.value,
         networkPublicKey: networkPk!,
         profilePublicKeys,
@@ -472,7 +479,7 @@ export class RemoteService {
         profilePublicKeys
       );
 
-      const av = AnyValue.deserialize(responseBytes, { keystore: req.node.getKeysWrapper() });
+      const av = AnyValue.deserialize(responseBytes, { keystore: req.node.keystore });
       return av.ok ? ok(av.value) : err(av.error.message);
     } catch (e) {
       return err(e instanceof Error ? e.message : String(e));
@@ -500,7 +507,7 @@ transport.onRequest(async msg => {
   const resolver = this.createUserLabelResolver(profileKeys);
   if (!resolver.ok) return makeErrorResponse('resolver error');
 
-  const deCtx: DeserializationContext = { keystore: this.keysWrapper, resolver: resolver.value };
+  const deCtx: DeserializationContext = { keystore: this.keystore, resolver: resolver.value };
   const payloadAv = AnyValue.deserialize(msg.payload.payload_bytes, deCtx);
   if (!payloadAv.ok) return makeErrorResponse(payloadAv.error.message);
 
@@ -561,7 +568,6 @@ This plan expands 02 to fully cover the areas detailed in 01 and adds transporte
 
 - Node
   - `createSerializationContext(userKeys?: Uint8Array[]): SerializationContext`
-  - `getKeysWrapper(): CommonKeysInterface`
   - `startNetworking(): Promise<Result<void, Error>>`
   - `handleNetworkMessage(message: NetworkMessage): Promise<Result<void, Error>>`
 - RemoteService
@@ -579,10 +585,11 @@ This plan expands 02 to fully cover the areas detailed in 01 and adds transporte
 
 ## 13. Work Breakdown Additions (Phases 4-5 deepening)
 
-- Phase 4A (Node Config): Implement `NetworkConfig`, require `LabelResolverConfig`, add validation.
-- Phase 4B (Transport): Create TS facades for native Transport/Discovery; integrate into Node lifecycle.
-- Phase 4C (RemoteService): Implement class, integrate with Node service registry; add request path.
-- Phase 4D (Inbound): Register transport request handler; implement full inbound decryption/routing/encryption.
+- Phase 4A (Node Config): Implement `NetworkConfig`, require `LabelResolverConfig`, add `role` field, add validation.
+- Phase 4B (KeystoreFactory): Implement role-based keystore creation and wrapper classes.
+- Phase 4C (Transport): Create TS facades for native Transport/Discovery; integrate into Node lifecycle.
+- Phase 4D (RemoteService): Implement class, integrate with Node service registry; add request path.
+- Phase 4E (Inbound): Register transport request handler; implement full inbound decryption/routing/encryption.
 - Phase 5 (E2E): Cross-language network tests; performance benchmark harness using real native transport.
 
 ## 14. Acceptance Checklist Additions
@@ -592,6 +599,7 @@ This plan expands 02 to fully cover the areas detailed in 01 and adds transporte
 - Discovery attaches to transport and connects to discovered peers.
 - All Node inbound requests are decrypted via dynamic resolver and re-encrypted on response.
 - Cross-language request/response tests pass for at least one decorated struct.
+- Role-based keystore creation works correctly for both frontend and backend configurations.
 
 ## 15. Alignment with @runar-nodejs-api (Exact API Mapping)
 
@@ -1010,87 +1018,43 @@ This merged section supersedes standalone decorator design docs and is aligned w
 
 This section maps each design element to current TS code to avoid duplication and to specify precise update scopes.
 
-- LabelResolver core — EXISTING
-  - File: `runar-ts-serializer/src/label_resolver.ts`
-  - Action: Update only
-    - Align error strings exactly with Rust.
-    - Change `networkPublicKey` handling to store an empty `Uint8Array` (present-but-empty) for user-only labels (Rust sets `Some(Vec::new())`), not `undefined`.
-    - Keep `createContextLabelResolver` merging semantics as in Rust.
+- LabelResolver core — EXISTING — Type-only interfaces + class (`LabelResolver`)
+  - Interfaces remain type-only; `LabelResolver` continues as a class (runtime).
+- ResolverCache — EXISTING — Class
+- Encryption helpers — EXISTING — Functions + Classes
+  - Expose sync functions and `EnvelopeEncryptedData`, `EncryptedLabelGroup` as classes.
+- Wire header utilities — EXISTING — Functions
+- Registry — EXISTING — Module with functions and internal maps (runtime values)
+- AnyValue — NEW — Class
+- Decorators runtime — EXISTING — Generated runtime classes (`EncryptedT`, `TLFields`) + registration functions
+- Node integration — EXISTING — `Node` class; `NodeConfig` remains type-only; keystore exposed via `KeysWrapper` class
+- RemoteService — NEW — Class
+- Transport/Discovery — NEW — `NativeQuicTransport`/`NativeDiscovery` classes and factories; transport/discovery option shapes remain type-only
+- Keys wrapper — EXISTING — Ensure `KeysWrapper` is a class with sync methods
+- Tests — Update imports to use `import type` for interfaces; import classes/functions for runtime
 
-- ResolverCache — EXISTING
-  - File: `runar-ts-serializer/src/resolver_cache.ts`
-  - Action: Update only
-    - Improve cache-key generation to a stable digest of sorted keys (length+lexical) to mirror Rust’s deterministic hashing.
-    - Ensure `stats()` returns `{ totalEntries, maxSize, ttlSeconds }` matching Rust fields.
-    - Keep LRU + TTL behavior; verify cleanup and eviction paths.
+## 20. Type Strategy: Type-only Interfaces vs Runtime Classes (No Schemas)
 
-- Encryption helpers (Envelope) — EXISTING (needs overhaul)
-  - File: `runar-ts-serializer/src/encryption.ts`
-  - Action: Update/Refactor
-    - Convert to synchronous helpers: `encryptLabelGroupSync`, `decryptLabelGroupSync`, `decryptBytesSync`.
-    - Ensure label-group encrypt returns CBOR-encoded `EnvelopeEncryptedData` bytes (no placeholders).
-    - Use native `Keys` functions (via `CommonKeysInterface`) that are synchronous.
+Guideline: Interfaces are erased at runtime. Export them for typing only (use `import type { ... }`). For anything needed at runtime, export concrete classes/functions. No schema library is used.
 
-- Wire header utilities — EXISTING
-  - File: `runar-ts-serializer/src/wire.ts`
-  - Action: Update only
-    - Enforce header bytes: category, isEncrypted, typeNameLen, typeName.
-    - Keep/expand `readHeader`, `writeHeader`, offsets; ensure exact ranges and validation on bounds.
+- Type-only (interfaces/types) — compile-time only
+  - `LabelValue`, `LabelKeyInfo`, `LabelResolverConfig`, `KeyMappingConfig`
+  - Transport/discovery config shapes (e.g., `NetworkConfig`, `LoggingConfig`)
+  - Internal DTO shapes used only within module boundaries
+  - Usage: `import type { LabelResolverConfig } from 'runar-ts-serializer'`
 
-- Registry (type names, encrypt/decrypt, JSON) — EXISTING (needs expansion)
-  - File: `runar-ts-serializer/src/registry.ts`
-  - Action: Update/Expand
-    - Add encrypt/decrypt registries and lookup APIs.
-    - Add JSON converters by rust name and bind by wire name.
-    - Maintain mappings: rust↔wire; wire→TypeId equivalent (constructor) if needed.
+- Runtime classes (export concrete values)
+  - `SerializationContext`, `DeserializationContext`
+  - `EnvelopeEncryptedData`, `EncryptedLabelGroup`
+  - `AnyValue` (ArcValue parity)
+  - `NativeQuicTransport`, `NativeDiscovery` (and factory functions)
+  - `KeysWrapper` (node/mobile wrappers)
+  - Decorator-generated classes: `Encrypted{Type}`, `{Type}{Label}Fields`
 
-- AnyValue (ArcValue parity) — NEW
-  - File: `runar-ts-serializer/src/any_value.ts` (new)
-  - Action: Implement
-    - Full wire format, lazy holder, sync `serialize/deserialize`, container element encryption via registry, decrypt-on-access.
-  - File: `runar-ts-serializer/src/index.ts`
-  - Action: Update exports to include `AnyValue`, registry APIs, and sync encryption helpers.
+- Factories (lightweight, optional for config ergonomics)
+  - Optional helpers like `createLabelResolverConfig(...)` may return frozen plain objects and provide minimal runtime checks if needed; not mandatory.
 
-- Decorators runtime — EXISTING (package present; behavior needs redesign)
-  - Package: `runar-ts-decorators`
-    - Files: `src/index.ts`, `src/helpers.ts`
-  - Action: Update/Refactor
-    - Generate `EncryptedT` and `{Type}{Label}Fields` at runtime.
-    - Implement sync `encryptWithKeystore` (label-group encryption via serializer helpers) and `decryptWithKeystore`.
-    - Perform idempotent registration to serializer registry (encrypt/decrypt, wire names, JSON converters).
-    - Maintain per-class `WeakMap` metadata.
-
-- Node integration (core Node) — EXISTING
-  - File: `runar-ts-node/src/node.ts`
-  - Action: Update only
-    - Implement `createSerializationContext()` returning fully populated context (keystore, resolver via `ResolverCache`, network/profile keys).
-    - Use `AnyValue.serialize`/`deserialize` synchronously in request/publish flows.
-
-- RemoteService proxy — NEW
-  - File: `runar-ts-node/src/remote_service.ts` (new)
-  - Action: Implement
-    - Build context from cache + keys; call `AnyValue.serialize(ctx)`; invoke transport; deserialize response.
-
-- Transport/Discovery facades — NEW
-  - Files: `runar-ts-node/src/transport.ts`, `runar-ts-node/src/discovery.ts`
-  - Action: Implement
-    - Typed wrappers over `@runar-nodejs-api` with aligned request/publish signatures (networkPublicKey, profilePublicKeys).
-
-- Keys wrapper — EXISTING
-  - File: `runar-ts-node/src/keys_manager_wrapper.ts`
-  - Action: Verify/Update
-    - Ensure synchronous interface methods used by serializer are exposed.
-
-- Serializer index/barrel — EXISTING
-  - File: `runar-ts-serializer/src/index.ts`
-  - Action: Update only
-    - Export new AnyValue, registry APIs, sync encryption helpers, and updated types.
-
-- Tests — PARTIALLY EXISTING, NEED NEW
-  - Serializer tests: `runar-ts-serializer/test/*.ts`
-  - Action: Add/Update
-    - Add AnyValue vectors, container element encryption, lazy flows, registry positive/negative, label resolver parity, envelope roundtrips.
-  - Node tests: `runar-ts-node/test/*.ts` (new)
-    - Add RemoteService request path (loopback/mocks), inbound handler, discovery/transport wiring.
-
-This mapping is meant to be the authoritative source during implementation to prevent duplicate work and to scope changes precisely to existing modules versus new modules.
+- Import/Export rules
+  - Always import interfaces with `import type { ... }`.
+  - Export only runtime classes/functions for values used at runtime.
+  - Public APIs should accept/return classes where runtime presence is required; interfaces can annotate arguments/returns where no runtime is needed.

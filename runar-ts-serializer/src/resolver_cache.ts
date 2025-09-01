@@ -69,7 +69,7 @@ export class ResolverCache {
    * Get or create a label resolver, using cache if available
    * Simplified cache key: only user_profile_keys since config changes are rare
    */
-  getOrCreate(config: LabelResolverConfig, userProfileKeys: Uint8Array[]): Result<LabelResolver> {
+  getOrCreate(config: LabelResolverConfig, userProfileKeys: Buffer[]): Result<LabelResolver> {
     const cacheKey = this.generateCacheKey(userProfileKeys);
 
     // Try to get from cache first
@@ -106,7 +106,7 @@ export class ResolverCache {
    * Generate a cache key for user profile keys only
    * Uses stable digest for deterministic hashing to match Rust behavior
    */
-  private generateCacheKey(userProfileKeys: Uint8Array[]): string {
+  private generateCacheKey(userProfileKeys: Buffer[]): string {
     // Create a deterministic hash of the user profile keys
     const sortedKeys = [...userProfileKeys].sort((a, b) => {
       if (a.length !== b.length) return a.length - b.length;
@@ -124,7 +124,7 @@ export class ResolverCache {
   /**
    * Fast JavaScript hash fallback when crypto.subtle is not available
    */
-  private fastHash(sortedKeys: Uint8Array[]): string {
+  private fastHash(sortedKeys: Buffer[]): string {
     let hash = 0;
     for (const key of sortedKeys) {
       for (let i = 0; i < key.length; i++) {

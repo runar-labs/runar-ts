@@ -43,12 +43,12 @@ export class KeysManagerWrapper implements CommonKeysInterface {
 
   decryptEnvelope(eedCbor: Buffer): Buffer {
     // Handle both mobile and node platforms
-    if ('mobileDecryptEnvelope' in this.keys && 'initAsMobile' in this.keys) {
-      // Check if it's initialized as mobile
+    // Since we're testing with mobile keystores, try mobile first
+    if ('mobileDecryptEnvelope' in this.keys) {
       try {
         return (this.keys as any).mobileDecryptEnvelope(eedCbor);
       } catch (error) {
-        // If mobile method fails, try node method
+        // If mobile fails, try node as fallback
         if ('nodeDecryptEnvelope' in this.keys) {
           return (this.keys as any).nodeDecryptEnvelope(eedCbor);
         }
@@ -56,9 +56,9 @@ export class KeysManagerWrapper implements CommonKeysInterface {
       }
     } else if ('nodeDecryptEnvelope' in this.keys) {
       return (this.keys as any).nodeDecryptEnvelope(eedCbor);
-    } else {
-      throw new Error('No decryption method available on this platform');
     }
+
+    throw new Error('No decryption method available on this platform');
   }
 
   // === UTILITY METHODS (BOTH PLATFORMS) ===

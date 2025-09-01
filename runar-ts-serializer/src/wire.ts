@@ -40,29 +40,35 @@ export enum ValueCategory {
   Json = 6,
 }
 
-export interface SerializationContext {
-  keystore?: CommonKeysInterface;
-  resolver: import('./label_resolver.js').LabelResolver; // Now required and properly typed
-  networkPublicKey?: Buffer; // Pre-resolved network public key - use Buffer to match native API
-  profilePublicKeys?: Buffer[]; // Multiple profile keys - use Buffer to match native API
+export class SerializationContext {
+  constructor(
+    public keystore: CommonKeysInterface,
+    public resolver: import('./label_resolver.js').LabelResolver,
+    public networkPublicKey: Buffer,
+    public profilePublicKeys: Buffer[]
+  ) {}
 }
 
-export interface DeserializationContext {
-  keystore?: CommonKeysInterface;
-  resolver?: import('./label_resolver.js').LabelResolver; // Now properly typed
-  decryptEnvelope?: (eed: Uint8Array) => Result<Uint8Array>;
+export class DeserializationContext {
+  constructor(
+    public keystore: CommonKeysInterface,
+    public resolver?: import('./label_resolver.js').LabelResolver,
+    public decryptEnvelope?: (eed: Uint8Array) => Result<Uint8Array>
+  ) {}
 }
 
 /**
  * Lazy data holder for complex types that are not immediately deserialized
  */
-export interface LazyDataWithOffset {
-  typeName: string;
-  originalBuffer: Buffer; // Use Buffer to match native API
-  startOffset?: number;
-  endOffset?: number;
-  keystore?: CommonKeysInterface;
-  encrypted: boolean;
+export class LazyDataWithOffset {
+  constructor(
+    public typeName: string,
+    public originalBuffer: Buffer,
+    public startOffset?: number,
+    public endOffset?: number,
+    public keystore?: CommonKeysInterface,
+    public encrypted: boolean
+  ) {}
 }
 
 export interface WireHeader {

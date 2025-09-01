@@ -16,6 +16,7 @@ export class NodeConfig {
   public requestTimeoutMs: number;
   public labelResolverConfig: LabelResolverConfig; // Required for encryption
   public networkConfig?: NetworkConfig;
+  public role?: 'frontend' | 'backend'; // TypeScript only - Rust doesn't need this
   private keyManager?: Keys; // Already initialized Keys instance from FFI
 
   constructor(defaultNetworkId: string, labelResolverConfig: LabelResolverConfig) {
@@ -23,6 +24,7 @@ export class NodeConfig {
     this.networkIds = [];
     this.requestTimeoutMs = 30000;
     this.labelResolverConfig = labelResolverConfig;
+    this.role = 'backend'; // Default to backend for TypeScript
   }
 
   // Match Rust with_key_manager() method
@@ -43,6 +45,11 @@ export class NodeConfig {
 
   withNetworkConfig(networkConfig: NetworkConfig): this {
     this.networkConfig = networkConfig;
+    return this;
+  }
+
+  withRole(role: 'frontend' | 'backend'): this {
+    this.role = role;
     return this;
   }
 
