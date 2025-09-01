@@ -24,6 +24,7 @@ import {
 } from './registry.js';
 import { getTypeName } from 'runar-ts-decorators';
 import { CBORUtils } from './cbor_utils.js';
+import { encryptLabelGroupSync, decryptLabelGroupSync, decryptBytesSync, EncryptedLabelGroup, EnvelopeEncryptedData } from './encryption.js';
 
 // Export LabelResolver types and functions
 export type {
@@ -41,9 +42,6 @@ export { ResolverCache } from './resolver_cache.js';
 // Export encryption functions
 export type { EnvelopeEncryptedData, EncryptedLabelGroup } from './encryption.js';
 export {
-  encryptLabelGroup,
-  decryptLabelGroup,
-  decryptBytes,
   encryptLabelGroupSync,
   decryptLabelGroupSync,
   decryptBytesSync,
@@ -66,21 +64,7 @@ export {
   lookupRustName,
 } from './registry.js';
 
-// Create a TypeRegistry class for compatibility
-export class TypeRegistry {
-  static register<T>(typeName: string, ctor: new (...args: any[]) => T): void {
-    registerType(typeName, { ctor });
-  }
 
-  static resolve<T>(typeName: string): (new (...args: any[]) => T) | undefined {
-    const entry = resolveType(typeName);
-    return entry?.ctor as (new (...args: any[]) => T) | undefined;
-  }
-
-  static clear(): void {
-    clearRegistry();
-  }
-}
 
 initWirePrimitives();
 
@@ -344,26 +328,25 @@ export class AnyValue<T = unknown> {
       'encryptWithKeystore' in value &&
       value.encryptWithKeystore !== (value as any).__isPlainNoOp;
 
-    const serializeFn: SerializeFn = hasEncryptionMethods
-      ? async (value, keystore, resolver) => {
-          try {
-            // This is a decorated class - use its encryption method
-            const encrypted = await value.encryptWithKeystore(keystore, resolver);
-            const bytes = encode(encrypted);
-            return ok(bytes);
-          } catch (e) {
-            return err(e as Error);
+    const serializeFn: SerializeFn = (value, keystore, resolver) => {
+      try {
+        if (hasEncryptionMethods) {
+          // This is a decorated class - use its encryption method
+          const encryptedResult = value.encryptWithKeystore(keystore, resolver);
+          if (!encryptedResult.ok) {
+            return err(encryptedResult.error);
           }
+          // Return CBOR of Encrypted{T} - this will be outer-enveloped by AnyValue.serialize
+          return ok(encode(encryptedResult.value));
+        } else {
+          // Regular struct serialization (no encryption)
+          const bytes = encode(value);
+          return ok(bytes);
         }
-      : value => {
-          try {
-            // Regular struct serialization
-            const bytes = encode(value);
-            return ok(bytes);
-          } catch (e) {
-            return err(e as Error);
-          }
-        };
+      } catch (e) {
+        return err(e as Error);
+      }
+    };
 
     return new AnyValue(ValueCategory.Struct, value, serializeFn, typeName);
   }
@@ -476,14 +459,14 @@ export class AnyValue<T = unknown> {
         category === ValueCategory.Json)
     ) {
       // Create lazy data holder according to design plan
-      const lazyData: LazyDataWithOffset = {
+      const lazyData = new LazyDataWithOffset(
         typeName,
-        originalBuffer: Buffer.from(bytes), // Convert Uint8Array to Buffer to match native API
-        startOffset: dataStart,
-        endOffset: bytes.length,
-        keystore: ctx.keystore,
-        encrypted: true,
-      };
+        bytes, // Use Uint8Array directly
+        true,
+        dataStart,
+        bytes.length,
+        ctx.keystore
+      );
 
       // Create AnyValue with lazy data
       const lazyAv = new AnyValue(category, null, null, typeName);
@@ -634,22 +617,12 @@ export class AnyValue<T = unknown> {
     return AnyValue.deserialize(bytes, context);
   }
 
-  // Serialization method matching Rust exactly (with backward compatibility)
-  serialize(context?: any): Result<Uint8Array> | Promise<Result<Uint8Array>> {
-    // Check if we need async serialization (has encryption methods)
-    const hasEncryptionMethods =
-      this.value && typeof this.value === 'object' && 'encryptWithKeystore' in this.value;
-
-    if (hasEncryptionMethods && context?.keystore) {
-      // Return a promise for async encryption
-      return this.serializeAsync(context);
-    } else {
-      // Return synchronous result
-      return this.serializeSync(context);
-    }
+  // Serialization method matching Rust exactly (synchronous only)
+  serialize(context?: any): Result<Uint8Array> {
+    return this.serializeSync(context);
   }
 
-  // Synchronous serialization for backward compatibility
+  // Synchronous serialization implementation
   private serializeSync(context?: any): Result<Uint8Array> {
     if (this.isNull()) {
       return ok(new Uint8Array([0]));
@@ -744,194 +717,110 @@ export class AnyValue<T = unknown> {
       if (!bytesResult.ok) {
         return err(bytesResult.error);
       }
-      // Store the result for building the wire format
-      bytes = bytesResult;
-    } catch (e) {
-      return err(e as Error);
-    }
-
-    // Build the wire format: [category][is_encrypted][type_name_len][type_name_bytes...][data...]
-    const isEncryptedByte = context ? 0x01 : 0x00;
-    mutBuf.push(isEncryptedByte);
-    mutBuf.push(typeNameBytes.length);
-    mutBuf.push(...typeNameBytes);
-    mutBuf.push(...bytes.value);
-
-    return ok(new Uint8Array(mutBuf));
+          // Store the result for building the wire format
+    bytes = bytesResult;
+  } catch (e) {
+    return err(e as Error);
   }
 
-  // Async serialization for encryption
-  private async serializeAsync(context?: any): Promise<Result<Uint8Array>> {
-    if (this.isNull()) {
-      return ok(new Uint8Array([0]));
-    }
-
-    if (!this.serializeFn) {
-      return err(new Error('No serialize function available'));
-    }
-
-    const categoryByte = this.category;
-    const mutBuf: number[] = [categoryByte];
-
-    // Resolve wire name (parameterized for containers)
-    let wireName: string;
-    switch (this.category) {
-      case ValueCategory.Primitive:
-        if (!this.typeName) {
-          return err(new Error('Missing type name for primitive'));
-        }
-        wireName = this.typeName;
-        break;
-      case ValueCategory.List:
-        // Generate parameterized type name for lists
-        if (this.value && Array.isArray(this.value) && this.value.length > 0) {
-          // Check if all elements are the same type (homogeneous) or different (heterogeneous)
-          const elementTypes = this.value.map(item => AnyValue.getTypeName(item));
-          const uniqueTypes = [...new Set(elementTypes)];
-          if (uniqueTypes.length === 1) {
-            // Homogeneous list - use the element type
-            wireName = `list<${uniqueTypes[0]}>`;
-          } else {
-            // Heterogeneous list - use 'any'
-            wireName = 'list<any>';
-          }
-        } else {
-          // Empty list or unknown content
-          wireName = 'list<any>';
-        }
-        break;
-      case ValueCategory.Map:
-        // Generate parameterized type name for maps
-        if (this.value && this.value instanceof Map && this.value.size > 0) {
-          // Check if all values are the same type (homogeneous) or different (heterogeneous)
-          const valueTypes = Array.from(this.value.values()).map(item =>
-            AnyValue.getTypeName(item)
-          );
-          const uniqueValueTypes = [...new Set(valueTypes)];
-          if (uniqueValueTypes.length === 1) {
-            // Homogeneous map - use the value type
-            wireName = `map<string,${uniqueValueTypes[0]}>`;
-          } else {
-            // Heterogeneous map - use 'any'
-            wireName = 'map<string,any>';
-          }
-        } else {
-          // Empty map or unknown content
-          wireName = 'map<string,any>';
-        }
-        break;
-      case ValueCategory.Json:
-        wireName = 'json';
-        break;
-      case ValueCategory.Bytes:
-        wireName = 'bytes';
-        break;
-      case ValueCategory.Struct:
-        if (!this.typeName) {
-          return err(new Error('Missing type name for struct'));
-        }
-        wireName = this.typeName;
-        break;
-      case ValueCategory.Null:
-        wireName = 'null';
-        break;
-      default:
-        return err(new Error(`Unknown category: ${this.category}`));
-    }
-
-    const typeNameBytes = new TextEncoder().encode(wireName);
-    if (typeNameBytes.length > 255) {
-      return err(new Error(`Wire type name too long: ${wireName}`));
-    }
-
-    // Serialize the value (async version)
-    const bytesResult = this.serializeFn(this.value, context?.keystore, context?.resolver);
-    const bytes = bytesResult instanceof Promise ? await bytesResult : bytesResult;
-    if (!bytes.ok) {
-      return err(bytes.error);
-    }
-
-    // Build the wire format: [category][is_encrypted][type_name_len][type_name_bytes...][data...]
-    const isEncryptedByte = context ? 0x01 : 0x00;
-    mutBuf.push(isEncryptedByte);
-    mutBuf.push(typeNameBytes.length);
-    mutBuf.push(...typeNameBytes);
+  // Build the wire format: [category][is_encrypted][type_name_len][type_name_bytes...][data...]
+  // Apply outer envelope only for complex types (Struct, List, Map, Json) when context is provided
+  const shouldEncrypt = context && (this.category === ValueCategory.Struct || 
+                                   this.category === ValueCategory.List || 
+                                   this.category === ValueCategory.Map || 
+                                   this.category === ValueCategory.Json);
+  const isEncryptedByte = shouldEncrypt ? 0x01 : 0x00;
+  mutBuf.push(isEncryptedByte);
+  mutBuf.push(typeNameBytes.length);
+  mutBuf.push(...typeNameBytes);
+  
+  if (shouldEncrypt) {
+    // Outer-envelope the bytes exactly like Rust
+    const envelope = context.keystore.encryptWithEnvelope(
+      bytes.value,
+      context.networkPublicKey || null,
+      context.profilePublicKeys || []
+    );
+    mutBuf.push(...envelope);
+  } else {
     mutBuf.push(...bytes.value);
-
-    return ok(new Uint8Array(mutBuf));
   }
 
-  // Type conversion methods
-  as<U = T>(): Result<U> {
+  return ok(new Uint8Array(mutBuf));
+  }
+
+
+
+  // Type conversion methods - TS semantic adjustment: single method for lazy decrypt-on-access
+  asType<U = T>(): Result<U> {
+    // If we have lazy data, use the lazy deserialization path
+    if (this.lazyData) {
+      return this.performLazyDecrypt<U>();
+    }
+    
+    // Otherwise use the regular value
     if (this.value === null) {
       return err(new Error('No value to convert'));
     }
     return ok(this.value as unknown as U);
   }
 
-  // Lazy deserialization accessors according to design plan
-  asTypeRef<U>(): Result<U> {
-    if (this.lazyData && this.lazyData.originalBuffer) {
-      // Lazy data exists - attempt to deserialize
-      if (this.lazyData.encrypted && this.lazyData.keystore) {
-        try {
-          // Decrypt the outer envelope first
-          const decryptedBytes = this.lazyData.keystore.decryptEnvelope(
-            Buffer.from(
-              this.lazyData.originalBuffer.subarray(
-                this.lazyData.startOffset || 0,
-                this.lazyData.endOffset
-              )
-            )
-          );
 
-          // Attempt direct CBOR decode into target type
+
+  // Perform lazy decrypt-on-access logic exactly like Rust
+  private performLazyDecrypt<U>(): Result<U> {
+    if (!this.lazyData || !this.lazyData.originalBuffer) {
+      return err(new Error('No lazy data available'));
+    }
+
+    // Slice the payload from startOffset..endOffset (that is the envelope CBOR)
+    const payload = this.lazyData.originalBuffer.subarray(
+      this.lazyData.startOffset || 0,
+      this.lazyData.endOffset
+    );
+
+    if (this.lazyData.encrypted && this.lazyData.keystore) {
+      try {
+        // Decrypt outer envelope via keystore.decryptEnvelope(payload) to get inner bytes
+        const decryptedBytes = this.lazyData.keystore.decryptEnvelope(payload);
+        
+        // Try direct decode into requested T first
+        try {
           const decoded = decode(decryptedBytes);
           return ok(decoded as U);
-        } catch (error) {
-          // If direct decode fails, try registry decryptor
-          const decryptor = lookupDecryptorByTypeName(this.lazyData.typeName);
-          if (decryptor && this.lazyData.keystore) {
+        } catch (directDecodeError) {
+          // If direct decode fails, try registry decryptor for the target type
+          const decryptor = lookupDecryptorByTypeName(this.lazyData.typeName || '');
+          if (decryptor) {
             try {
-              // Re-decrypt for registry decryptor
-              const decryptedBytesForRegistry = this.lazyData.keystore.decryptEnvelope(
-                Buffer.from(
-                  this.lazyData.originalBuffer.subarray(
-                    this.lazyData.startOffset || 0,
-                    this.lazyData.endOffset
-                  )
-                )
-              );
-              const result = decryptor(decryptedBytesForRegistry, this.lazyData.keystore);
-              return result;
-            } catch (e) {
-              return err(new Error(`Registry decryptor failed: ${e}`));
+              const decrypted = decryptor(decryptedBytes, this.lazyData.keystore!);
+              if (decrypted.ok) {
+                return ok(decrypted.value as U);
+              } else {
+                return err(new Error(`Registry decryptor failed: ${decrypted.error.message}`));
+              }
+            } catch (decryptorError) {
+              return err(new Error(`Registry decryptor error: ${decryptorError}`));
             }
+          } else {
+            return err(new Error(`No decryptor found for type: ${this.lazyData.typeName}`));
           }
-          return err(new Error(`Failed to deserialize lazy data: ${error}`));
         }
-      } else {
-        // Plain data - attempt direct decode
-        try {
-          const decoded = decode(
-            this.lazyData.originalBuffer.subarray(
-              this.lazyData.startOffset || 0,
-              this.lazyData.endOffset
-            )
-          );
-          return ok(decoded as U);
-        } catch (error) {
-          return err(new Error(`Failed to decode plain lazy data: ${error}`));
-        }
+      } catch (envelopeDecryptError) {
+        return err(new Error(`Failed to decrypt outer envelope: ${envelopeDecryptError}`));
+      }
+    } else {
+      // Plain data - attempt direct decode
+      try {
+        const decoded = decode(payload);
+        return ok(decoded as U);
+      } catch (error) {
+        return err(new Error(`Failed to decode plain lazy data: ${error}`));
       }
     }
-
-    // No lazy data - use regular value
-    if (this.value === null) {
-      return err(new Error('No value to convert'));
-    }
-    return ok(this.value as unknown as U);
   }
+
+  // Lazy deserialization accessors according to design plan - REMOVED, replaced by performLazyDecrypt
 
   // Core API method for creating AnyValue from JavaScript/TypeScript values
   static from<T>(value: T): AnyValue<T> {

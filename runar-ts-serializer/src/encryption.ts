@@ -62,13 +62,13 @@ export function encryptLabelGroupSync<T>(
 
     const info = infoResult.value;
     if (!info) {
-      return err(new Error(`Label '${label}' not available in current context`));
+      return err(new Error(`Label not found`));
     }
 
-    // Use Buffer directly - no conversion needed since we're already using Buffer throughout
-    const dataBuffer = Buffer.from(plainBytes);
-    const networkPublicKey = info.networkPublicKey || null; // Already Buffer type
-    const profileKeys = info.profilePublicKeys; // Already Buffer[] type
+    // Convert to Uint8Array for native API
+    const dataBuffer = new Uint8Array(plainBytes);
+    const networkPublicKey = info.networkPublicKey || null; // Already Uint8Array type
+    const profileKeys = info.profilePublicKeys; // Already Uint8Array[] type
 
     // Encrypt using envelope encryption (synchronous)
     // The native API returns a CBOR-encoded EnvelopeEncryptedData structure
@@ -84,9 +84,7 @@ export function encryptLabelGroupSync<T>(
 
     // Convert to our class format - the native API uses different field names
     const envelope = new EnvelopeEncryptedData(
-      envelopeData.encrypted_data
-        ? new Uint8Array(envelopeData.encrypted_data)
-        : new Uint8Array(),
+      envelopeData.encrypted_data ? new Uint8Array(envelopeData.encrypted_data) : new Uint8Array(),
       envelopeData.network_encrypted_key
         ? new Uint8Array(envelopeData.network_encrypted_key)
         : new Uint8Array(),
@@ -126,7 +124,7 @@ export function decryptLabelGroupSync<T>(
       profile_encrypted_keys: Object.fromEntries(encryptedGroup.envelope.profileEncryptedKeys),
     });
 
-    const encryptedBytes = Buffer.from(envelopeCbor);
+    const encryptedBytes = new Uint8Array(envelopeCbor);
 
     // Attempt decryption using the provided key manager (synchronous)
     const plaintext = keystore.decryptEnvelope(encryptedBytes);
@@ -150,7 +148,7 @@ export function decryptBytesSync(
   try {
     // The bytes parameter contains the CBOR-encoded EnvelopeEncryptedData structure
     // The native API expects the same format, so pass it through
-    const encryptedBytes = Buffer.from(bytes);
+    const encryptedBytes = bytes;
 
     // Decrypt using native module
     const plaintext = keystore.decryptEnvelope(encryptedBytes);
@@ -160,38 +158,4 @@ export function decryptBytesSync(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Legacy Async Functions (for backward compatibility)
-// ---------------------------------------------------------------------------
 
-/**
- * @deprecated Use encryptLabelGroupSync instead
- */
-export async function encryptLabelGroup<T>(
-  label: string,
-  fieldsStruct: T,
-  keystore: CommonKeysInterface,
-  resolver: LabelResolver
-): Promise<Result<EncryptedLabelGroup>> {
-  return encryptLabelGroupSync(label, fieldsStruct, keystore, resolver);
-}
-
-/**
- * @deprecated Use decryptLabelGroupSync instead
- */
-export async function decryptLabelGroup<T>(
-  encryptedGroup: EncryptedLabelGroup,
-  keystore: CommonKeysInterface
-): Promise<Result<T>> {
-  return decryptLabelGroupSync(encryptedGroup, keystore);
-}
-
-/**
- * @deprecated Use decryptBytesSync instead
- */
-export async function decryptBytes(
-  bytes: Uint8Array,
-  keystore: CommonKeysInterface
-): Promise<Result<Uint8Array>> {
-  return decryptBytesSync(bytes, keystore);
-}

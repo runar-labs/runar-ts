@@ -53,8 +53,9 @@ export class NodeConfigManager {
 
     // Create keys manager from state
     // This matches Rust: NodeKeyManager::from_state(node_state, key_logger)
-    // TODO: Implement loadFromState when available in Keys API
-    // keys.loadFromState(nodeState);
+    if ('loadFromState' in keys) {
+      (keys as any).loadFromState(nodeState);
+    }
 
     return keys;
   }

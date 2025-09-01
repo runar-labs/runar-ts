@@ -18,9 +18,9 @@ export class KeystoreFactory {
     const keys = new Keys();
     keys.setPersistenceDir(tmpDir);
     keys.enableAutoPersist(true);
-    
+
     const role = config.role || 'backend'; // Default to backend for TypeScript
-    
+
     if (role === 'frontend') {
       keys.initAsMobile();
       return new FrontendKeystoreWrapper(keys);

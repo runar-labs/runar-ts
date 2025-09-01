@@ -1,5 +1,6 @@
 import { Result, ok, err } from './result.js';
 import { LabelResolver, LabelResolverConfig } from './label_resolver.js';
+import { createHash } from 'crypto';
 
 // ---------------------------------------------------------------------------
 // Cache Entry Implementation
@@ -69,7 +70,7 @@ export class ResolverCache {
    * Get or create a label resolver, using cache if available
    * Simplified cache key: only user_profile_keys since config changes are rare
    */
-  getOrCreate(config: LabelResolverConfig, userProfileKeys: Buffer[]): Result<LabelResolver> {
+  getOrCreate(config: LabelResolverConfig, userProfileKeys: Uint8Array[]): Result<LabelResolver> {
     const cacheKey = this.generateCacheKey(userProfileKeys);
 
     // Try to get from cache first
@@ -106,7 +107,7 @@ export class ResolverCache {
    * Generate a cache key for user profile keys only
    * Uses stable digest for deterministic hashing to match Rust behavior
    */
-  private generateCacheKey(userProfileKeys: Buffer[]): string {
+  private generateCacheKey(userProfileKeys: Uint8Array[]): string {
     // Create a deterministic hash of the user profile keys
     const sortedKeys = [...userProfileKeys].sort((a, b) => {
       if (a.length !== b.length) return a.length - b.length;
@@ -116,15 +117,31 @@ export class ResolverCache {
       return 0;
     });
 
-    // For now, use fast JS hash for synchronous operation
-    // TODO: Consider implementing async cache key generation if needed
-    return this.fastHash(sortedKeys);
+    // Use Node.js crypto.createHash for stable SHA-256 hashing
+    try {
+      // Concatenate all sorted keys
+      const totalLength = sortedKeys.reduce((sum, key) => sum + key.length, 0);
+      const concatenated = new Uint8Array(totalLength);
+      let offset = 0;
+      for (const key of sortedKeys) {
+        concatenated.set(key, offset);
+        offset += key.length;
+      }
+      
+      // Create SHA-256 hash
+      const hash = createHash('sha256');
+      hash.update(concatenated);
+      return hash.digest('hex');
+    } catch (error) {
+      // Fall back to fast hash if crypto fails
+      return this.fastHash(sortedKeys);
+    }
   }
 
   /**
    * Fast JavaScript hash fallback when crypto.subtle is not available
    */
-  private fastHash(sortedKeys: Buffer[]): string {
+  private fastHash(sortedKeys: Uint8Array[]): string {
     let hash = 0;
     for (const key of sortedKeys) {
       for (let i = 0; i < key.length; i++) {

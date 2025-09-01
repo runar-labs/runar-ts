@@ -4,17 +4,17 @@ import { Result, ok, err } from './result.js';
 export interface CommonKeysInterface {
   // === ENVELOPE ENCRYPTION (WORKS ON BOTH) ===
   encryptWithEnvelope(
-    data: Buffer,
-    networkPublicKey: Buffer | undefined | null,
-    profilePublicKeys: Buffer[]
-  ): Buffer;
+    data: Uint8Array,
+    networkPublicKey: Uint8Array | undefined | null,
+    profilePublicKeys: Uint8Array[]
+  ): Uint8Array;
 
-  decryptEnvelope(eedCbor: Buffer): Buffer;
+  decryptEnvelope(eedCbor: Uint8Array): Uint8Array;
 
   // === UTILITY METHODS (BOTH PLATFORMS) ===
-  ensureSymmetricKey(keyName: string): Buffer;
-  setLabelMapping(mappingCbor: Buffer): void;
-  setLocalNodeInfo(nodeInfoCbor: Buffer): void;
+  ensureSymmetricKey(keyName: string): Uint8Array;
+  setLabelMapping(mappingCbor: Uint8Array): void;
+  setLocalNodeInfo(nodeInfoCbor: Uint8Array): void;
 
   // === CONFIGURATION (BOTH PLATFORMS) ===
   setPersistenceDir(dir: string): void;
@@ -44,14 +44,14 @@ export class SerializationContext {
   constructor(
     public keystore: CommonKeysInterface,
     public resolver: import('./label_resolver.js').LabelResolver,
-    public networkPublicKey: Buffer,
-    public profilePublicKeys: Buffer[]
+    public networkPublicKey: Uint8Array,
+    public profilePublicKeys: Uint8Array[]
   ) {}
 }
 
 export class DeserializationContext {
   constructor(
-    public keystore: CommonKeysInterface,
+    public keystore?: CommonKeysInterface,
     public resolver?: import('./label_resolver.js').LabelResolver,
     public decryptEnvelope?: (eed: Uint8Array) => Result<Uint8Array>
   ) {}
@@ -63,11 +63,11 @@ export class DeserializationContext {
 export class LazyDataWithOffset {
   constructor(
     public typeName: string,
-    public originalBuffer: Buffer,
+    public originalBuffer: Uint8Array,
+    public encrypted: boolean,
     public startOffset?: number,
     public endOffset?: number,
-    public keystore?: CommonKeysInterface,
-    public encrypted: boolean
+    public keystore?: CommonKeysInterface
   ) {}
 }
 

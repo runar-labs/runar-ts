@@ -334,8 +334,8 @@ Achieve 100% functional and API parity between the TypeScript LabelResolver ecos
   - TS: `encryptLabelGroup`, `decryptLabelGroup`, `decryptBytes`
   - Rust: same semantics with `EnvelopeEncryptedData` CBOR.
 - AnyValue/ArcValue
-  - TS: `serialize(context?)`, `deserialize(bytes, keystore?)`, getters `asTypeRef<T>()`, list/map helpers, JSON conversion
-  - Rust: identical behavior and header format.
+  - TS: `serialize(context?)`, `deserialize(bytes, keystore?)`, getters `asType<T>()`, list/map helpers, JSON conversion
+  - Rust: identical behavior and header format (TS uses `asType` instead of reference-returning methods).
 
 ## 10. Native API Transporter Integration (Detailed)
 
@@ -396,18 +396,18 @@ Configuration additions in `NodeConfig`:
 export interface NodeConfig {
   // REQUIRED: Label resolver configuration (matches Rust exactly)
   labelResolverConfig: LabelResolverConfig;
-  
+
   // Network configuration (matches Rust exactly)
   defaultNetworkId: string;
   networkIds?: string[];
   networkConfig?: NetworkConfig;
-  
+
   // Logging configuration (matches Rust exactly)
   loggingConfig?: LoggingConfig;
-  
+
   // Request timeout (matches Rust exactly)
   requestTimeoutMs?: number; // defaults to 30000
-  
+
   // NEW: Role configuration (TypeScript only - Rust doesn't need this)
   role?: 'frontend' | 'backend'; // defaults to 'backend'
 }
@@ -927,6 +927,15 @@ This section reconciles the design with the exact Rust behavior and supersedes a
   - `decryptLabelGroupSync(encryptedGroup, keystore): Result<T>`
 - These are used by registry encryptors/decryptors, not by decorators directly.
 
+### 17.7.1 Serializer Struct Path Checklist (to avoid envelope/body mix-ups)
+- For Struct with context present:
+  1) Invoke `encryptWithKeystore(keystore, resolver)` on the struct value to produce `Encrypted{T}` with label groups populated
+  2) CBOR-encode the `Encrypted{T}` into `structBytes`
+  3) Call `keystore.encryptWithEnvelope(structBytes, networkPublicKey, profilePublicKeys)` to get EnvelopeEncryptedData
+  4) Write wire header: `[category][is_encrypted=1][type_len][type_bytes]`
+  5) Append CBOR(EnvelopeEncryptedData) as the wire body
+- For Struct with no context: CBOR-encode the plain struct and write with `is_encrypted=0`
+
 ### 17.7 API Signatures (Parity)
 
 - Traits-equivalent in TS:
@@ -946,6 +955,14 @@ This section reconciles the design with the exact Rust behavior and supersedes a
 - Decorator registration: encryptor/decryptor invoked only from serializer paths; `encryptWithKeystore` returns structural companion without performing crypto.
 - Field duplication: verify fields present in multiple label groups are included and encrypted in both groups.
 - Synchronous enforcement: serializer paths contain no `await`; NodeJS `Keys` calls used are sync.
+
+### 17.10 TS-only API Note: No Ref-returning methods
+- Rust exposes `as_type_ref<T>` and similar methods returning borrowed references. TS is GC-based and cannot return borrowed references.
+- TS exposes a single method `asType<T>(): Result<T, Error>` that performs the same lazy decrypt-on-access logic and returns a concrete instance.
+- Impact on design:
+  - All mentions of `as_type_ref` in Rust map to `asType` in TS
+  - Performance and functionality remain equivalent for our use-cases; no observable behavior change for consumers
+  - Tests and examples must use `asType<T>()` in TS
 
 These corrections ensure the TS implementation matches Rust precisely: decorators generate structure and register handlers; only `AnyValue.serialize` triggers encryption (via registry); deserialization is lazy with decrypt-on-access for complex types; the entire flow remains synchronous as in Rust.
 
@@ -1058,3 +1075,178 @@ Guideline: Interfaces are erased at runtime. Export them for typing only (use `i
   - Always import interfaces with `import type { ... }`.
   - Export only runtime classes/functions for values used at runtime.
   - Public APIs should accept/return classes where runtime presence is required; interfaces can annotate arguments/returns where no runtime is needed.
+
+### 17.7.2 serializeFn and AnyValue.serialize return-contract (re‑emphasized)
+- serializeFn(inner, keystore?, resolver?) MUST return CBOR bytes of the inner representation only:
+  - Struct WITHOUT context: CBOR(Plain T)
+  - Struct WITH context: CBOR(Encrypted{T}) produced by `encryptWithKeystore(keystore, resolver)`
+  - List/Map WITHOUT context or WITHOUT element encryptor: CBOR(Vec<T>) / CBOR(Map<String,T>)
+  - List/Map WITH context AND element encryptor: CBOR(Vec<bytes>) / CBOR(Map<String,bytes>) where each bytes entry is CBOR(Encrypted<Elem>) created via registry encryptor
+- AnyValue.serialize(context?) is responsible for the OUTER envelope and wire header:
+  - WITH context: call serializeFn → get inner CBOR → call `keystore.encryptWithEnvelope(innerCBOR, networkPublicKey, profilePublicKeys)` → write header with is_encrypted=1 and body = CBOR(EnvelopeEncryptedData)
+  - WITHOUT context: call serializeFn → write header with is_encrypted=0 and body = inner CBOR
+- DO NOT write CBOR(EncryptedLabelGroup) directly to the wire body; DO NOT write CBOR(Encrypted{T}) to the wire body when context is present. The wire body is strictly CBOR(EnvelopeEncryptedData) in the encrypted path.
+- The deserialization lazy path must slice the payload (startOffset..endOffset), decrypt the outer envelope (if encrypted), and then decode the inner CBOR (Plain T, Encrypted{T}, Vec/Map variants) with registry fallback as needed.
+
+## 21. De/Serialization Dataflow (Rust-Parity, Prescriptive Checklists)
+
+This section removes ambiguity by specifying exact steps, byte boundaries, and function contracts. It mirrors Rust behavior line-by-line.
+
+### 21.1 Terminology and payload layers
+- Wire header: `[category:1][isEncrypted:1][typeNameLen:1][typeNameBytes:len]`
+- Wire body (encrypted path): CBOR(EnvelopeEncryptedData)
+- Wire body (plain path): CBOR(inner)
+- Inner CBOR for Struct:
+  - With context: CBOR(Encrypted{T}) produced by `encryptWithKeystore()` (label groups inside)
+  - Without context: CBOR(Plain T)
+- Inner CBOR for List/Map:
+  - With context AND element encryptor: CBOR(Vec<bytes>) or CBOR(Map<string,bytes>) where bytes = CBOR(Encrypted<Elem>)
+  - Otherwise: CBOR(Vec<T>) or CBOR(Map<string,T>)
+
+### 21.2 Struct Serialize Path (MUST follow in TS)
+1) Build `wireName` for the struct
+2) If `context` is present:
+   - Call `val.encryptWithKeystore(context.keystore, context.resolver)` → `Encrypted{T}` with label groups populated
+   - `structBytes = CBOR(Encrypted{T})`
+   - `envelopeCBOR = keystore.encryptWithEnvelope(structBytes, context.networkPublicKey, context.profilePublicKeys)`
+   - Write header bytes with `is_encrypted = 1`
+   - Append `envelopeCBOR` to the wire body
+3) If `context` is not present:
+   - `plainBytes = CBOR(Plain T)`
+   - Write header with `is_encrypted = 0`
+   - Append `plainBytes` to the wire body
+
+### 21.3 Deserialize + asType<T>() (TS-only)
+Given `bytes` from the wire:
+1) Parse header; compute `dataStart = 3 + typeNameLen`; ensure `dataStart <= bytes.length`
+2) Slice payload precisely: `body = bytes.subarray(dataStart, bytes.length)`
+3) If `is_encrypted == 1`:
+   - Expect `body` to be CBOR(EnvelopeEncryptedData)
+   - Require `keystore` (from `DeserializationContext` or stored lazy state)
+   - `innerBytes = keystore.decryptEnvelope(body)` → returns plaintext bytes
+4) If `is_encrypted == 0`:
+   - `innerBytes = body`
+5) Attempt direct decode into requested T: `try decode<T>(innerBytes)`
+6) If step 5 fails, attempt registry fallback (struct path):
+   - The bytes are likely CBOR(Encrypted{T}). Call `registry.tryDecryptInto<T>(innerBytes, keystore)` which:
+     - Decodes Encrypted{T}
+     - Calls `Encrypted{T}.decryptWithKeystore(keystore)`
+     - Returns plain T
+7) For Lists/Maps: after (3/4), try in order:
+   - `decode<Vec<T>>()` or `decode<Map<string,T>>()`
+   - `decode<Vec<bytes>>()` or `decode<Map<string,bytes>>()` then for each element call `registry.tryDecryptInto<T>(elemBytes, keystore)`
+   - `decode<Vec<AnyValue>>()` or `decode<Map<string,AnyValue>>()` and map each entry via `asType<T>()`
+8) Return `Result<T, Error>` (TS single method `asType<T>()` replaces refs)
+
+### 21.4 Function Contracts (TS)
+- serializeFn(inner, keystore?, resolver?) MUST return CBOR(inner) ONLY:
+  - Struct with context: CBOR(Encrypted{T})
+  - Struct without context: CBOR(Plain T)
+  - List/Map with element encryptor: CBOR(Vec/Map of bytes where bytes = CBOR(Encrypted<Elem>))
+  - List/Map without encryptor: CBOR(Vec/Map of plain values)
+- AnyValue.serialize(context?) MUST:
+  - With context: envelope the serializeFn’s CBOR with `keystore.encryptWithEnvelope` and write CBOR(EnvelopeEncryptedData)
+  - Without context: write serializeFn’s CBOR directly
+- decryptBytesSync(bytes, keystore): expects `bytes = CBOR(EnvelopeEncryptedData)`; returns plaintext `Uint8Array`
+- keystore.decryptEnvelope(cborEnvelopeBytes): same as decryptBytesSync but calls native decrypt directly
+
+### 21.5 Encrypted Types and Registry Requirements
+- Encrypted{T}: runtime class generated by decorators; contains optional `..._encrypted: EncryptedLabelGroup` fields per label + plaintext pass-through fields
+- EncryptedLabelGroup: `{ label: string; envelope?: EnvelopeEncryptedData }`
+- EnvelopeEncryptedData (runtime class): must preserve binary fields as `Uint8Array`
+- Registry MUST register for each Plain T:
+  - encryptor: downcasts Plain T, calls `encryptWithKeystore`, returns `CBOR(Encrypted{T})`
+  - decryptor: decodes `Encrypted{T}` and calls `decryptWithKeystore` to return Plain T
+- Without proper registration, step 6 in 21.3 will fail; tests expecting inner decrypts will not pass
+
+### 21.6 Byte Slicing & CBOR Pitfalls (Do/Don’t)
+- DO: Slice `body = bytes.subarray(3 + typeNameLen)`
+- DO: Pass `body` (CBOR(EnvelopeEncryptedData)) directly to `keystore.decryptEnvelope`
+- DO: Treat all binary fields of `EnvelopeEncryptedData` as `Uint8Array`
+- DON’T: JSON.stringify/parse `Uint8Array` (you’ll get numeric-keyed objects)
+- DON’T: Reconstruct envelope from partial fields; prefer passing exact CBOR from the wire
+- If you must reconstruct (tests/tools), normalize binary fields:
+  - `toU8 = v => (v instanceof Uint8Array ? v : Uint8Array.from(Object.values(v)))`
+
+### 21.7 TS-only API Adjustment (Refs → Values)
+- TS replaces Rust’s `as_type_ref<T>` with `asType<T>(): Result<T, Error>`
+- The internal lazy decrypt-on-access logic is identical in functionality
+- Performance impact is negligible for our use; document rationale where ref-methods are mentioned
+
+### 21.8 Error Message Alignment (where to match Rust)
+- Invalid type name length
+- Unknown primitive wire type
+- Missing wire-name registration for struct/list/map/primitive
+- Keystore required for outer decryption
+- Keystore required for decryptor
+- Use exact strings from Rust tests when asserted
+
+This section, together with 17.7.1 and 17.7.2, defines the unambiguous contract for serializeFn and AnyValue.serialize and a precise decrypt path to avoid envelope/body mix-ups.
+
+## 22. asType<T> Dual‑Mode Semantics (Decrypted Plain vs Encrypted{T})
+
+Rust parity requirement: For an encrypted payload, callers can either obtain the decrypted original struct (subject to keystore permissions) or the encrypted companion type for persistence. TS MUST mirror this with a single API: `asType<T>()`.
+
+### 22.1 Decision logic (TS, mirrors Rust)
+- Inputs:
+  - `T` (constructor or branded type tag)
+  - `lazy` (whether body is a lazy encrypted payload)
+  - `registry` (provides decoders for `T` and `Encrypted{T}`)
+  - `keystore` (optional; if absent, only encrypted result is possible)
+- Algorithm:
+  1) If not lazy (plain body): decode directly to `T`. If decoding fails, error `InvalidTypeForPlainBody`.
+  2) If lazy (encrypted body):
+     - If `T` is `Encrypted{U}` (detected via registry “encrypted companion” metadata):
+       a) Decrypt outer envelope → innerBytes
+       b) Decode innerBytes as `Encrypted{U}` and return
+     - Else (plain `U` requested):
+       a) Decrypt outer envelope → innerBytes
+       b) Try to decode innerBytes directly as `U` (this covers labels that resolved to plaintext)
+       c) If (b) fails, decode innerBytes as `Encrypted{U}`, then call registry `decryptor(U)` to produce plain `U` using current `keystore`
+       d) If decryptor fails due to missing keys, return `Err(AccessDenied)` (match Rust message)
+
+### 22.2 Contracts and types
+- `asType<T>()` returns `Result<T>`
+  - On success: instance of `T`
+  - On failure: error strings identical to Rust tests (e.g., `InvalidTypeForPlainBody`, `AccessDenied`, `UnknownWireName`, `DecodeError`)
+- Type-only vs runtime:
+  - `Encrypted{T}` is a runtime class exported by decorators (not interface-only), so it can be returned at runtime.
+  - Plain `T` may be a class (recommended) or decoded POJO matching a type-only interface; tests expect structural equality.
+
+### 22.3 Examples (pseudocode)
+- Request decrypted struct:
+```ts
+const user = anyValue.asType<User>(); // decrypts envelope → innerBytes; decodes Encrypted<User> → decrypt groups → User
+```
+- Request encrypted companion for persistence:
+```ts
+const encUser = anyValue.asType<EncryptedUser>(); // decrypts envelope → innerBytes; decodes Encrypted<User>; returns it
+```
+- Plain body path:
+```ts
+const profile = anyValue.asType<Profile>(); // body is plain; decodes directly
+```
+
+### 22.4 Edge cases and error behavior
+- No keystore provided + plain `T` requested on encrypted body → `AccessDenied`
+- Keystore provided but lacks keys → `AccessDenied`
+- Registry lacks companion or decryptor for `T` → `UnknownEncryptedCompanion`
+- InnerBytes decode fails for both `T` and `Encrypted{T}` → `DecodeError`
+
+### 22.5 Implementation mapping (Exists vs New)
+- AnyValue — EXISTING (new behavior)
+  - File: `runar-ts-serializer/src/index.ts` (if AnyValue lives here) or `any_value.ts`
+  - Action: Update `asType<T>()` to implement decision logic above; add helper `isEncryptedCompanion(targetCtor)` via registry
+- Registry — EXISTING (update)
+  - File: `runar-ts-serializer/src/registry.ts`
+  - Action: Ensure metadata to map `T ↔ Encrypted{T}`; expose `getEncryptedCompanion(T)`, `isEncryptedCompanion(ctor)`, and `decryptor(T)`
+- Decorator output — NEW/EXISTING depending on status
+  - Files: `runar-ts-decorators/src/index.ts` generation outputs
+  - Action: Generate runtime class `Encrypted{T}` and `{T}{Label}Fields`; register both in registry with companion links
+
+### 22.6 Test checklist (must pass)
+- Encrypted struct → asType<PlainT>() returns decrypted PlainT with correct fields
+- Encrypted struct → asType<EncryptedT>() returns EncryptedT structurally equal to inner CBOR
+- Plain struct → asType<PlainT>() works; asType<EncryptedT>() yields `InvalidTypeForPlainBody`
+- Access control: missing/insufficient keys → `AccessDenied`
+- Registry gaps: missing companion/decryptor → `UnknownEncryptedCompanion`

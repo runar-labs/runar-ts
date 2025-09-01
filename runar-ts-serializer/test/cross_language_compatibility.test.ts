@@ -1,13 +1,7 @@
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { AnyValue, ValueCategory, SerializationContext } from '../src/index.js';
-import {
-  LabelResolver,
-  LabelKeyword,
-} from '../src/label_resolver.js';
-import type {
-  LabelResolverConfig,
-  LabelValue,
-} from '../src/label_resolver.js';
+import { LabelResolver, LabelKeyword } from '../src/label_resolver.js';
+import type { LabelResolverConfig, LabelValue } from '../src/label_resolver.js';
 import { ResolverCache } from '../src/resolver_cache.js';
 import {
   encryptLabelGroupSync,
@@ -24,7 +18,7 @@ import { NodeConfig } from '../../runar-ts-node/src/config.js';
 
 class CrossLanguageRealKeystore {
   private frontendKeystore: any; // Frontend keystore for encryption
-  private backendKeystore: any;  // Backend keystore for decryption
+  private backendKeystore: any; // Backend keystore for decryption
   private _networkPublicKey: Buffer;
   private _profilePublicKeys: Buffer[];
   private _networkId: string;
@@ -32,15 +26,21 @@ class CrossLanguageRealKeystore {
   constructor() {
     // Create frontend keystore for encryption (mobile role)
     const frontendConfig = new NodeConfig('test-network', {
-      labelMappings: new Map([['system', { networkPublicKey: undefined, userKeySpec: undefined }]])
+      labelMappings: new Map([['system', { networkPublicKey: undefined, userKeySpec: undefined }]]),
     }).withRole('frontend');
-    this.frontendKeystore = KeystoreFactory.createKeystore(frontendConfig, '/tmp/runar-cross-language-test-frontend');
+    this.frontendKeystore = KeystoreFactory.createKeystore(
+      frontendConfig,
+      '/tmp/runar-cross-language-test-frontend'
+    );
 
     // Create backend keystore for decryption (node role)
     const backendConfig = new NodeConfig('test-network', {
-      labelMappings: new Map([['system', { networkPublicKey: undefined, userKeySpec: undefined }]])
+      labelMappings: new Map([['system', { networkPublicKey: undefined, userKeySpec: undefined }]]),
     }).withRole('backend');
-    this.backendKeystore = KeystoreFactory.createKeystore(backendConfig, '/tmp/runar-cross-language-test-backend');
+    this.backendKeystore = KeystoreFactory.createKeystore(
+      backendConfig,
+      '/tmp/runar-cross-language-test-backend'
+    );
   }
 
   async initialize(): Promise<void> {
@@ -76,7 +76,10 @@ class CrossLanguageRealKeystore {
     // Install network key in backend keystore for decryption
     console.log('Installing network key in backend keystore...');
     const nodeAgreementPk = this.backendKeystore.nodeGetAgreementPublicKey();
-    const networkKeyMessage = this.frontendKeystore.mobileCreateNetworkKeyMessage(this._networkId, nodeAgreementPk);
+    const networkKeyMessage = this.frontendKeystore.mobileCreateNetworkKeyMessage(
+      this._networkId,
+      nodeAgreementPk
+    );
     this.backendKeystore.nodeInstallNetworkKey(networkKeyMessage);
     console.log('Network key installed in backend keystore');
 
@@ -153,9 +156,19 @@ describe('Cross-Language Compatibility Tests', () => {
 
     // Use the REAL generated keys from the keystore initialization
     // NO MOCKS - these are actual native API generated keys
+    
+    // Create a real resolver for the context
+    const config: LabelResolverConfig = {
+      labelMappings: new Map([['system', { networkPublicKey: realKeystore.networkPublicKey }]]),
+    };
+    
+    const resolverResult = LabelResolver.createContextLabelResolver(config, []);
+    expect(resolverResult.ok).toBe(true);
+    const resolver = resolverResult.value;
+    
     context = {
       keystore: realKeystore,
-      resolver: {} as any, // TODO: Create real resolver per test
+      resolver: resolver,
       networkPublicKey: realKeystore.networkPublicKey,
       profilePublicKeys: realKeystore.profilePublicKeys,
     };
@@ -294,7 +307,9 @@ describe('Cross-Language Compatibility Tests', () => {
       // Test envelope decryption
       // TODO: Skip decryption test until proper network key installation is implemented
       // This follows the REAL test pattern from the native API tests
-      console.log('  ⏭️  Skipping envelope decryption test - needs proper network key installation');
+      console.log(
+        '  ⏭️  Skipping envelope decryption test - needs proper network key installation'
+      );
       console.log('  ✅ Envelope encryption test completed successfully');
     });
 

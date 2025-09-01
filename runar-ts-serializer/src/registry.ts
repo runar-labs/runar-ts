@@ -1,16 +1,18 @@
 import { Result } from './result.js';
+import type { CommonKeysInterface } from './wire.js';
+import type { LabelResolver } from './label_resolver.js';
 
-export type Constructor<T = any> = new (...args: any[]) => T;
+export type Constructor<T = unknown> = new (...args: unknown[]) => T;
 
 export interface TypeEntry {
   ctor: Constructor;
-  decoder?: (bytes: Uint8Array) => any;
+  decoder?: (bytes: Uint8Array) => unknown;
 }
 
 // Type definitions for registry functions
-export type EncryptFn<T = any> = (value: T, keystore: any, resolver: any) => Result<Uint8Array>;
-export type DecryptFn<T = any> = (bytes: Uint8Array, keystore: any) => Result<T>;
-export type ToJsonFn<T = any> = (value: T) => any;
+export type EncryptFn<T = unknown> = (value: T, keystore: CommonKeysInterface, resolver: LabelResolver) => Result<Uint8Array>;
+export type DecryptFn<T = unknown> = (bytes: Uint8Array, keystore: CommonKeysInterface) => Result<T>;
+export type ToJsonFn<T = unknown> = (value: T) => unknown;
 
 // Registry for type resolution (matches Rust functionality)
 const typeNameToEntry = new Map<string, TypeEntry>();
@@ -26,6 +28,10 @@ const wireNameToJson = new Map<string, ToJsonFn>();
 // Wire name registry (Rust type name -> wire name)
 const rustTypeToWireName = new Map<string, string>();
 const wireNameToRust = new Map<string, string>();
+
+// Encrypted companion registry (for asType<T> dual-mode semantics)
+const plainTypeToEncryptedCompanion = new Map<string, Constructor>();
+const encryptedCompanionToPlainType = new Map<string, Constructor>();
 
 export function registerType(typeName: string, entry: TypeEntry): void {
   typeNameToEntry.set(typeName, entry);
@@ -43,6 +49,8 @@ export function clearRegistry(): void {
   wireNameToJson.clear();
   rustTypeToWireName.clear();
   wireNameToRust.clear();
+  plainTypeToEncryptedCompanion.clear();
+  encryptedCompanionToPlainType.clear();
 }
 
 // Wire name registration
@@ -60,12 +68,12 @@ export function lookupRustName(wireName: string): string | undefined {
 }
 
 // Encrypt/Decrypt registration
-export function registerEncrypt<T>(rustTypeName: string, encryptFn: EncryptFn<T>): void {
-  encryptRegistry.set(rustTypeName, encryptFn);
+export function registerEncrypt<T = unknown>(rustTypeName: string, encryptFn: EncryptFn<T>): void {
+  encryptRegistry.set(rustTypeName, encryptFn as EncryptFn);
 }
 
-export function registerDecrypt<T>(rustTypeName: string, decryptFn: DecryptFn<T>): void {
-  decryptRegistry.set(rustTypeName, decryptFn);
+export function registerDecrypt<T = unknown>(rustTypeName: string, decryptFn: DecryptFn<T>): void {
+  decryptRegistry.set(rustTypeName, decryptFn as DecryptFn);
 }
 
 export function lookupEncryptorByTypeName(rustTypeName: string): EncryptFn | undefined {
@@ -76,14 +84,32 @@ export function lookupDecryptorByTypeName(rustTypeName: string): DecryptFn | und
   return decryptRegistry.get(rustTypeName);
 }
 
+// Encrypted companion registration and lookup (for asType<T> dual-mode semantics)
+export function registerEncryptedCompanion<T = unknown>(plainTypeName: string, encryptedCompanionCtor: Constructor): void {
+  plainTypeToEncryptedCompanion.set(plainTypeName, encryptedCompanionCtor);
+  encryptedCompanionToPlainType.set(encryptedCompanionCtor.name, encryptedCompanionCtor);
+}
+
+export function getEncryptedCompanion<T = unknown>(plainTypeName: string): Constructor | undefined {
+  return plainTypeToEncryptedCompanion.get(plainTypeName);
+}
+
+export function isEncryptedCompanion(ctor: Constructor): boolean {
+  return encryptedCompanionToPlainType.has(ctor.name);
+}
+
+export function getDecryptor<T>(plainTypeName: string): DecryptFn | undefined {
+  return decryptRegistry.get(plainTypeName);
+}
+
 // JSON converter registration
-export function registerToJson<T>(rustTypeName: string, toJsonFn: ToJsonFn<T>): void {
-  jsonRegistryByRustName.set(rustTypeName, toJsonFn);
+export function registerToJson<T = unknown>(rustTypeName: string, toJsonFn: ToJsonFn<T>): void {
+  jsonRegistryByRustName.set(rustTypeName, toJsonFn as ToJsonFn);
 
   // If a wire name exists for this type, also bind under wire name
   const wireName = lookupWireName(rustTypeName);
   if (wireName) {
-    wireNameToJson.set(wireName, toJsonFn);
+    wireNameToJson.set(wireName, toJsonFn as ToJsonFn);
   }
 }
 
@@ -130,7 +156,7 @@ export function initWirePrimitives(): void {
   registerToJson('i64', (value: number) => value);
   registerToJson('f64', (value: number) => value);
   registerToJson('bytes', (value: Uint8Array) => Array.from(value));
-  registerToJson('list', (value: any[]) => value);
-  registerToJson('map', (value: Map<string, any>) => Object.fromEntries(value));
-  registerToJson('json', (value: any) => value);
+  registerToJson('list', (value: unknown[]) => value);
+  registerToJson('map', (value: Map<string, unknown>) => Object.fromEntries(value));
+  registerToJson('json', (value: unknown) => value);
 }
