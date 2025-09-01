@@ -14,17 +14,17 @@ import { KeysManagerWrapper } from '../../runar-ts-node/src/keys_manager_wrapper
 
 /**
  * AnyValue Struct Encryption End-to-End Tests
- * 
+ *
  * Following the exact flow described in integration_design_plan_02.md sections 17.1-17.10
  * and mirroring runar-rust/runar-serializer/tests/encryption_test.rs
- * 
+ *
  * Validates:
  * - AnyValue.newStruct() → encryptWithKeystore() → registry encryptor
  * - AnyValue.serialize(context) → outer envelope encryption
  * - AnyValue.deserialize() → lazy decrypt on access
  * - Dual-mode semantics: plain T vs Encrypted{T}
  * - Wire format compliance
- * 
+ *
  * NO MOCKS, NO STUBS, NO SHORTCUTS - Real cryptographic operations only
  */
 
@@ -97,7 +97,9 @@ class AnyValueTestEnvironment {
 
     // Generate network and profile keys
     this.networkId = this.mobileKeys.mobileGenerateNetworkDataKey();
-    this.networkPublicKey = new Uint8Array(this.mobileKeys.mobileGetNetworkPublicKey(this.networkId));
+    this.networkPublicKey = new Uint8Array(
+      this.mobileKeys.mobileGetNetworkPublicKey(this.networkId)
+    );
 
     const personalKey = new Uint8Array(this.mobileKeys.mobileDeriveUserProfileKey('personal'));
     const workKey = new Uint8Array(this.mobileKeys.mobileDeriveUserProfileKey('work'));
@@ -232,7 +234,7 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       const anyValue = AnyValue.newStruct(testProfile);
 
       expect(anyValue.getCategory()).toBe(ValueCategory.Struct);
-      
+
       // Should be able to extract struct without encryption
       const extractResult = anyValue.as<TestProfile>();
       expect(extractResult.ok).toBe(true);
@@ -292,7 +294,7 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       };
 
       const anyValue = AnyValue.newStruct(testProfile);
-      
+
       // CRITICAL: serialize() MUST be synchronous (no await)
       const serializeResult = anyValue.serialize();
 
@@ -321,7 +323,7 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
 
       const context = testEnv.createSerializationContext(testEnv.getMobileWrapper());
       const anyValue = AnyValue.newStruct(testProfile);
-      
+
       // CRITICAL: serialize(context) MUST be synchronous (no await)
       const serializeResult = anyValue.serialize(context);
 
@@ -352,7 +354,7 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       // Validate exact wire format per design section 16.1
       expect(bytes[0]).toBe(ValueCategory.Struct); // Byte 0: category
       expect(bytes[1]).toBe(0); // Byte 1: isEncrypted (plain)
-      
+
       const typeNameLen = bytes[2]; // Byte 2: typeNameLen
       expect(typeNameLen).toBeGreaterThan(0);
       expect(typeNameLen).toBeLessThan(256);
@@ -389,7 +391,7 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       // Validate encrypted wire format
       expect(bytes[0]).toBe(ValueCategory.Struct); // category
       expect(bytes[1]).toBe(1); // isEncrypted = true
-      
+
       const typeNameLen = bytes[2];
       expect(typeNameLen).toBeGreaterThan(0);
 
@@ -545,7 +547,7 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
 
       // Try to deserialize without keystore
       const deserializeResult = AnyValue.deserialize(serializeResult.value!);
-      
+
       if (deserializeResult.ok) {
         // Access should fail without keystore
         const accessResult = deserializeResult.value!.as<TestProfile>();
@@ -567,12 +569,18 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
         ValueCategory.Struct, // valid category
         0, // valid isEncrypted
         5, // typeNameLen
-        65, 66, 67, 68, 69, // "ABCDE" - valid type name
-        255, 254, 253, // invalid CBOR
+        65,
+        66,
+        67,
+        68,
+        69, // "ABCDE" - valid type name
+        255,
+        254,
+        253, // invalid CBOR
       ]);
 
       const deserializeResult = AnyValue.deserialize(corruptedBytes);
-      
+
       if (deserializeResult.ok) {
         // Access should fail for corrupted data
         const accessResult = deserializeResult.value!.as<TestProfile>();
@@ -638,7 +646,7 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
 
       const accessResult = deserializeResult.value!.as<LargeStruct>();
       expect(accessResult.ok).toBe(true);
-      
+
       const totalTime = Date.now() - deserializeStart;
       console.log(`   📈 Deserialization + access time: ${totalTime}ms`);
 

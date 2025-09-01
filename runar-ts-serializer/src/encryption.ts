@@ -7,8 +7,6 @@ import { encode, decode } from 'cbor-x';
 // Envelope Encryption Types
 // ---------------------------------------------------------------------------
 
-
-
 /**
  * Container for label-grouped encryption (one per label)
  */

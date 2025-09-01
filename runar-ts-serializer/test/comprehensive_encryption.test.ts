@@ -16,10 +16,10 @@ import { KeysManagerWrapper } from '../../runar-ts-node/src/keys_manager_wrapper
 
 /**
  * Comprehensive Encryption Tests
- * 
+ *
  * Following the pattern from runar-rust/runar-keys/tests/end_to_end_test.rs
  * and runar-rust/runar-serializer/tests/encryption_test.rs
- * 
+ *
  * NO MOCKS, NO STUBS, NO SHORTCUTS - Real cryptographic operations only
  */
 
@@ -62,7 +62,9 @@ class TestEnvironment {
 
     // Generate network data key (mirrors Rust network creation)
     this.networkId = this.mobileKeys.mobileGenerateNetworkDataKey();
-    this.networkPublicKey = new Uint8Array(this.mobileKeys.mobileGetNetworkPublicKey(this.networkId));
+    this.networkPublicKey = new Uint8Array(
+      this.mobileKeys.mobileGetNetworkPublicKey(this.networkId)
+    );
 
     console.log(`   ✅ Network created with ID: ${this.networkId}`);
 
@@ -540,7 +542,9 @@ describe('Comprehensive Encryption Tests', () => {
       expect(serializedBytes.length).toBeGreaterThan(0);
 
       // Deserialize with keystore
-      const deserializeResult = AnyValue.deserialize(serializedBytes, { keystore: testEnv.getMobileWrapper() });
+      const deserializeResult = AnyValue.deserialize(serializedBytes, {
+        keystore: testEnv.getMobileWrapper(),
+      });
       expect(deserializeResult.ok).toBe(true);
 
       const deserialized = deserializeResult.value!;
@@ -579,7 +583,12 @@ describe('Comprehensive Encryption Tests', () => {
 
       // Test system-only data
       const systemData = { message: 'system secret', value: 200 };
-      const systemEncryptResult = encryptLabelGroupSync('system_only', systemData, mobileWrapper, resolver);
+      const systemEncryptResult = encryptLabelGroupSync(
+        'system_only',
+        systemData,
+        mobileWrapper,
+        resolver
+      );
       expect(systemEncryptResult.ok).toBe(true);
 
       // Node should decrypt successfully (has network key)
@@ -638,11 +647,13 @@ describe('Comprehensive Encryption Tests', () => {
       console.log('❌ Testing Decryption Without Keystore');
 
       const testBytes = new Uint8Array([1, 2, 3, 4, 5]);
-      const encrypted = testEnv.getMobileWrapper().encryptWithEnvelope(
-        testBytes,
-        testEnv.getNetworkPublicKey(),
-        testEnv.getUserProfileKeys()
-      );
+      const encrypted = testEnv
+        .getMobileWrapper()
+        .encryptWithEnvelope(
+          testBytes,
+          testEnv.getNetworkPublicKey(),
+          testEnv.getUserProfileKeys()
+        );
 
       // Attempt to decrypt without keystore should fail gracefully
       const decryptResult = decryptBytesSync(encrypted, undefined as any);

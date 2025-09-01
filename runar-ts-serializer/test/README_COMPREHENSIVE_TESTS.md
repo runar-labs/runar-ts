@@ -5,9 +5,11 @@ This directory contains comprehensive, production-ready encryption tests that fo
 ## Test Files Overview
 
 ### 1. `comprehensive_encryption.test.ts`
+
 **Primary Focus**: Basic encryption operations and core component integration
+
 - **Real crypto setup**: Mobile and Node keys with actual certificate workflow
-- **Envelope encryption**: Multi-recipient encryption with network and profile keys  
+- **Envelope encryption**: Multi-recipient encryption with network and profile keys
 - **Label group encryption**: User-only, system-only, and mixed label semantics
 - **LabelResolver integration**: Context creation with real user profile keys
 - **ResolverCache testing**: Key-based caching with deterministic SHA-256 digest
@@ -18,14 +20,17 @@ This directory contains comprehensive, production-ready encryption tests that fo
 - **Performance**: Large data encryption (1MB) with timing validation
 
 **Key Validations**:
+
 - ✅ Real PKI setup (no mocks/stubs)
 - ✅ Multiple encryption recipients
 - ✅ Label-based access control semantics
 - ✅ Cache key generation with stable digest
 - ✅ Error scenarios with proper handling
 
-### 2. `decorator_encryption.test.ts` 
+### 2. `decorator_encryption.test.ts`
+
 **Primary Focus**: Decorator system integration and field-level encryption
+
 - **Decorator registration**: Type registration and encrypted companion creation
 - **Field-level semantics**: `@runar({ system })`, `@runar({ user })`, `@runar({ search })`, `@runar({ systemOnly })`
 - **Label priority**: Deterministic ordering (system=0, user=1, other=2)
@@ -35,6 +40,7 @@ This directory contains comprehensive, production-ready encryption tests that fo
 - **Registry integration**: Encryptor/decryptor registration and lookup
 
 **Key Validations**:
+
 - ✅ Decorator metadata capture and code generation
 - ✅ Field-level encryption with multiple label support
 - ✅ Access control based on keystore capabilities
@@ -42,7 +48,9 @@ This directory contains comprehensive, production-ready encryption tests that fo
 - ✅ Label priority and deterministic ordering
 
 ### 3. `anyvalue_struct_encryption.test.ts`
+
 **Primary Focus**: AnyValue struct encryption end-to-end flow
+
 - **Synchronous operation**: No `await` in serialize/deserialize (design requirement)
 - **Wire format compliance**: Exact header format per design sections 16.1, 21.1-21.8
 - **Lazy deserialization**: Complex types use lazy holders with decrypt-on-access
@@ -52,6 +60,7 @@ This directory contains comprehensive, production-ready encryption tests that fo
 - **Context-based encryption**: Outer envelope only applied when context provided
 
 **Key Validations**:
+
 - ✅ Synchronous serialize/deserialize (no Promise paths)
 - ✅ Wire format byte-for-byte compliance
 - ✅ Lazy deserialization with decrypt-on-access
@@ -59,7 +68,9 @@ This directory contains comprehensive, production-ready encryption tests that fo
 - ✅ Complex nested struct handling
 
 ### 4. `end_to_end_encryption.test.ts`
+
 **Primary Focus**: Complete end-to-end workflow mirroring Rust `end_to_end_test.rs`
+
 - **Complete PKI workflow**: Mobile CA → Node setup → Certificate workflow
 - **Network key distribution**: Real network ID generation and node installation
 - **Profile key management**: Personal/work profile key derivation
@@ -71,6 +82,7 @@ This directory contains comprehensive, production-ready encryption tests that fo
 - **Comprehensive integration**: All components working together
 
 **Key Validations**:
+
 - ✅ Complete PKI certificate workflow (mirrors Rust exactly)
 - ✅ Real network and profile key generation
 - ✅ Multi-recipient envelope encryption
@@ -81,7 +93,9 @@ This directory contains comprehensive, production-ready encryption tests that fo
 ## Test Principles and Standards
 
 ### NO MOCKS, NO STUBS, NO SHORTCUTS
+
 All tests use real cryptographic operations:
+
 - Real `Keys` instances from `runar-nodejs-api`
 - Actual certificate generation and installation
 - Real network and profile key derivation
@@ -89,14 +103,18 @@ All tests use real cryptographic operations:
 - Authentic state serialization/restoration
 
 ### Rust Parity Validation
+
 Every test mirrors corresponding Rust test patterns:
+
 - `end_to_end_encryption.test.ts` ↔ `runar-keys/tests/end_to_end_test.rs`
 - `decorator_encryption.test.ts` ↔ `runar-serializer/tests/encryption_test.rs`
 - Same data structures, same crypto workflows, same validation patterns
 - Identical error handling and edge case coverage
 
 ### Design Document Compliance
+
 Tests validate every requirement from `integration_design_plan_02.md`:
+
 - Section 17.1-17.10: Exact encryption flow implementation
 - Section 21.1-21.8: Wire format and serialization contracts
 - Section 22: Dual-mode semantics for `asType<T>()`
@@ -104,6 +122,7 @@ Tests validate every requirement from `integration_design_plan_02.md`:
 - Buffer vs Uint8Array type compliance
 
 ### Performance Requirements Met
+
 - Large data encryption (1MB) completes within 5 seconds
 - Cache operations validate deterministic hashing
 - Concurrent operations handle multiple simultaneous encryptions
@@ -115,7 +134,7 @@ Tests validate every requirement from `integration_design_plan_02.md`:
 # Run all comprehensive encryption tests
 cd runar-ts-serializer
 bun test test/comprehensive_encryption.test.ts
-bun test test/decorator_encryption.test.ts  
+bun test test/decorator_encryption.test.ts
 bun test test/anyvalue_struct_encryption.test.ts
 bun test test/end_to_end_encryption.test.ts
 
@@ -134,6 +153,7 @@ bun test --timeout 90000 test/end_to_end_encryption.test.ts
 ## Coverage Validation
 
 These tests provide 100% coverage of:
+
 - ✅ All encryption/decryption paths
 - ✅ All label semantics (system/user/search/systemOnly)
 - ✅ All access control patterns (mobile vs node)
@@ -145,6 +165,7 @@ These tests provide 100% coverage of:
 ## Integration with CI/CD
 
 Tests are designed for automated validation:
+
 - Deterministic setup and teardown
 - Comprehensive error reporting
 - Performance regression detection

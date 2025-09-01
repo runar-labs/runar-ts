@@ -322,7 +322,7 @@ export function getTypeName(constructor: Function): string | undefined {
   if (classMeta) {
     return classMeta.wireName;
   }
-  
+
   // Fallback to constructor name
   return constructor.name || undefined;
 }

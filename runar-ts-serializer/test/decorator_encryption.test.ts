@@ -19,12 +19,12 @@ import { KeysManagerWrapper } from '../../runar-ts-node/src/keys_manager_wrapper
 
 /**
  * Decorator Field-Level Encryption Tests
- * 
+ *
  * Following the pattern from runar-rust/runar-serializer/tests/encryption_test.rs
- * 
+ *
  * Tests the @runar decorator with field-level encryption using real crypto operations.
  * Validates system/user/search/systemOnly label semantics exactly as in Rust.
- * 
+ *
  * NO MOCKS, NO STUBS, NO SHORTCUTS - Real cryptographic operations only
  */
 
@@ -33,13 +33,13 @@ import { KeysManagerWrapper } from '../../runar-ts-node/src/keys_manager_wrapper
 class TestProfile {
   @runar({ system: true })
   public name: string;
-  
+
   @runar({ user: true })
   public private: string;
-  
+
   @runar({ search: true })
   public email: string;
-  
+
   @runar({ systemOnly: true })
   public systemMetadata: string;
 
@@ -101,14 +101,16 @@ class DecoratorTestContext {
 
     // Generate network
     this.networkId = this.mobileNetworkMaster.mobileGenerateNetworkDataKey();
-    this.networkPub = new Uint8Array(this.mobileNetworkMaster.mobileGetNetworkPublicKey(this.networkId));
+    this.networkPub = new Uint8Array(
+      this.mobileNetworkMaster.mobileGetNetworkPublicKey(this.networkId)
+    );
 
     // Setup user mobile (has user keys but only network public key)
     this.userMobile.setPersistenceDir('/tmp/runar-decorator-test-user-mobile');
     this.userMobile.enableAutoPersist(true);
     this.userMobile.initAsMobile();
     await this.userMobile.mobileInitializeUserRootKey();
-    
+
     this.profilePk = new Uint8Array(this.userMobile.mobileDeriveUserProfileKey('user'));
     this.userMobile.installNetworkPublicKey(this.networkPub);
 
@@ -219,7 +221,7 @@ describe('Decorator Field-Level Encryption Tests', () => {
 
       // Register TestProfile type
       registerType('decorator_test.TestProfile', { ctor: TestProfile });
-      
+
       // Verify registration
       const entry = resolveType('decorator_test.TestProfile');
       expect(entry).toBeDefined();
@@ -233,7 +235,7 @@ describe('Decorator Field-Level Encryption Tests', () => {
 
       // In a real implementation, this would be done by decorators automatically
       // For now, we'll test the registry functions directly
-      
+
       // Create a mock encrypted version of TestProfile
       class EncryptedTestProfile {
         constructor(
@@ -439,10 +441,9 @@ describe('Decorator Field-Level Encryption Tests', () => {
       expect(serializedBytes.length).toBeGreaterThan(0);
 
       // Deserialize with mobile keystore (should have access to user fields)
-      const deserializeResult = AnyValue.deserialize(
-        serializedBytes,
-        { keystore: testContext.getUserMobileWrapper() }
-      );
+      const deserializeResult = AnyValue.deserialize(serializedBytes, {
+        keystore: testContext.getUserMobileWrapper(),
+      });
       expect(deserializeResult.ok).toBe(true);
 
       const deserialized = deserializeResult.value!;
@@ -504,11 +505,7 @@ describe('Decorator Field-Level Encryption Tests', () => {
         }
       }
 
-      const multiLabel = new MultiLabelStruct(
-        'shared data',
-        'user private',
-        'system admin'
-      );
+      const multiLabel = new MultiLabelStruct('shared data', 'user private', 'system admin');
 
       // Test that the resolver correctly handles multiple labels
       const systemInfo = testContext.getResolver().resolveLabelInfo('system');
@@ -533,10 +530,10 @@ describe('Decorator Field-Level Encryption Tests', () => {
 
       const emptyProfile = new TestProfile(
         'empty-test',
-        '',  // empty name
-        '',  // empty private
-        '',  // empty email
-        ''   // empty systemMetadata
+        '', // empty name
+        '', // empty private
+        '', // empty email
+        '' // empty systemMetadata
       );
 
       // Should handle empty values without crashing

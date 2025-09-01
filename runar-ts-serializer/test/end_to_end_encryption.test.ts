@@ -17,18 +17,18 @@ import { KeysManagerWrapper } from '../../runar-ts-node/src/keys_manager_wrapper
 
 /**
  * End-to-End Encryption Tests
- * 
+ *
  * Following the EXACT pattern from runar-rust/runar-keys/tests/end_to_end_test.rs
- * 
+ *
  * Simulates the complete end-to-end encryption and key management flows:
- * 1. Mobile side - first time use - generate user keys  
+ * 1. Mobile side - first time use - generate user keys
  * 2. Node first time use - enter setup mode
  * 3. Mobile scans Node QR code - certificate workflow
  * 4. Network key distribution
  * 5. Profile-based envelope encryption
  * 6. Cross-device data sharing validation
  * 7. State serialization and restoration
- * 
+ *
  * NO MOCKS, NO STUBS, NO SHORTCUTS - Real cryptographic operations only
  */
 
@@ -54,7 +54,7 @@ class EndToEndTestEnvironment {
   private mobileWrapper: KeysManagerWrapper;
   private userPublicKey: Uint8Array;
 
-  // Node side (certificate + network operations) 
+  // Node side (certificate + network operations)
   private nodeKeys: Keys;
   private nodeWrapper: KeysManagerWrapper;
   private nodePublicKey: Uint8Array;
@@ -155,7 +155,9 @@ class EndToEndTestEnvironment {
 
     // Generate network data key (mirrors Rust step 5)
     this.networkId = this.mobileKeys.mobileGenerateNetworkDataKey();
-    this.networkPublicKey = new Uint8Array(this.mobileKeys.mobileGetNetworkPublicKey(this.networkId));
+    this.networkPublicKey = new Uint8Array(
+      this.mobileKeys.mobileGetNetworkPublicKey(this.networkId)
+    );
     console.log(`   ✅ Network data key generated with ID: ${this.networkId}`);
 
     // Create network key message for node (mirrors Rust step 6)
@@ -199,7 +201,7 @@ class EndToEndTestEnvironment {
           },
         ],
         [
-          'system', 
+          'system',
           {
             networkPublicKey: this.networkPublicKey,
             userKeySpec: LabelKeyword.CurrentUser,
@@ -362,7 +364,7 @@ describe('End-to-End Encryption Tests', () => {
 
       // Validate mobile CA initialization
       expect(testEnv.getMobileWrapper()).toBeDefined();
-      
+
       // Validate node identity creation
       expect(testEnv.getNodeWrapper()).toBeDefined();
 
@@ -386,11 +388,9 @@ describe('End-to-End Encryption Tests', () => {
       const allProfileKeys = testEnv.getProfileKeys();
 
       // Encrypt for multiple recipients
-      const encrypted = testEnv.getMobileWrapper().encryptWithEnvelope(
-        testData,
-        testEnv.getNetworkPublicKey(),
-        allProfileKeys
-      );
+      const encrypted = testEnv
+        .getMobileWrapper()
+        .encryptWithEnvelope(testData, testEnv.getNetworkPublicKey(), allProfileKeys);
 
       expect(encrypted.length).toBeGreaterThan(testData.length);
 
@@ -410,11 +410,9 @@ describe('End-to-End Encryption Tests', () => {
       const testData = new Uint8Array([11, 22, 33]);
       const singleProfileKey = [testEnv.getProfileKeys()[0]];
 
-      const encrypted = testEnv.getMobileWrapper().encryptWithEnvelope(
-        testData,
-        testEnv.getNetworkPublicKey(),
-        singleProfileKey
-      );
+      const encrypted = testEnv
+        .getMobileWrapper()
+        .encryptWithEnvelope(testData, testEnv.getNetworkPublicKey(), singleProfileKey);
 
       const decrypted = testEnv.getMobileWrapper().decryptEnvelope(encrypted);
       expect(decrypted).toEqual(testData);
@@ -428,11 +426,9 @@ describe('End-to-End Encryption Tests', () => {
       const testData = new Uint8Array([1, 1, 1]);
 
       // Encrypt with network key only (empty profile keys)
-      const encrypted = testEnv.getMobileWrapper().encryptWithEnvelope(
-        testData,
-        testEnv.getNetworkPublicKey(),
-        []
-      );
+      const encrypted = testEnv
+        .getMobileWrapper()
+        .encryptWithEnvelope(testData, testEnv.getNetworkPublicKey(), []);
 
       // Node should be able to decrypt (has network key)
       const nodeDecrypted = testEnv.getNodeWrapper().decryptEnvelope(encrypted);
@@ -465,10 +461,7 @@ describe('End-to-End Encryption Tests', () => {
       expect(encryptResult.ok).toBe(true);
 
       // Mobile should decrypt successfully
-      const decryptResult = decryptLabelGroupSync(
-        encryptResult.value!,
-        testEnv.getMobileWrapper()
-      );
+      const decryptResult = decryptLabelGroupSync(encryptResult.value!, testEnv.getMobileWrapper());
       expect(decryptResult.ok).toBe(true);
       expect(decryptResult.value).toEqual(userData);
 
@@ -497,10 +490,7 @@ describe('End-to-End Encryption Tests', () => {
       expect(encryptResult.ok).toBe(true);
 
       // Node should decrypt successfully (has network key)
-      const decryptResult = decryptLabelGroupSync(
-        encryptResult.value!,
-        testEnv.getNodeWrapper()
-      );
+      const decryptResult = decryptLabelGroupSync(encryptResult.value!, testEnv.getNodeWrapper());
       expect(decryptResult.ok).toBe(true);
       expect(decryptResult.value).toEqual(systemData);
 
@@ -554,7 +544,7 @@ describe('End-to-End Encryption Tests', () => {
       const userProfile: UserProfile = {
         id: 'cross-device-test',
         name: 'Cross Device User',
-        email: 'cross@example.com', 
+        email: 'cross@example.com',
         privateData: 'sensitive user info',
         systemMetadata: 'system configuration',
       };
@@ -578,10 +568,9 @@ describe('End-to-End Encryption Tests', () => {
       expect(serializeResult.ok).toBe(true);
 
       // Node receives and decrypts profile
-      const deserializeResult = AnyValue.deserialize(
-        serializeResult.value!,
-        { keystore: testEnv.getNodeWrapper() }
-      );
+      const deserializeResult = AnyValue.deserialize(serializeResult.value!, {
+        keystore: testEnv.getNodeWrapper(),
+      });
       expect(deserializeResult.ok).toBe(true);
 
       const sharedProfile = deserializeResult.value!.as<UserProfile>();
@@ -627,10 +616,9 @@ describe('End-to-End Encryption Tests', () => {
       expect(encryptedMessage.ok).toBe(true);
 
       // Decrypt network message
-      const decryptedMessage = AnyValue.deserialize(
-        encryptedMessage.value!,
-        { keystore: testEnv.getNodeWrapper() }
-      );
+      const decryptedMessage = AnyValue.deserialize(encryptedMessage.value!, {
+        keystore: testEnv.getNodeWrapper(),
+      });
       expect(decryptedMessage.ok).toBe(true);
 
       const receivedMessage = decryptedMessage.value!.as<NetworkMessage>();
@@ -666,11 +654,9 @@ describe('End-to-End Encryption Tests', () => {
 
       const startTime = Date.now();
 
-      const encrypted = testEnv.getMobileWrapper().encryptWithEnvelope(
-        largeData,
-        testEnv.getNetworkPublicKey(),
-        testEnv.getProfileKeys()
-      );
+      const encrypted = testEnv
+        .getMobileWrapper()
+        .encryptWithEnvelope(largeData, testEnv.getNetworkPublicKey(), testEnv.getProfileKeys());
 
       const encryptTime = Date.now() - startTime;
       console.log(`   📈 Encryption time for 100KB: ${encryptTime}ms`);
@@ -692,18 +678,16 @@ describe('End-to-End Encryption Tests', () => {
 
       const concurrentTests = Array.from({ length: 10 }, (_, i) => {
         const testData = new Uint8Array([i, i + 1, i + 2]);
-        return testEnv.getMobileWrapper().encryptWithEnvelope(
-          testData,
-          testEnv.getNetworkPublicKey(),
-          testEnv.getProfileKeys()
-        );
+        return testEnv
+          .getMobileWrapper()
+          .encryptWithEnvelope(testData, testEnv.getNetworkPublicKey(), testEnv.getProfileKeys());
       });
 
       // All encryptions should complete successfully
       expect(concurrentTests.length).toBe(10);
       concurrentTests.forEach((encrypted, i) => {
         expect(encrypted.length).toBeGreaterThan(3);
-        
+
         const decrypted = testEnv.getNodeWrapper().decryptEnvelope(encrypted);
         expect(decrypted).toEqual(new Uint8Array([i, i + 1, i + 2]));
       });
@@ -715,7 +699,7 @@ describe('End-to-End Encryption Tests', () => {
   describe('Final Integration Validation', () => {
     it('should complete comprehensive end-to-end validation', async () => {
       console.log('🎉 COMPREHENSIVE END-TO-END TEST COMPLETED SUCCESSFULLY!');
-      
+
       console.log('📋 All validations passed:');
       console.log('   ✅ Mobile CA initialization and user root key generation');
       console.log('   ✅ Node setup token generation and CSR workflow');
