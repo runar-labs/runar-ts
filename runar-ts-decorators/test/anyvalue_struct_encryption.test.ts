@@ -16,22 +16,22 @@ import {
 } from 'runar-ts-node/src/keys_manager_wrapper.js';
 import { Encrypt, runar } from '../src/index.js';
 
-// Test data structure for encryption testing - using proper TS 5 decorators
+// Test data structure for encryption testing - using proper TS 5 decorators with string labels
 @Encrypt
 class TestProfile {
-  @runar({ user: true })
+  @runar("user")
   public id: string;
 
-  @runar({ user: true })
+  @runar("user")
   public name: string;
 
-  @runar({ user: true })
+  @runar("user")
   public privateData: string;
 
-  @runar({ system: true })
+  @runar("system")
   public email: string;
 
-  @runar({ systemOnly: true })
+  @runar("system_only")
   public systemMetadata: string;
 
   constructor(
@@ -282,7 +282,7 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       expect(decryptedProfile.systemMetadata).toBe(userData.systemMetadata);
     });
 
-    it('should encrypt and decrypt system-only fields', async () => {
+    it('should encrypt and decrypt system-only fields with proper access control', async () => {
       const systemData = new TestProfile(
         'system-456',
         'System User',
@@ -291,7 +291,7 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
         'system metadata'
       );
 
-      // Create serialization context with mobile keystore
+      // Create serialization context with mobile keystore (has user profile keys)
       const context = testEnv.createSerializationContext(testEnv.getMobileWrapper());
 
       // Serialize with encryption context
@@ -302,18 +302,18 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       }
       expect(serializeResult.value.length).toBeGreaterThan(0);
 
-      // Deserialize with keystore
-      const deserContext = testEnv.createDeserializationContext(testEnv.getMobileWrapper());
+      // CRITICAL: Deserialize with NODE keystore (has network keys, NO user profile keys)
+      // This tests access control - user fields should be empty, system fields should contain data
       const deserializeResult = AnyValue.deserialize(
         serializeResult.value,
-        testEnv.getMobileWrapper()
+        testEnv.getNodeWrapper()  // ✅ Using node wrapper for access control test
       );
       expect(deserializeResult.ok).toBe(true);
       if (!deserializeResult.ok) {
         throw new Error(`Deserialization failed: ${(deserializeResult as any).error.message}`);
       }
 
-      // Verify the decrypted data
+      // Verify the decrypted data with proper access control
       const decrypted = deserializeResult.value;
       const asProfileResult = decrypted.as<TestProfile>();
       expect(asProfileResult.ok).toBe(true);
@@ -322,11 +322,15 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       }
 
       const decryptedProfile = asProfileResult.value;
-      expect(decryptedProfile.id).toBe(systemData.id);
-      expect(decryptedProfile.name).toBe(systemData.name);
-      expect(decryptedProfile.privateData).toBe(systemData.privateData);
-      expect(decryptedProfile.email).toBe(systemData.email);
-      expect(decryptedProfile.systemMetadata).toBe(systemData.systemMetadata);
+      
+      // ✅ ACCESS CONTROL TEST: User fields should be EMPTY (no user profile keys in node keystore)
+      expect(decryptedProfile.id).toBe("");           // user field - should be empty
+      expect(decryptedProfile.name).toBe("");         // user field - should be empty  
+      expect(decryptedProfile.privateData).toBe("");  // user field - should be empty
+      
+      // ✅ System fields should contain data (node keystore has network keys)
+      expect(decryptedProfile.email).toBe(systemData.email);           // system field - should contain data
+      expect(decryptedProfile.systemMetadata).toBe(systemData.systemMetadata); // system_only field - should contain data
     });
 
     it('should encrypt and decrypt mixed system+user fields', async () => {
@@ -402,6 +406,56 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       expect(mobileCaps.canDecrypt).toBe(true);
       expect(nodeCaps.canEncrypt).toBe(true);
       expect(nodeCaps.canDecrypt).toBe(true);
+    });
+
+    it('should test reverse access control - mobile keystore decrypting system-only fields', async () => {
+      const systemOnlyData = new TestProfile(
+        'system-only-123',
+        'System Only User',
+        'system only private',
+        'systemonly@example.com',
+        'system only metadata'
+      );
+
+      // Create serialization context with mobile keystore
+      const context = testEnv.createSerializationContext(testEnv.getMobileWrapper());
+
+      // Serialize with encryption context
+      const serializeResult = AnyValue.newStruct(systemOnlyData).serialize(context);
+      expect(serializeResult.ok).toBe(true);
+      if (!serializeResult.ok) {
+        throw new Error(`Serialization failed: ${(serializeResult as any).error.message}`);
+      }
+
+      // CRITICAL: Deserialize with MOBILE keystore (has user profile keys, NO network keys)
+      // This tests reverse access control - system fields should be empty, user fields should contain data
+      const deserializeResult = AnyValue.deserialize(
+        serializeResult.value,
+        testEnv.getMobileWrapper()  // ✅ Using mobile wrapper for reverse access control test
+      );
+      expect(deserializeResult.ok).toBe(true);
+      if (!deserializeResult.ok) {
+        throw new Error(`Deserialization failed: ${(deserializeResult as any).error.message}`);
+      }
+
+      // Verify the decrypted data with reverse access control
+      const decrypted = deserializeResult.value;
+      const asProfileResult = decrypted.as<TestProfile>();
+      expect(asProfileResult.ok).toBe(true);
+      if (!asProfileResult.ok) {
+        throw new Error(`as<TestProfile> failed: ${(asProfileResult as any).error.message}`);
+      }
+
+      const decryptedProfile = asProfileResult.value;
+      
+      // ✅ REVERSE ACCESS CONTROL TEST: User fields should contain data (mobile keystore has user profile keys)
+      expect(decryptedProfile.id).toBe(systemOnlyData.id);           // user field - should contain data
+      expect(decryptedProfile.name).toBe(systemOnlyData.name);       // user field - should contain data  
+      expect(decryptedProfile.privateData).toBe(systemOnlyData.privateData); // user field - should contain data
+      
+      // ✅ System fields should be EMPTY (mobile keystore has no network keys)
+      expect(decryptedProfile.email).toBe("");                      // system field - should be empty
+      expect(decryptedProfile.systemMetadata).toBe("");             // system_only field - should be empty
     });
   });
 

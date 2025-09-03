@@ -148,7 +148,17 @@ Achieve 100% functional and API parity between the TypeScript LabelResolver ecos
     - encryptor: `register_encrypt<Plain, Enc>()` using a function that accepts `Plain`, context keys, label resolver.
     - JSON converters and `registerTypeName` for both plain and encrypted representations with proper wire names.
 - `@runar` field decorator:
-  - Support field-level labels: `system`, `user`, `search`, `system_only` aligned with Rust macro semantics.
+  - **Syntax**: `@runar("<LABEL>")` where `<LABEL>` is a user-defined string label
+  - **Flexibility**: Labels are completely user-defined and can be any string (e.g., `"user"`, `"system"`, `"search"`, `"customLabel"`, `"admin"`, etc.)
+  - **Label Resolution**: The label resolver maps these user-defined labels to actual public keys via `LabelResolverConfig`
+  - **Examples**: 
+    - `@runar("user")` - encrypts field with user profile keys
+    - `@runar("system")` - encrypts field with system/network keys  
+    - `@runar("search")` - encrypts field with search-specific keys
+    - `@runar("admin")` - encrypts field with admin-specific keys
+    - `@runar("customLabel")` - encrypts field with custom label keys
+  - **No Restrictions**: No hardcoded label names; developers define their own labels
+  - **Rust Parity**: Aligned with Rust macro semantics where labels are user-defined strings
 - Type registration:
   - On module import or decorator evaluation, register both the plain and encrypted types in wire-name registry and JSON converters.
 
@@ -1052,6 +1062,30 @@ This section consolidates and reconciles the decorator system design into the ov
 - Unit: metadata capture, label grouping/ordering, codegen naming, idempotent registration, sync methods' structural correctness.
 - Integration: AnyValue serialize triggers registry encryptor; deserialize triggers decryptor; multiple labels and duplication validated.
 - E2E: Envelope encryption with keystore, missing-label error behavior, performance baselines.
+
+#### 18.8.1 Access Control Testing Scenarios
+
+**Critical Test Requirements:**
+- **User-labeled fields**: Encrypt with mobile keystore (has user profile keys), decrypt with mobile keystore
+- **System-labeled fields**: Encrypt with mobile keystore, decrypt with node keystore (has network keys)
+- **Access Control Validation**: 
+  - When decrypting with **node keystore** (no user keys), **user-labeled fields** must be **empty**
+  - When decrypting with **mobile keystore** (no network keys), **system-only-labeled fields** must be **empty**
+- **Keystore Role Separation**: 
+  - Mobile keystore: `hasProfileKeys: true, hasNetworkKeys: false`
+  - Node keystore: `hasProfileKeys: false, hasNetworkKeys: true`
+
+**Test Pattern:**
+```typescript
+// For user-labeled fields: use mobile keystore for both encrypt/decrypt
+const context = createSerializationContext(mobileKeystore);
+const deserializeResult = AnyValue.deserialize(bytes, mobileKeystore);
+
+// For system-labeled fields: use mobile keystore to encrypt, node keystore to decrypt
+const context = createSerializationContext(mobileKeystore);
+const deserializeResult = AnyValue.deserialize(bytes, nodeKeystore);
+// Verify user fields are empty, system fields contain data
+```
 
 This merged section supersedes standalone decorator design docs and is aligned with sections 16–17 and the overall transport/node integration in sections 10 and 15.
 

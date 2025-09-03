@@ -43,13 +43,7 @@ export interface EncryptFieldOptions {
   priority?: number;
 }
 
-export interface RunarFieldOptions {
-  system?: boolean;
-  user?: boolean;
-  search?: boolean;
-  systemOnly?: boolean;
-  priority?: number;
-}
+
 
 export interface FieldEncryption {
   label: string;
@@ -339,8 +333,9 @@ export function Encrypt<T extends Constructor>(value: T, context: ClassDecorator
     ensureClassRegistered(value as unknown as Constructor);
 }
 
-// Design Section 18.5: @runar decorator with preset support (TS 5 standard)
-export function runar(options: RunarFieldOptions) {
+// Design Section 18.5: @runar decorator with string-based labels (TS 5 standard)
+// Syntax: @runar("labelName") where labelName is user-defined
+export function runar(label: string) {
   return function <T, V>(initialValue: V, context: ClassFieldDecoratorContext<T, V>): V {
     // Use context.addInitializer to attach instance-level initialization
     context.addInitializer(function (this: any) {
@@ -348,48 +343,12 @@ export function runar(options: RunarFieldOptions) {
         this.constructor.fieldEncryptions = [];
       }
 
-      const fieldEncryptions: FieldEncryption[] = [];
-
-      // Add system label if specified
-      if (options.system) {
-        fieldEncryptions.push({
-          label: 'system',
-          propertyKey: context.name,
-          priority: options.priority || 0,
-        });
-      }
-
-      // Add user label if specified
-      if (options.user) {
-        fieldEncryptions.push({
-          label: 'user',
-          propertyKey: context.name,
-          priority: options.priority || 1,
-        });
-      }
-
-      // Add search label if specified
-      if (options.search) {
-        fieldEncryptions.push({
-          label: 'search',
-          propertyKey: context.name,
-          priority: options.priority || 2,
-        });
-      }
-
-      // Add system_only label if specified
-      if (options.systemOnly) {
-        fieldEncryptions.push({
-          label: 'system_only',
-          propertyKey: context.name,
-          priority: options.priority || 0,
-        });
-      }
-
-      // Register all field encryptions for this instance
-      for (const encryption of fieldEncryptions) {
-        this.constructor.fieldEncryptions.push(encryption);
-      }
+      // Add field encryption with the specified label
+      this.constructor.fieldEncryptions.push({
+        label: label,
+        propertyKey: context.name,
+        priority: 0, // Default priority
+      });
     });
 
     // Return the initial value unchanged
