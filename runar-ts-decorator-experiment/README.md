@@ -44,7 +44,8 @@ export interface EncryptedTestProfile {
 
 ```typescript
 // ✅ PERFECT: Using proper types instead of 'any'
-const encryptableOriginal = original as TestProfile & RunarEncryptable<TestProfile, EncryptedTestProfile>;
+const encryptableOriginal = original as TestProfile &
+  RunarEncryptable<TestProfile, EncryptedTestProfile>;
 
 // Full type safety, IntelliSense, and compile-time validation!
 const encrypted: EncryptedTestProfile = {
@@ -52,7 +53,7 @@ const encrypted: EncryptedTestProfile = {
   system_encrypted: 'encrypted_data',
   user_encrypted: 'encrypted_data',
   search_encrypted: 'encrypted_data',
-  system_only_encrypted: 'encrypted_data'
+  system_only_encrypted: 'encrypted_data',
 };
 ```
 
@@ -85,6 +86,7 @@ bun run build-with-types
 ## **🎉 Result**
 
 **Before (Terrible):**
+
 ```typescript
 const encryptableOriginal = original as TestProfile & RunarEncryptable<TestProfile, any>;
 //                                                                              ^^^
@@ -92,8 +94,10 @@ const encryptableOriginal = original as TestProfile & RunarEncryptable<TestProfi
 ```
 
 **After (Perfect):**
+
 ```typescript
-const encryptableOriginal = original as TestProfile & RunarEncryptable<TestProfile, EncryptedTestProfile>;
+const encryptableOriginal = original as TestProfile &
+  RunarEncryptable<TestProfile, EncryptedTestProfile>;
 //                                                                              ^^^^^^^^^^^^^^^^^^^
 //                                                                              Proper type safety!
 ```

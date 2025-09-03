@@ -8,3 +8,4 @@ export interface EncryptedTestProfile {
   search_encrypted: string;
   system_only_encrypted: string;
 }
+

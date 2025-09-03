@@ -19,12 +19,12 @@ export function Encrypt<T extends new (...args: any[]) => any>(
 ): void {
   const className = context.name || 'AnonymousClass';
   const encryptedClassName = `Encrypted${className}`;
-  
+
   // This is what we want to achieve - but TypeScript doesn't allow this at compile time
   // We need to find a way to make this type available
-  
+
   console.log(`Decorator applied to ${className}, would generate ${encryptedClassName}`);
-  
+
   // The challenge: How do we make EncryptedClassName available as a TypeScript type?
   // without using 'any' and without manual interface definitions
 }

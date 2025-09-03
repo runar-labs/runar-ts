@@ -28,8 +28,7 @@ describe('AnyValue Dual-Mode Semantics', () => {
 
   beforeAll(() => {
     // Setup logging
-    const loggingConfig = LoggingConfig.new()
-      .withDefaultLevel(LogLevel.Trace);
+    const loggingConfig = LoggingConfig.new().withDefaultLevel(LogLevel.Trace);
 
     applyLoggingConfig(loggingConfig);
     logger = Logger.newRoot(Component.System).setNodeId('test-node');
@@ -45,7 +44,7 @@ describe('AnyValue Dual-Mode Semantics', () => {
     // Create a plain AnyValue
     const plainProfile = new TestProfile('123', 'John Doe', 'john@example.com');
     const anyValue = AnyValue.from(plainProfile);
-    
+
     expect(isOk(anyValue)).toBe(true);
     if (isErr(anyValue)) return;
 
@@ -68,8 +67,12 @@ describe('AnyValue Dual-Mode Semantics', () => {
 
   it('should demonstrate dual-mode semantics with encrypted data', () => {
     // Create mock encrypted data
-    const encryptedProfile = new EncryptedTestProfile('123', { label: 'user' }, { label: 'system' });
-    
+    const encryptedProfile = new EncryptedTestProfile(
+      '123',
+      { label: 'user' },
+      { label: 'system' }
+    );
+
     // Create AnyValue from encrypted data (this is just a plain object, not actually encrypted)
     const anyValue = AnyValue.from(encryptedProfile);
     expect(isOk(anyValue)).toBe(true);
@@ -98,13 +101,13 @@ describe('AnyValue Dual-Mode Semantics', () => {
   it('should handle lazy deserialization with dual-mode semantics', () => {
     // This test would require a more complex setup with actual serialization/deserialization
     // For now, we'll just verify the API exists and can be called
-    
+
     const mockBytes = new Uint8Array([1, 2, 3, 4, 5]);
     const anyValue = AnyValue.deserialize(mockBytes);
-    
+
     // The deserialize should fail with invalid data, but the API should be available
     expect(isErr(anyValue)).toBe(true);
-    
+
     console.log('Dual-mode semantics API is available and functional');
   });
 });

@@ -1042,7 +1042,11 @@ export class AnyValue<T = unknown> {
         return ok(this.value as unknown as U);
       } else {
         // The value is not of the requested encrypted companion type, so error
-        return err(new Error('InvalidTypeForPlainBody: Cannot request encrypted companion type from plain body'));
+        return err(
+          new Error(
+            'InvalidTypeForPlainBody: Cannot request encrypted companion type from plain body'
+          )
+        );
       }
     }
 
@@ -1074,7 +1078,7 @@ export class AnyValue<T = unknown> {
         // Try direct decode into requested T first
         try {
           const decoded = decode(decryptedBytes);
-          
+
           // Check if we're requesting an encrypted companion type
           if (targetConstructor && this.isEncryptedCompanionType(targetConstructor)) {
             // Requesting Encrypted{T} - return the encrypted companion as-is
@@ -1082,7 +1086,11 @@ export class AnyValue<T = unknown> {
           } else {
             // Requesting plain T - need to decrypt the encrypted companion
             // Check if the decoded object is an encrypted companion
-            if (decoded && typeof decoded === 'object' && decoded.constructor.name.startsWith('Encrypted')) {
+            if (
+              decoded &&
+              typeof decoded === 'object' &&
+              decoded.constructor.name.startsWith('Encrypted')
+            ) {
               // We have an encrypted companion, need to decrypt it to get plain T
               const decryptorResult = lookupDecryptorByTypeName(this.lazyData.typeName || '');
               if (decryptorResult.ok) {
@@ -1097,7 +1105,9 @@ export class AnyValue<T = unknown> {
                   return err(new Error(`Registry decryptor execution error: ${decryptorError}`));
                 }
               } else {
-                return err(new Error(`No decryptor registered for type: ${this.lazyData.typeName}`));
+                return err(
+                  new Error(`No decryptor registered for type: ${this.lazyData.typeName}`)
+                );
               }
             } else {
               // Direct decode succeeded and we got plain data
@@ -1129,12 +1139,16 @@ export class AnyValue<T = unknown> {
       // Plain data - attempt direct decode
       try {
         const decoded = decode(payload);
-        
+
         // If requesting encrypted companion on plain data, return error
         if (targetConstructor && this.isEncryptedCompanionType(targetConstructor)) {
-          return err(new Error('InvalidTypeForPlainBody: Cannot request encrypted companion type from plain body'));
+          return err(
+            new Error(
+              'InvalidTypeForPlainBody: Cannot request encrypted companion type from plain body'
+            )
+          );
         }
-        
+
         return ok(decoded as U);
       } catch (error) {
         return err(new Error(`Failed to decode plain lazy data: ${error}`));

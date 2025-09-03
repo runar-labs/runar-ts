@@ -19,7 +19,7 @@ function demonstrateTypeSafety() {
     system_encrypted: 'encrypted_data_here',
     user_encrypted: 'encrypted_data_here',
     search_encrypted: 'encrypted_data_here',
-    system_only_encrypted: 'encrypted_data_here'
+    system_only_encrypted: 'encrypted_data_here',
   };
 
   // TypeScript now knows the exact structure!

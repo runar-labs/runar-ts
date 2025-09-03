@@ -7,7 +7,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rimraf dist",
-    "test": "bun test"
+    "test": "bun test",
+    "generate-types": "bun run generate-types.ts",
+    "build-with-types": "bun run generate-types && tsc -p tsconfig.json"
   },
   "dependencies": {},
   "devDependencies": {

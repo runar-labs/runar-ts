@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { Keys } from 'runar-nodejs-api';
 import {
   LabelResolverConfig,
+  LabelResolver,
   ResolverCache,
   SerializationContext,
   DeserializationContext,
@@ -16,6 +17,7 @@ import {
   KeysWrapperNode,
 } from 'runar-ts-node/src/keys_manager_wrapper.js';
 import { Encrypt, runar, type RunarEncryptable } from '../src/index.js';
+import { EncryptedTestProfile } from '../src/generated-types.js';
 
 // Import Result type and utilities
 import { Result, isErr, isOk } from 'runar-ts-common/src/error/Result.js';
@@ -67,7 +69,7 @@ class AnyValueTestEnvironment {
   private networkPublicKey: Uint8Array;
   private userProfileKeys: Uint8Array[];
   private labelResolverConfig: LabelResolverConfig;
-  private resolver: any; // Will be set during initialization
+  private resolver: LabelResolver; // Will be set during initialization
 
   constructor() {
     this.mobileKeys = new Keys();
@@ -219,7 +221,7 @@ class AnyValueTestEnvironment {
     return this.labelResolverConfig;
   }
 
-  getResolver(): any {
+  getResolver(): LabelResolver {
     return this.resolver;
   }
 
@@ -257,8 +259,7 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
 
   beforeAll(async () => {
     // Setup comprehensive logging for debugging
-    const loggingConfig = LoggingConfig.new()
-      .withDefaultLevel(LogLevel.Trace);
+    const loggingConfig = LoggingConfig.new().withDefaultLevel(LogLevel.Trace);
 
     applyLoggingConfig(loggingConfig);
     logger = Logger.newRoot(Component.Node).setNodeId('test-node-123');
@@ -285,7 +286,8 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       );
 
       // Test encryption (matches Rust: original.encrypt_with_keystore(&mobile_ks, resolver.as_ref()))
-      const encryptableOriginal = original as TestProfile & RunarEncryptable<TestProfile, EncryptedTestProfile>;
+      const encryptableOriginal = original as TestProfile &
+        RunarEncryptable<TestProfile, EncryptedTestProfile>;
       const encryptResult = encryptableOriginal.encryptWithKeystore(
         testEnv.getMobileWrapper(),
         testEnv.getResolver()
@@ -305,7 +307,10 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       expect(encrypted.system_only_encrypted).toBeDefined();
 
       // Test decryption with mobile (matches Rust: encrypted.decrypt_with_keystore(&mobile_ks))
-      const encryptedCompanion = encrypted as unknown as RunarEncryptable<TestProfile, EncryptedTestProfile>;
+      const encryptedCompanion = encrypted as unknown as RunarEncryptable<
+        TestProfile,
+        EncryptedTestProfile
+      >;
       const decryptedMobile = encryptedCompanion.decryptWithKeystore(
         testEnv.getMobileWrapper(),
         logger

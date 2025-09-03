@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
- * Build script to demonstrate build-time type generation
- * This script analyzes TypeScript source files and generates encrypted companion types
+ * Build script to generate encrypted companion types from decorators
+ * This eliminates the need for 'any' types in the decorator system
  */
 
 import * as ts from 'typescript';
@@ -29,17 +29,6 @@ function analyzeSourceFile(filePath: string): ClassInfo[] {
     if (ts.isClassDeclaration(node) && node.name) {
       const className = node.name.text;
       const fields: FieldInfo[] = [];
-
-      console.log(`Found class: ${className}`);
-      console.log(`  Modifiers: ${node.modifiers?.length || 0}`);
-      if (node.modifiers) {
-        node.modifiers.forEach((modifier, index) => {
-          console.log(`    Modifier ${index}: ${ts.SyntaxKind[modifier.kind]}`);
-          if (ts.isDecorator(modifier)) {
-            console.log(`      Decorator expression: ${modifier.expression.getText()}`);
-          }
-        });
-      }
 
       // Check for @Encrypt decorator (TypeScript 5 syntax)
       const hasEncryptDecorator = node.modifiers?.some(modifier => {
@@ -138,7 +127,9 @@ function generateTypeDefinitions(classes: ClassInfo[]): string {
 function main() {
   console.log('🔍 Analyzing source files for @Encrypt decorators...\n');
 
-  const sourceFiles = ['src/test-class.ts'];
+  const sourceFiles = [
+    'test/anyvalue_struct_encryption.test.ts'
+  ];
 
   const allClasses: ClassInfo[] = [];
 
