@@ -12,7 +12,11 @@ import {
   decryptBytesSync,
 } from '../src/index.js';
 import { Keys } from 'runar-nodejs-api';
-import { KeystoreFactory, KeysWrapperMobile, KeysWrapperNode } from '../../runar-ts-node/src/keys_manager_wrapper.js';
+import {
+  KeystoreFactory,
+  KeysWrapperMobile,
+  KeysWrapperNode,
+} from '../../runar-ts-node/src/keys_manager_wrapper.js';
 
 /**
  * Comprehensive Encryption Tests
@@ -41,21 +45,21 @@ export class ComprehensiveEncryptionTestContext {
   constructor() {
     this.mobileKeys = new Keys();
     this.nodeKeys = new Keys();
-    
+
     // Use the new keystore factory to create role-specific wrappers
     const mobileResult = KeystoreFactory.create(this.mobileKeys, 'frontend');
     const nodeResult = KeystoreFactory.create(this.nodeKeys, 'backend');
-    
+
     if (!mobileResult.ok) {
       throw new Error(`Failed to create mobile keystore wrapper: ${mobileResult.error.message}`);
     }
     if (!nodeResult.ok) {
       throw new Error(`Failed to create node keystore wrapper: ${nodeResult.error.message}`);
     }
-    
+
     this.mobileWrapper = mobileResult.value as KeysWrapperMobile;
     this.nodeWrapper = nodeResult.value as KeysWrapperNode;
-    
+
     this.userPublicKey = new Uint8Array(0);
     this.nodePublicKey = new Uint8Array(0);
     this.networkId = '';

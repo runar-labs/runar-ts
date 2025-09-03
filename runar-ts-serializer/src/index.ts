@@ -177,24 +177,21 @@ export class AnyValue<T = unknown> {
 
         // Fallback to regular serialization
         if (Array.isArray(value) && value.length > 0 && value[0] instanceof AnyValue) {
-          // Elements are AnyValue objects - use CBORUtils to create array of structures
-          const anyValueStructures: any[] = [];
+          // Elements are AnyValue objects - serialize each element's content recursively
+          const serializedElements: any[] = [];
 
           for (const element of value) {
             if (element instanceof AnyValue) {
-              // Create AnyValue structure as JavaScript object
-              const anyValueStructure = {
-                category: element.category,
-                typename: element.getTypeName() || 'unknown',
-                value: element.value,
-              };
-              anyValueStructures.push(anyValueStructure);
+              // For nested AnyValue objects, we need to recursively serialize their content
+              // to handle cases like lists containing maps containing AnyValues
+              const serializedContent = AnyValue.serializeAnyValueContent(element);
+              serializedElements.push(serializedContent);
             }
           }
 
-          // Use CBORUtils to encode the array of structures
-          const cborBytes = CBORUtils.encodeAnyValueArray(anyValueStructures);
-          return ok(new Uint8Array(cborBytes));
+          // Serialize the array of serialized content
+          const bytes = encode(serializedElements);
+          return ok(bytes);
         } else {
           // Regular array of primitive values
           const bytes = encode(value);
@@ -259,24 +256,21 @@ export class AnyValue<T = unknown> {
           // Fallback to regular serialization
           const firstValue = value.values().next().value;
           if (firstValue instanceof AnyValue) {
-            // Values are AnyValue objects - use CBORUtils to create map of structures
-            const anyValueMap = new Map<string, any>();
+            // Values are AnyValue objects - serialize their content recursively
+            const innerValueMap: Record<string, any> = {};
 
             for (const [key, val] of value) {
               if (val instanceof AnyValue) {
-                // Create AnyValue structure as JavaScript object
-                const anyValueStructure = {
-                  category: val.category,
-                  typename: val.getTypeName() || 'unknown',
-                  value: val.value,
-                };
-                anyValueMap.set(key, anyValueStructure);
+                // For nested AnyValue objects, we need to recursively serialize their content
+                // to handle cases like maps containing lists containing AnyValues
+                const serializedContent = AnyValue.serializeAnyValueContent(val);
+                innerValueMap[key] = serializedContent;
               }
             }
 
-            // Use CBORUtils to encode the map of structures
-            const cborBytes = CBORUtils.encodeAnyValueMap(anyValueMap);
-            return ok(new Uint8Array(cborBytes));
+            // Serialize the map of serialized content
+            const bytes = encode(innerValueMap);
+            return ok(bytes);
           } else {
             // Regular map of primitive values - create simple CBOR map
             const cborBytes: number[] = [];
@@ -372,7 +366,7 @@ export class AnyValue<T = unknown> {
             }
           }
         }
-        
+
         // Regular struct serialization (no encryption)
         const bytes = encode(value);
         return ok(bytes);
@@ -406,7 +400,10 @@ export class AnyValue<T = unknown> {
   }
 
   // Deserialization constructor matching Rust
-  static deserialize(bytes: Uint8Array, keystore?: CommonKeysInterface): Result<AnyValue<any>, Error> {
+  static deserialize(
+    bytes: Uint8Array,
+    keystore?: CommonKeysInterface
+  ): Result<AnyValue<any>, Error> {
     if (bytes.length === 0) {
       return err(new Error('Empty bytes provided for deserialization'));
     }
@@ -432,7 +429,7 @@ export class AnyValue<T = unknown> {
     if (typeNameLen > 255) {
       return err(new Error('Type name length exceeds maximum (255 bytes)'));
     }
-    
+
     if (typeNameLen + 3 > bytes.length) {
       return err(new Error('Type name length exceeds available data'));
     }
@@ -444,7 +441,7 @@ export class AnyValue<T = unknown> {
     if (dataStart >= bytes.length) {
       return err(new Error('No data payload after header'));
     }
-    
+
     let dataBytes = bytes.subarray(dataStart);
 
     // Handle encrypted data
@@ -463,10 +460,53 @@ export class AnyValue<T = unknown> {
         value = decode(dataBytes);
         break;
       case ValueCategory.List:
-        value = decode(dataBytes) || [];
+        const listData = decode(dataBytes) || [];
+        // Convert list elements to AnyValue instances if they're not already
+        if (Array.isArray(listData)) {
+          value = listData.map(item => {
+            if (item instanceof AnyValue) {
+              return item;
+            }
+            // Create appropriate AnyValue for each element
+            if (item === null || item === undefined) {
+              return AnyValue.null();
+            } else if (typeof item === 'object' && !Array.isArray(item)) {
+              return AnyValue.newStruct(item);
+            } else if (Array.isArray(item)) {
+              return AnyValue.newList(item);
+            } else {
+              return AnyValue.newPrimitive(item);
+            }
+          });
+        } else {
+          value = [];
+        }
         break;
       case ValueCategory.Map:
-        value = decode(dataBytes) || new Map();
+        const mapData = decode(dataBytes) || {};
+        // Convert map values to AnyValue instances if they're not already
+        if (mapData && typeof mapData === 'object' && !Array.isArray(mapData)) {
+          const map = new Map();
+          for (const [key, val] of Object.entries(mapData)) {
+            if (val instanceof AnyValue) {
+              map.set(key, val);
+            } else {
+              // Create appropriate AnyValue for each value
+              if (val === null || val === undefined) {
+                map.set(key, AnyValue.null());
+              } else if (typeof val === 'object' && !Array.isArray(val)) {
+                map.set(key, AnyValue.newStruct(val));
+              } else if (Array.isArray(val)) {
+                map.set(key, AnyValue.newList(val));
+              } else {
+                map.set(key, AnyValue.newPrimitive(val));
+              }
+            }
+          }
+          value = map;
+        } else {
+          value = new Map();
+        }
         break;
       case ValueCategory.Struct:
         value = decode(dataBytes) || {};
@@ -478,7 +518,9 @@ export class AnyValue<T = unknown> {
         value = decode(dataBytes);
         break;
       default:
-        return err(new Error(`Unsupported category for deserialization: ${category} (expected 0-6)`));
+        return err(
+          new Error(`Unsupported category for deserialization: ${category} (expected 0-6)`)
+        );
     }
 
     // Handle encrypted instances from decorators
@@ -649,6 +691,63 @@ export class AnyValue<T = unknown> {
     return this.typeName;
   }
 
+  // JSON conversion method matching Rust exactly
+  toJson(): Result<any, Error> {
+    try {
+      switch (this.category) {
+        case ValueCategory.Null:
+          return ok(null);
+        case ValueCategory.Primitive:
+          return ok(this.value);
+        case ValueCategory.List:
+          if (Array.isArray(this.value)) {
+            // If elements are AnyValue instances, convert them recursively
+            if (this.value.length > 0 && this.value[0] instanceof AnyValue) {
+              const jsonArray = this.value.map(item => {
+                if (item instanceof AnyValue) {
+                  const jsonResult = item.toJson();
+                  return jsonResult.ok ? jsonResult.value : null;
+                }
+                return item;
+              });
+              return ok(jsonArray);
+            }
+            return ok(this.value);
+          }
+          return ok([]);
+        case ValueCategory.Map:
+          if (this.value instanceof Map) {
+            const jsonObj: any = {};
+            for (const [key, val] of this.value.entries()) {
+              if (val instanceof AnyValue) {
+                const jsonResult = val.toJson();
+                jsonObj[key] = jsonResult.ok ? jsonResult.value : null;
+              } else {
+                jsonObj[key] = val;
+              }
+            }
+            return ok(jsonObj);
+          }
+          return ok({});
+        case ValueCategory.Struct:
+          return ok(this.value);
+        case ValueCategory.Bytes:
+          // Convert bytes to base64 for JSON
+          if (this.value instanceof Uint8Array) {
+            const base64 = btoa(String.fromCharCode(...this.value));
+            return ok(base64);
+          }
+          return ok(this.value);
+        case ValueCategory.Json:
+          return ok(this.value);
+        default:
+          return err(new Error(`Unknown category for JSON conversion: ${this.category}`));
+      }
+    } catch (error) {
+      return err(error instanceof Error ? error : new Error(String(error)));
+    }
+  }
+
   // Enhanced serialization method with encryption support
   serializeWithEncryption(
     context?: SerializationContext
@@ -672,7 +771,17 @@ export class AnyValue<T = unknown> {
   // Synchronous serialization implementation
   private serializeSync(context?: any): Result<Uint8Array> {
     if (this.isNull()) {
-      return ok(new Uint8Array([0]));
+      // Null values still need proper wire format: [category][is_encrypted][type_name_len][type_name_bytes...]
+      const categoryByte = ValueCategory.Null;
+      const isEncryptedByte = 0x00; // null is never encrypted
+      const typeNameBytes = new TextEncoder().encode('null');
+      const typeNameLen = typeNameBytes.length;
+
+      const mutBuf: number[] = [categoryByte, isEncryptedByte, typeNameLen];
+      mutBuf.push(...typeNameBytes);
+      // No payload data for null
+
+      return ok(new Uint8Array(mutBuf));
     }
 
     if (!this.serializeFn) {
@@ -798,6 +907,49 @@ export class AnyValue<T = unknown> {
     return ok(new Uint8Array(mutBuf));
   }
 
+  // Helper method to recursively serialize AnyValue content for containers
+  private static serializeAnyValueContent(anyValue: AnyValue): any {
+    if (anyValue.isNull()) {
+      return null;
+    }
+
+    switch (anyValue.getCategory()) {
+      case ValueCategory.Primitive:
+      case ValueCategory.Bytes:
+      case ValueCategory.Json:
+      case ValueCategory.Struct:
+        // For primitive types, return the value directly
+        return anyValue.value;
+      case ValueCategory.List:
+        // For lists, recursively serialize each element
+        if (Array.isArray(anyValue.value)) {
+          return anyValue.value.map(item => {
+            if (item instanceof AnyValue) {
+              return AnyValue.serializeAnyValueContent(item);
+            }
+            return item;
+          });
+        }
+        return anyValue.value;
+      case ValueCategory.Map:
+        // For maps, recursively serialize each value
+        if (anyValue.value instanceof Map) {
+          const result: Record<string, any> = {};
+          for (const [key, val] of anyValue.value) {
+            if (val instanceof AnyValue) {
+              result[key] = AnyValue.serializeAnyValueContent(val);
+            } else {
+              result[key] = val;
+            }
+          }
+          return result;
+        }
+        return anyValue.value;
+      default:
+        return anyValue.value;
+    }
+  }
+
   // Type conversion methods - TS semantic adjustment: single method for lazy decrypt-on-access
   asType<U = T>(): Result<U, Error> {
     // If we have lazy data, use the lazy deserialization path
@@ -894,9 +1046,7 @@ export class AnyValue<T = unknown> {
         if (value instanceof Map) {
           return AnyValue.newMap(value) as AnyValue<T>;
         }
-        throw new Error(
-          `Expected Map instance for ValueCategory.Map, but got ${typeof value}`
-        );
+        throw new Error(`Expected Map instance for ValueCategory.Map, but got ${typeof value}`);
       case ValueCategory.Struct:
         return AnyValue.newStruct(value as any) as AnyValue<T>;
       case ValueCategory.Bytes:
@@ -943,7 +1093,10 @@ export function serializeEntity(entity: any): Uint8Array | Promise<Uint8Array> {
 }
 
 // Export function to deserialize entities
-export function deserializeEntity<T>(bytes: Uint8Array, keystore?: CommonKeysInterface): Result<T, Error> {
+export function deserializeEntity<T>(
+  bytes: Uint8Array,
+  keystore?: CommonKeysInterface
+): Result<T, Error> {
   const av = AnyValue.fromBytes<T>(bytes, keystore);
   return av.as<T>();
 }

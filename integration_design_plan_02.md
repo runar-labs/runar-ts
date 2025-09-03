@@ -1366,11 +1366,13 @@ All comprehensive encryption tests (19/19) pass, confirming:
 ## 25. Keystore Role Separation (Mobile vs Node) — Detailed Design
 
 ### 25.1 Role source of truth
+
 - `NodeConfig.role?: 'frontend' | 'backend'` (defaults to `'backend'`)
 - Role is read exactly once during node initialization; after selection, role is immutable for the process lifetime.
 - Any attempt to reconfigure or reconstruct a wrapper of a different role MUST return `Err(RoleImmutable)`.
 
 ### 25.2 Wrappers and responsibilities
+
 - KeysWrapperNode (backend)
   - Wraps native `Keys` in node mode; sync methods used by serializer and networking.
   - Provides: `nodeEncryptWithEnvelope`, `nodeDecryptEnvelope`, `nodeGetKeystoreState`, `nodeGetPublicKey`, `nodeGenerateCsr`, `nodeInstallCertificate`, `nodeInstallNetworkKey`, `encrypt_local_data`, `decrypt_local_data`, QUIC certificate accessors, etc.
@@ -1382,6 +1384,7 @@ All comprehensive encryption tests (19/19) pass, confirming:
   - Returns `Result`; prohibits node-only operations (returns `Err(UnsupportedInFrontendRole)`).
 
 ### 25.3 KeystoreFactory
+
 - Input: `NodeConfig.role`
 - Output: a single concrete wrapper instance (`KeysWrapperNode` or `KeysWrapperMobile`)
 - Invariants:
@@ -1389,6 +1392,7 @@ All comprehensive encryption tests (19/19) pass, confirming:
   - Wrapper role matches `NodeConfig.role`
   - Exposes a unified `CommonKeysInterface` (runtime class) with a subset of common methods used by the serializer (encrypt/decrypt envelope, get caps/state)
 - Example (TS):
+
 ```ts
 export class KeystoreFactory {
   static create(config: NodeConfig): Result<CommonKeysInterface, Error> {
@@ -1399,15 +1403,17 @@ export class KeystoreFactory {
 ```
 
 ### 25.4 Lifecycle
+
 - Node initialization
-  1) Read `NodeConfig.role` (default `'backend'`)
-  2) `KeystoreFactory.create(config)` → `CommonKeysInterface` (KeysWrapperNode or KeysWrapperMobile)
-  3) Store wrapper on `Node` as `this.keystore` (immutable)
-  4) For backend role, initialize QUIC/transport/discovery if networking is enabled
+  1. Read `NodeConfig.role` (default `'backend'`)
+  2. `KeystoreFactory.create(config)` → `CommonKeysInterface` (KeysWrapperNode or KeysWrapperMobile)
+  3. Store wrapper on `Node` as `this.keystore` (immutable)
+  4. For backend role, initialize QUIC/transport/discovery if networking is enabled
 - Wrapper disposal (optional)
   - Provide `close()` if native resources must be freed; otherwise rely on process lifetime
 
 ### 25.5 CommonKeysInterface (runtime class)
+
 - Purpose: unify serializer access without leaking role specifics
 - Methods (sync) exposed to serializer:
   - `encryptWithEnvelope(plaintext: Uint8Array, networkPublicKey?: Uint8Array, profilePublicKeys?: Uint8Array[]): Uint8Array`
@@ -1442,6 +1448,7 @@ export class KeystoreFactory {
   - Role guards: frontend (mobile) vs backend (node); methods not applicable to a role must return `Err(UnsupportedIn<role>Role)`
 
 ### 25.6 Invariants and validations
+
 - Role immutability:
   - After wrapper creation, calling a method not supported by the role MUST return `Err(UnsupportedIn<role>Role)`
 - No fallbacks:
@@ -1451,6 +1458,7 @@ export class KeystoreFactory {
   - Wrappers convert to/from `Buffer` (zero-copy) for NAPI calls
 
 ### 25.7 Integration points
+
 - Node
   - `constructor(config: NodeConfig)` calls `KeystoreFactory.create(config)` and stores `this.keystore`
   - `createSerializationContext()` uses `this.keystore` directly
@@ -1461,12 +1469,14 @@ export class KeystoreFactory {
   - Backend role: wrappers provide required node keystore functions (e.g., QUIC certs) via role-specific interfaces; these are used in `runar-ts-node` only (not in serializer)
 
 ### 25.8 Error contracts (Result only)
+
 - `RoleImmutable`: attempting to change role or rebuild opposing wrapper
 - `UnsupportedInFrontendRole` / `UnsupportedInBackendRole`: method not allowed for role
 - `NativeCallFailed`: any native error mapped with context string
 - `InvalidArgument`: wrong parameters or missing inputs
 
 ### 25.9 Tests
+
 - Construction
   - `KeystoreFactory.create({ role: 'backend' })` → `KeysWrapperNode`; `frontend` → `KeysWrapperMobile`
   - Reinitialization attempts with different role return `Err(RoleImmutable)` (if process-bound), or new `Node` instance required
@@ -1540,6 +1550,7 @@ Adopt these signatures across the codebase; update all call sites. Do not suppor
   - On EncryptedT: `decryptWithKeystore(keystore: CommonKeysInterface): Result<T, Error>`
 
 Notes to resolve "expected 1 arg, got 2" mismatches:
+
 - AnyValue.deserialize takes `(bytes, keystore?)` only. Remove context-objects or extra params and update all sites accordingly.
 - Registry encrypt/decrypt handlers accept exactly (value, keystore, resolver) for encrypt; (bytes, keystore) for decrypt, returning CBOR bytes or plain T respectively, wrapped in Result at the call boundary.
 
@@ -1577,12 +1588,15 @@ Notes to resolve "expected 1 arg, got 2" mismatches:
 **SOLUTION CONFIRMED**: Use TypeScript compilation + Bun runtime for decorator testing and execution.
 
 **Implementation Strategy**:
-1. **Compile decorators with TypeScript**: 
+
+1. **Compile decorators with TypeScript**:
+
    ```bash
    bunx tsc --experimentalDecorators false --emitDecoratorMetadata false --skipLibCheck
    ```
 
-2. **Run tests with Bun**: 
+2. **Run tests with Bun**:
+
    ```bash
    bun dist/test.js
    ```
@@ -1596,6 +1610,7 @@ Notes to resolve "expected 1 arg, got 2" mismatches:
 **Verification**: Confirmed that TS 5 decorators work perfectly when compiled with TypeScript and run with Bun. The `__esDecorate` and `__runInitializers` functions work correctly, providing proper context objects with `context.name`, `context.kind`, and `context.addInitializer`.
 
 **Usage Pattern**:
+
 - For decorator development: Use TypeScript compilation + Bun runtime
 - For production builds: Use standard Bun build process (which will support TS 5 decorators in future versions)
 - For tests: Compile with TypeScript, run with Bun

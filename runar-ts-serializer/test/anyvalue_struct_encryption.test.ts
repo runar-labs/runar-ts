@@ -1,7 +1,19 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { Keys } from 'runar-nodejs-api';
-import { LabelResolverConfig, ResolverCache, SerializationContext, DeserializationContext, AnyValue, createContextLabelResolver, LabelKeyword } from '../src/index.js';
-import { KeystoreFactory, KeysWrapperMobile, KeysWrapperNode } from '../../runar-ts-node/src/keys_manager_wrapper.js';
+import {
+  LabelResolverConfig,
+  ResolverCache,
+  SerializationContext,
+  DeserializationContext,
+  AnyValue,
+  createContextLabelResolver,
+  LabelKeyword,
+} from '../src/index.js';
+import {
+  KeystoreFactory,
+  KeysWrapperMobile,
+  KeysWrapperNode,
+} from '../../runar-ts-node/src/keys_manager_wrapper.js';
 
 // Test data structure for encryption testing - manually configured to avoid decorator compatibility issues
 class TestProfile {
@@ -31,7 +43,7 @@ class TestProfile {
     { label: 'user', propertyKey: 'name', priority: 1 },
     { label: 'user', propertyKey: 'privateData', priority: 1 },
     { label: 'system', propertyKey: 'email', priority: 0 },
-    { label: 'system_only', propertyKey: 'systemMetadata', priority: 0 }
+    { label: 'system_only', propertyKey: 'systemMetadata', priority: 0 },
   ];
 
   // Mock encryption method to satisfy the AnyValue.newStruct requirements
@@ -56,21 +68,21 @@ class AnyValueTestEnvironment {
   constructor() {
     this.mobileKeys = new Keys();
     this.nodeKeys = new Keys();
-    
+
     // Use the new keystore factory to create role-specific wrappers
     const mobileResult = KeystoreFactory.create(this.mobileKeys, 'frontend');
     const nodeResult = KeystoreFactory.create(this.nodeKeys, 'backend');
-    
+
     if (!mobileResult.ok) {
       throw new Error(`Failed to create mobile keystore wrapper: ${mobileResult.error.message}`);
     }
     if (!nodeResult.ok) {
       throw new Error(`Failed to create node keystore wrapper: ${nodeResult.error.message}`);
     }
-    
+
     this.mobileWrapper = mobileResult.value as KeysWrapperMobile;
     this.nodeWrapper = nodeResult.value as KeysWrapperNode;
-    
+
     this.networkId = '';
     this.networkPublicKey = new Uint8Array(0);
     this.userProfileKeys = [];
@@ -241,7 +253,10 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
 
       // Deserialize with keystore
       const deserContext = testEnv.createDeserializationContext(testEnv.getNodeWrapper());
-      const deserializeResult = AnyValue.deserialize(serializeResult.value!, testEnv.getNodeWrapper());
+      const deserializeResult = AnyValue.deserialize(
+        serializeResult.value!,
+        testEnv.getNodeWrapper()
+      );
       expect(deserializeResult.ok).toBe(true);
 
       // Verify the decrypted data
@@ -276,7 +291,10 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
 
       // Deserialize with keystore
       const deserContext = testEnv.createDeserializationContext(testEnv.getNodeWrapper());
-      const deserializeResult = AnyValue.deserialize(serializeResult.value!, testEnv.getNodeWrapper());
+      const deserializeResult = AnyValue.deserialize(
+        serializeResult.value!,
+        testEnv.getNodeWrapper()
+      );
       expect(deserializeResult.ok).toBe(true);
 
       // Verify the decrypted data
@@ -311,7 +329,10 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
 
       // Deserialize with keystore
       const deserContext = testEnv.createDeserializationContext(testEnv.getNodeWrapper());
-      const deserializeResult = AnyValue.deserialize(serializeResult.value!, testEnv.getNodeWrapper());
+      const deserializeResult = AnyValue.deserialize(
+        serializeResult.value!,
+        testEnv.getNodeWrapper()
+      );
       expect(deserializeResult.ok).toBe(true);
 
       // Verify the decrypted data
@@ -364,7 +385,7 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
         'A'.repeat(1000), // Large name
         'B'.repeat(1000), // Large private data
         'C'.repeat(1000), // Large email
-        'D'.repeat(1000)  // Large metadata
+        'D'.repeat(1000) // Large metadata
       );
 
       const context = testEnv.createSerializationContext(testEnv.getMobileWrapper());
@@ -378,7 +399,10 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
 
       // Test decryption
       const deserContext = testEnv.createDeserializationContext(testEnv.getNodeWrapper());
-      const deserializeResult = AnyValue.deserialize(serializeResult.value!, testEnv.getNodeWrapper());
+      const deserializeResult = AnyValue.deserialize(
+        serializeResult.value!,
+        testEnv.getNodeWrapper()
+      );
       expect(deserializeResult.ok).toBe(true);
 
       // Verify data integrity

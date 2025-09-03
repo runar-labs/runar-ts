@@ -7,10 +7,10 @@ console.log('🎉 Testing TS 5 decorators with TypeScript compilation + Bun runt
 class TestProfile {
   @runar({ system: true })
   systemField: string = 'system_value';
-  
+
   @runar({ user: true })
   userField: string = 'user_value';
-  
+
   constructor(public name: string) {}
 }
 
@@ -25,4 +25,3 @@ console.log('System field:', instance.systemField);
 console.log('User field:', instance.userField);
 
 console.log('🎯 TS 5 decorators work perfectly with TypeScript compilation + Bun runtime!');
-

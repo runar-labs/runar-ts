@@ -40,7 +40,8 @@ export interface CommonKeysInterface {
 export class KeysWrapperMobile implements CommonKeysInterface {
   private readonly keys: Keys;
   private readonly role = 'frontend' as const;
-  private labelMappings: Map<string, { networkPublicKey?: Uint8Array; userKeySpec?: any }> = new Map();
+  private labelMappings: Map<string, { networkPublicKey?: Uint8Array; userKeySpec?: any }> =
+    new Map();
 
   constructor(keys: Keys) {
     this.keys = keys;
@@ -60,7 +61,9 @@ export class KeysWrapperMobile implements CommonKeysInterface {
       );
       return new Uint8Array(result);
     } catch (error) {
-      throw new Error(`Mobile encryption failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Mobile encryption failed: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -70,7 +73,9 @@ export class KeysWrapperMobile implements CommonKeysInterface {
       const result = this.keys.mobileDecryptEnvelope(Buffer.from(eedCbor));
       return new Uint8Array(result);
     } catch (error) {
-      throw new Error(`Mobile decryption failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Mobile decryption failed: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -80,7 +85,9 @@ export class KeysWrapperMobile implements CommonKeysInterface {
       const result = this.keys.mobileDeriveUserProfileKey(label);
       return new Uint8Array(result);
     } catch (error) {
-      throw new Error(`Failed to derive user profile key: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to derive user profile key: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -90,7 +97,9 @@ export class KeysWrapperMobile implements CommonKeysInterface {
       const result = this.keys.mobileGenerateNetworkDataKey();
       return new Uint8Array(result);
     } catch (error) {
-      throw new Error(`Failed to generate network data key: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to generate network data key: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -99,12 +108,17 @@ export class KeysWrapperMobile implements CommonKeysInterface {
     try {
       this.keys.mobileInstallNetworkPublicKey(Buffer.from(networkPublicKey));
     } catch (error) {
-      throw new Error(`Failed to install network public key: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to install network public key: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
   // Mobile-specific network key message creation
-  mobileCreateNetworkKeyMessage(networkPublicKey: Uint8Array, nodeAgreementPublicKey: Uint8Array): Uint8Array {
+  mobileCreateNetworkKeyMessage(
+    networkPublicKey: Uint8Array,
+    nodeAgreementPublicKey: Uint8Array
+  ): Uint8Array {
     try {
       const result = this.keys.mobileCreateNetworkKeyMessage(
         Buffer.from(networkPublicKey),
@@ -112,7 +126,9 @@ export class KeysWrapperMobile implements CommonKeysInterface {
       );
       return new Uint8Array(result);
     } catch (error) {
-      throw new Error(`Failed to create network key message: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to create network key message: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -121,7 +137,9 @@ export class KeysWrapperMobile implements CommonKeysInterface {
     try {
       await this.keys.mobileInitializeUserRootKey();
     } catch (error) {
-      throw new Error(`Failed to initialize user root key: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to initialize user root key: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -130,7 +148,9 @@ export class KeysWrapperMobile implements CommonKeysInterface {
     try {
       return this.keys.mobileGetKeystoreState();
     } catch (error) {
-      throw new Error(`Failed to get mobile keystore state: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to get mobile keystore state: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -140,7 +160,7 @@ export class KeysWrapperMobile implements CommonKeysInterface {
       canEncrypt: true,
       canDecrypt: true,
       hasNetworkKeys: false, // Mobile keystores don't have network keys by default
-      hasProfileKeys: true,  // Mobile keystores have profile keys
+      hasProfileKeys: true, // Mobile keystores have profile keys
     };
   }
 
@@ -150,7 +170,9 @@ export class KeysWrapperMobile implements CommonKeysInterface {
       const result = this.keys.ensureSymmetricKey(keyName);
       return new Uint8Array(result);
     } catch (error) {
-      throw new Error(`Failed to ensure symmetric key: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to ensure symmetric key: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -158,7 +180,9 @@ export class KeysWrapperMobile implements CommonKeysInterface {
     try {
       this.keys.setLocalNodeInfo(Buffer.from(nodeInfoCbor));
     } catch (error) {
-      throw new Error(`Failed to set local node info: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to set local node info: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -166,7 +190,9 @@ export class KeysWrapperMobile implements CommonKeysInterface {
     try {
       this.keys.setPersistenceDir(dir);
     } catch (error) {
-      throw new Error(`Failed to set persistence directory: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to set persistence directory: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -174,7 +200,9 @@ export class KeysWrapperMobile implements CommonKeysInterface {
     try {
       this.keys.enableAutoPersist(enabled);
     } catch (error) {
-      throw new Error(`Failed to enable auto persist: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to enable auto persist: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -182,7 +210,9 @@ export class KeysWrapperMobile implements CommonKeysInterface {
     try {
       await this.keys.wipePersistence();
     } catch (error) {
-      throw new Error(`Failed to wipe persistence: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to wipe persistence: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -190,7 +220,9 @@ export class KeysWrapperMobile implements CommonKeysInterface {
     try {
       await this.keys.flushState();
     } catch (error) {
-      throw new Error(`Failed to flush state: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to flush state: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -209,7 +241,8 @@ export class KeysWrapperMobile implements CommonKeysInterface {
 export class KeysWrapperNode implements CommonKeysInterface {
   private readonly keys: Keys;
   private readonly role = 'backend' as const;
-  private labelMappings: Map<string, { networkPublicKey?: Uint8Array; userKeySpec?: any }> = new Map();
+  private labelMappings: Map<string, { networkPublicKey?: Uint8Array; userKeySpec?: any }> =
+    new Map();
 
   constructor(keys: Keys) {
     this.keys = keys;
@@ -229,7 +262,9 @@ export class KeysWrapperNode implements CommonKeysInterface {
       );
       return new Uint8Array(result);
     } catch (error) {
-      throw new Error(`Node encryption failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Node encryption failed: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -239,7 +274,9 @@ export class KeysWrapperNode implements CommonKeysInterface {
       const result = this.keys.nodeDecryptEnvelope(Buffer.from(eedCbor));
       return new Uint8Array(result);
     } catch (error) {
-      throw new Error(`Node decryption failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Node decryption failed: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -249,7 +286,9 @@ export class KeysWrapperNode implements CommonKeysInterface {
       const result = this.keys.nodeGenerateCsr();
       return new Uint8Array(result);
     } catch (error) {
-      throw new Error(`Failed to generate CSR: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to generate CSR: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -259,7 +298,9 @@ export class KeysWrapperNode implements CommonKeysInterface {
       const result = this.keys.nodeGetAgreementPublicKey();
       return new Uint8Array(result);
     } catch (error) {
-      throw new Error(`Failed to get agreement public key: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to get agreement public key: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -268,7 +309,9 @@ export class KeysWrapperNode implements CommonKeysInterface {
     try {
       this.keys.nodeInstallNetworkKey(Buffer.from(networkKeyMessage));
     } catch (error) {
-      throw new Error(`Failed to install network key: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to install network key: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -277,7 +320,9 @@ export class KeysWrapperNode implements CommonKeysInterface {
     try {
       return this.keys.nodeGetKeystoreState();
     } catch (error) {
-      throw new Error(`Failed to get node keystore state: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to get node keystore state: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -286,7 +331,7 @@ export class KeysWrapperNode implements CommonKeysInterface {
     return {
       canEncrypt: true,
       canDecrypt: true,
-      hasNetworkKeys: true,  // Node keystores have network keys
+      hasNetworkKeys: true, // Node keystores have network keys
       hasProfileKeys: false, // Node keystores don't have profile keys
     };
   }
@@ -297,7 +342,9 @@ export class KeysWrapperNode implements CommonKeysInterface {
       const result = this.keys.ensureSymmetricKey(keyName);
       return new Uint8Array(result);
     } catch (error) {
-      throw new Error(`Failed to ensure symmetric key: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to ensure symmetric key: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -305,7 +352,9 @@ export class KeysWrapperNode implements CommonKeysInterface {
     try {
       this.keys.setLocalNodeInfo(Buffer.from(nodeInfoCbor));
     } catch (error) {
-      throw new Error(`Failed to set local node info: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to set local node info: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -313,7 +362,9 @@ export class KeysWrapperNode implements CommonKeysInterface {
     try {
       this.keys.setPersistenceDir(dir);
     } catch (error) {
-      throw new Error(`Failed to set persistence directory: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to set persistence directory: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -321,7 +372,9 @@ export class KeysWrapperNode implements CommonKeysInterface {
     try {
       this.keys.enableAutoPersist(enabled);
     } catch (error) {
-      throw new Error(`Failed to enable auto persist: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to enable auto persist: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -329,7 +382,9 @@ export class KeysWrapperNode implements CommonKeysInterface {
     try {
       await this.keys.wipePersistence();
     } catch (error) {
-      throw new Error(`Failed to wipe persistence: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to wipe persistence: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -337,7 +392,9 @@ export class KeysWrapperNode implements CommonKeysInterface {
     try {
       await this.keys.flushState();
     } catch (error) {
-      throw new Error(`Failed to flush state: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to flush state: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 

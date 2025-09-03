@@ -10,7 +10,10 @@ import {
   SerializationContext,
 } from '../src/index.js';
 import { Keys } from 'runar-nodejs-api';
-import { KeystoreFactory, KeysWrapperMobile } from '../../runar-ts-node/src/keys_manager_wrapper.js';
+import {
+  KeystoreFactory,
+  KeysWrapperMobile,
+} from '../../runar-ts-node/src/keys_manager_wrapper.js';
 
 // REAL keystore for testing - NO MOCKS ALLOWED
 class RealTestKeystore {
@@ -101,14 +104,14 @@ describe('Integration Tests', () => {
 
   beforeAll(async () => {
     keys = new Keys();
-    
+
     // Use the new keystore factory to create role-specific wrapper
     const result = KeystoreFactory.create(keys, 'frontend');
     if (!result.ok) {
       throw new Error(`Failed to create keystore wrapper: ${result.error.message}`);
     }
     wrapper = result.value as KeysWrapperMobile;
-    
+
     labelResolverConfig = {
       labelMappings: new Map([
         [

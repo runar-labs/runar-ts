@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeAll } from 'bun:test';
 import { Keys } from 'runar-nodejs-api';
-import { KeystoreFactory, KeysWrapperMobile, KeysWrapperNode } from '../../runar-ts-node/src/keys_manager_wrapper.js';
+import {
+  KeystoreFactory,
+  KeysWrapperMobile,
+  KeysWrapperNode,
+} from '../../runar-ts-node/src/keys_manager_wrapper.js';
 import { AnyValue, SerializationContext } from '../src/index.js';
 
 describe('Envelope Encryption Roundtrip Tests', () => {
@@ -13,27 +17,27 @@ describe('Envelope Encryption Roundtrip Tests', () => {
 
   beforeAll(async () => {
     keys = new Keys();
-    
+
     // Use the new keystore factory to create role-specific wrappers
     const result = KeystoreFactory.create(keys, 'frontend');
     if (!result.ok) {
       throw new Error(`Failed to create keystore wrapper: ${result.error.message}`);
     }
     keysWrapper = result.value as KeysWrapperMobile;
-    
+
     mobileKeys = new Keys();
     nodeKeys = new Keys();
-    
+
     const mobileResult = KeystoreFactory.create(mobileKeys, 'frontend');
     const nodeResult = KeystoreFactory.create(nodeKeys, 'backend');
-    
+
     if (!mobileResult.ok) {
       throw new Error(`Failed to create mobile keystore wrapper: ${mobileResult.error.message}`);
     }
     if (!nodeResult.ok) {
       throw new Error(`Failed to create node keystore wrapper: ${nodeResult.error.message}`);
     }
-    
+
     mobileWrapper = mobileResult.value as KeysWrapperMobile;
     nodeWrapper = nodeResult.value as KeysWrapperNode;
   });
@@ -139,7 +143,11 @@ describe('Envelope Encryption Roundtrip Tests', () => {
       const profilePublicKey = Buffer.alloc(65, 3);
 
       // Encrypt using mobile wrapper with mobile network public key
-      const encryptedMobile = mobileWrapper.encryptWithEnvelope(dataBuffer, mobileNetworkPublicKey, []);
+      const encryptedMobile = mobileWrapper.encryptWithEnvelope(
+        dataBuffer,
+        mobileNetworkPublicKey,
+        []
+      );
 
       // Decrypt using node wrapper
       const decryptedNode = nodeWrapper.decryptEnvelope(encryptedMobile);
@@ -165,7 +173,10 @@ describe('Envelope Encryption Roundtrip Tests', () => {
       }
     } catch (error) {
       // If cross-keystore encryption fails (e.g., no user root key), skip this test
-      console.log('Cross-keystore test skipped - mobile initialization not available:', error.message);
+      console.log(
+        'Cross-keystore test skipped - mobile initialization not available:',
+        error.message
+      );
       expect(true).toBe(true); // Test passes
     }
   });
@@ -196,7 +207,7 @@ describe('Envelope Encryption Roundtrip Tests', () => {
     try {
       await mobileKeys.mobileInitializeUserRootKey();
       await mobileKeys.flushState();
-      
+
       const symmetricKey = mobileWrapper.ensureSymmetricKey('test-key');
       expect(symmetricKey).toBeDefined();
       expect(symmetricKey.length).toBeGreaterThan(0);
@@ -212,7 +223,10 @@ describe('Envelope Encryption Roundtrip Tests', () => {
       expect(() => mobileWrapper.enableAutoPersist(true)).not.toThrow();
     } catch (error) {
       // If mobile initialization fails, skip this test
-      console.log('Utility methods test skipped - mobile initialization not available:', error.message);
+      console.log(
+        'Utility methods test skipped - mobile initialization not available:',
+        error.message
+      );
       expect(true).toBe(true); // Test passes
     }
   });
