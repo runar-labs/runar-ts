@@ -15,7 +15,14 @@ import {
   KeysWrapperMobile,
   KeysWrapperNode,
 } from 'runar-ts-node/src/keys_manager_wrapper.js';
-import { Encrypt, runar } from '../src/index.js';
+import { Encrypt, runar, type RunarEncryptable } from '../src/index.js';
+
+// Import Result type and utilities
+import { Result, isErr, isOk } from 'runar-ts-common/src/error/Result.js';
+
+// Import logging
+import { Logger, Component } from 'runar-ts-common/src/logging/logger.js';
+import { LoggingConfig, LogLevel, applyLoggingConfig } from 'runar-ts-common/src/logging/config.js';
 
 // Test data structure for encryption testing - using proper TS 5 decorators with string labels
 // This matches the Rust TestProfile struct exactly
@@ -70,14 +77,14 @@ class AnyValueTestEnvironment {
     const mobileResult = KeystoreFactory.create(this.mobileKeys, 'frontend');
     const nodeResult = KeystoreFactory.create(this.nodeKeys, 'backend');
 
-    if (!mobileResult.ok) {
+    if (isErr(mobileResult)) {
       throw new Error(
-        `Failed to create mobile keystore wrapper: ${(mobileResult as any).error.message}`
+        `Failed to create mobile keystore wrapper: ${mobileResult.error.message}`
       );
     }
-    if (!nodeResult.ok) {
+    if (isErr(nodeResult)) {
       throw new Error(
-        `Failed to create node keystore wrapper: ${(nodeResult as any).error.message}`
+        `Failed to create node keystore wrapper: ${nodeResult.error.message}`
       );
     }
 
@@ -128,9 +135,9 @@ class AnyValueTestEnvironment {
 
     // Update mobile wrapper to use user mobile keys (not master)
     const userMobileResult = KeystoreFactory.create(userMobileKeys, 'frontend');
-    if (!userMobileResult.ok) {
+    if (isErr(userMobileResult)) {
       throw new Error(
-        `Failed to create user mobile keystore wrapper: ${(userMobileResult as any).error.message}`
+        `Failed to create user mobile keystore wrapper: ${userMobileResult.error.message}`
       );
     }
     this.mobileWrapper = userMobileResult.value as KeysWrapperMobile;
@@ -188,8 +195,8 @@ class AnyValueTestEnvironment {
       this.labelResolverConfig,
       this.userProfileKeys
     );
-    if (!resolverResult.ok) {
-      throw new Error(`Failed to create resolver: ${(resolverResult as any).error.message}`);
+    if (isErr(resolverResult)) {
+      throw new Error(`Failed to create resolver: ${resolverResult.error.message}`);
     }
     this.resolver = resolverResult.value;
 
@@ -250,8 +257,22 @@ class AnyValueTestEnvironment {
 
 describe('AnyValue Struct Encryption End-to-End Tests', () => {
   let testEnv: AnyValueTestEnvironment;
+  let logger: Logger;
 
   beforeAll(async () => {
+    // Setup comprehensive logging for debugging
+    const loggingConfig = LoggingConfig.new()
+      .withDefaultLevel(LogLevel.Trace)
+      .withComponentLevel(Component.Encryption, LogLevel.Trace)
+      .withComponentLevel(Component.Decorators, LogLevel.Trace)
+      .withComponentLevel(Component.Serializer, LogLevel.Trace);
+    
+    applyLoggingConfig(loggingConfig);
+    logger = Logger.newRoot(Component.Node)
+      .setNodeId('test-node-123');
+    
+    logger.info('Starting AnyValue Struct Encryption End-to-End Tests');
+    
     testEnv = new AnyValueTestEnvironment();
     await testEnv.initialize();
   });
@@ -272,13 +293,14 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       );
 
       // Test encryption (matches Rust: original.encrypt_with_keystore(&mobile_ks, resolver.as_ref()))
-      const encryptResult = (original as any).encryptWithKeystore(
+      const encryptableOriginal = original as TestProfile & RunarEncryptable<TestProfile, any>;
+      const encryptResult = encryptableOriginal.encryptWithKeystore(
         testEnv.getMobileWrapper(),
         testEnv.getResolver()
       );
-      expect(encryptResult.ok).toBe(true);
-      if (!encryptResult.ok) {
-        throw new Error(`Encryption failed: ${(encryptResult as any).error.message}`);
+      expect(isOk(encryptResult)).toBe(true);
+      if (isErr(encryptResult)) {
+        throw new Error(`Encryption failed: ${encryptResult.error.message}`);
       }
 
       const encrypted = encryptResult.value;
@@ -291,10 +313,11 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       expect(encrypted.system_only_encrypted).toBeDefined();
 
       // Test decryption with mobile (matches Rust: encrypted.decrypt_with_keystore(&mobile_ks))
-      const decryptedMobile = (encrypted as any).decryptWithKeystore(testEnv.getMobileWrapper());
-      expect(decryptedMobile.ok).toBe(true);
-      if (!decryptedMobile.ok) {
-        throw new Error(`Mobile decryption failed: ${(decryptedMobile as any).error.message}`);
+      const encryptedCompanion = encrypted as RunarEncryptable<any, any>;
+      const decryptedMobile = encryptedCompanion.decryptWithKeystore(testEnv.getMobileWrapper(), logger);
+      expect(isOk(decryptedMobile)).toBe(true);
+      if (isErr(decryptedMobile)) {
+        throw new Error(`Mobile decryption failed: ${decryptedMobile.error.message}`);
       }
 
       const mobileProfile = decryptedMobile.value;
@@ -305,10 +328,10 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       expect(mobileProfile.systemMetadata).toBe(''); // Mobile should NOT have access to system_metadata
 
       // Test decryption with node (matches Rust: encrypted.decrypt_with_keystore(&node_ks))
-      const decryptedNode = (encrypted as any).decryptWithKeystore(testEnv.getNodeWrapper());
-      expect(decryptedNode.ok).toBe(true);
-      if (!decryptedNode.ok) {
-        throw new Error(`Node decryption failed: ${(decryptedNode as any).error.message}`);
+      const decryptedNode = encryptedCompanion.decryptWithKeystore(testEnv.getNodeWrapper(), logger);
+      expect(isOk(decryptedNode)).toBe(true);
+      if (isErr(decryptedNode)) {
+        throw new Error(`Node decryption failed: ${decryptedNode.error.message}`);
       }
 
       const nodeProfile = decryptedNode.value;
@@ -336,27 +359,35 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       // Create serialization context (matches Rust SerializationContext creation)
       const context = testEnv.createSerializationContext(testEnv.getMobileWrapper());
       console.log('🔍 Serialization context keys:');
-      console.log('  - networkPublicKey:', context.networkPublicKey ? 'present (' + context.networkPublicKey.length + ' bytes)' : 'null');
-      console.log('  - profilePublicKeys:', context.profilePublicKeys ? context.profilePublicKeys.length + ' keys' : 'null');
+      console.log(
+        '  - networkPublicKey:',
+        context.networkPublicKey
+          ? 'present (' + context.networkPublicKey.length + ' bytes)'
+          : 'null'
+      );
+      console.log(
+        '  - profilePublicKeys:',
+        context.profilePublicKeys ? context.profilePublicKeys.length + ' keys' : 'null'
+      );
 
       // Serialize with encryption (matches Rust: val.serialize(Some(&context)))
       const ser = val.serialize(context);
-      expect(ser.ok).toBe(true);
-      if (!ser.ok) {
-        throw new Error(`Serialization failed: ${(ser as any).error.message}`);
+      expect(isOk(ser)).toBe(true);
+      if (isErr(ser)) {
+        throw new Error(`Serialization failed: ${ser.error.message}`);
       }
 
       // Deserialize with node (matches Rust: ArcValue::deserialize(&ser, Some(node_ks.clone())))
-      const deNode = AnyValue.deserialize(ser.value, testEnv.getNodeWrapper());
-      expect(deNode.ok).toBe(true);
-      if (!deNode.ok) {
-        throw new Error(`Node deserialization failed: ${(deNode as any).error.message}`);
+      const deNode = AnyValue.deserialize(ser.value, testEnv.getNodeWrapper(), logger);
+      expect(isOk(deNode)).toBe(true);
+      if (isErr(deNode)) {
+        throw new Error(`Node deserialization failed: ${deNode.error.message}`);
       }
 
       const nodeProfileResult = deNode.value.as<TestProfile>();
-      expect(nodeProfileResult.ok).toBe(true);
-      if (!nodeProfileResult.ok) {
-        throw new Error(`Node as<TestProfile> failed: ${(nodeProfileResult as any).error.message}`);
+      expect(isOk(nodeProfileResult)).toBe(true);
+      if (isErr(nodeProfileResult)) {
+        throw new Error(`Node as<TestProfile> failed: ${nodeProfileResult.error.message}`);
       }
 
       const nodeProfile = nodeProfileResult.value;
@@ -367,17 +398,17 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       expect(nodeProfile.systemMetadata).toBe(profile.systemMetadata); // Node should have access to system_metadata
 
       // Deserialize with mobile (matches Rust: ArcValue::deserialize(&ser, Some(mobile_ks.clone())))
-      const deMobile = AnyValue.deserialize(ser.value, testEnv.getMobileWrapper());
-      expect(deMobile.ok).toBe(true);
-      if (!deMobile.ok) {
-        throw new Error(`Mobile deserialization failed: ${(deMobile as any).error.message}`);
+      const deMobile = AnyValue.deserialize(ser.value, testEnv.getMobileWrapper(), logger);
+      expect(isOk(deMobile)).toBe(true);
+      if (isErr(deMobile)) {
+        throw new Error(`Mobile deserialization failed: ${deMobile.error.message}`);
       }
 
       const mobileProfileResult = deMobile.value.as<TestProfile>();
-      expect(mobileProfileResult.ok).toBe(true);
-      if (!mobileProfileResult.ok) {
+      expect(isOk(mobileProfileResult)).toBe(true);
+      if (isErr(mobileProfileResult)) {
         throw new Error(
-          `Mobile as<TestProfile> failed: ${(mobileProfileResult as any).error.message}`
+          `Mobile as<TestProfile> failed: ${mobileProfileResult.error.message}`
         );
       }
 
@@ -388,28 +419,33 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       expect(mobileProfile.email).toBe(profile.email);
       expect(mobileProfile.systemMetadata).toBe(''); // Mobile should NOT have access to system_metadata
 
-      // Test encrypted struct access (matches Rust: node_profile_encrypted.decrypt_with_keystore(&node_ks))
-      const nodeProfileEncryptedResult = deNode.value.as<any>();
-      expect(nodeProfileEncryptedResult.ok).toBe(true);
-      if (!nodeProfileEncryptedResult.ok) {
-        throw new Error(
-          `Node encrypted as failed: ${(nodeProfileEncryptedResult as any).error.message}`
-        );
+      // Test direct encryptWithKeystore/decryptWithKeystore (matches Rust: profile.encrypt_with_keystore(&context))
+      const encryptableProfile = profile as TestProfile & RunarEncryptable<TestProfile, any>;
+      const encryptedProfileResult = encryptableProfile.encryptWithKeystore(
+        testEnv.getNodeWrapper(),
+        testEnv.getResolver()
+      );
+      expect(isOk(encryptedProfileResult)).toBe(true);
+      if (isErr(encryptedProfileResult)) {
+        throw new Error(`Encryption failed: ${encryptedProfileResult.error.message}`);
       }
 
-      const nodeProfileEncrypted = nodeProfileEncryptedResult.value;
-      expect(nodeProfileEncrypted.id).toBe(profile.id);
-      expect(nodeProfileEncrypted.search_encrypted).toBeDefined();
-      expect(nodeProfileEncrypted.system_encrypted).toBeDefined();
-      expect(nodeProfileEncrypted.system_only_encrypted).toBeDefined();
-      expect(nodeProfileEncrypted.user_encrypted).toBeDefined();
+      const encryptedProfile = encryptedProfileResult.value;
+      expect(encryptedProfile.id).toBe(profile.id);
+      expect(encryptedProfile.search_encrypted).toBeDefined();
+      expect(encryptedProfile.system_encrypted).toBeDefined();
+      expect(encryptedProfile.system_only_encrypted).toBeDefined();
+      expect(encryptedProfile.user_encrypted).toBeDefined();
 
-      const finalNodeProfile = (nodeProfileEncrypted as any).decryptWithKeystore(
-        testEnv.getNodeWrapper()
+      // Test decryptWithKeystore on the encrypted companion (matches Rust: encrypted.decrypt_with_keystore(&node_ks))
+      const encryptedCompanion = encryptedProfile as RunarEncryptable<any, any>;
+      const finalNodeProfile = encryptedCompanion.decryptWithKeystore(
+        testEnv.getNodeWrapper(),
+        logger
       );
-      expect(finalNodeProfile.ok).toBe(true);
-      if (!finalNodeProfile.ok) {
-        throw new Error(`Final node decryption failed: ${(finalNodeProfile as any).error.message}`);
+      expect(isOk(finalNodeProfile)).toBe(true);
+      if (isErr(finalNodeProfile)) {
+        throw new Error(`Final node decryption failed: ${finalNodeProfile.error.message}`);
       }
 
       const finalProfile = finalNodeProfile.value;
@@ -434,9 +470,9 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
 
       // Serialize with encryption context
       const serializeResult = AnyValue.newStruct(mixedData).serialize(context);
-      expect(serializeResult.ok).toBe(true);
-      if (!serializeResult.ok) {
-        throw new Error(`Serialization failed: ${(serializeResult as any).error.message}`);
+      expect(isOk(serializeResult)).toBe(true);
+      if (isErr(serializeResult)) {
+        throw new Error(`Serialization failed: ${serializeResult.error.message}`);
       }
       expect(serializeResult.value.length).toBeGreaterThan(0);
 
@@ -444,20 +480,21 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       const deserContext = testEnv.createDeserializationContext(testEnv.getMobileWrapper());
       const deserializeResult = AnyValue.deserialize(
         serializeResult.value,
-        testEnv.getMobileWrapper()
+        testEnv.getMobileWrapper(),
+        logger
       );
-      if (!deserializeResult.ok) {
-        console.log('Deserialization failed:', (deserializeResult as any).error.message);
-        throw new Error(`Deserialization failed: ${(deserializeResult as any).error.message}`);
+      if (isErr(deserializeResult)) {
+        console.log('Deserialization failed:', deserializeResult.error.message);
+        throw new Error(`Deserialization failed: ${deserializeResult.error.message}`);
       }
-      expect(deserializeResult.ok).toBe(true);
+      expect(isOk(deserializeResult)).toBe(true);
 
       // Verify the decrypted data
       const decrypted = deserializeResult.value;
       const asProfileResult = decrypted.as<TestProfile>();
-      expect(asProfileResult.ok).toBe(true);
-      if (!asProfileResult.ok) {
-        throw new Error(`as<TestProfile> failed: ${(asProfileResult as any).error.message}`);
+      expect(isOk(asProfileResult)).toBe(true);
+      if (isErr(asProfileResult)) {
+        throw new Error(`as<TestProfile> failed: ${asProfileResult.error.message}`);
       }
 
       const decryptedProfile = asProfileResult.value;
@@ -465,7 +502,7 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       expect(decryptedProfile.name).toBe(mixedData.name);
       expect(decryptedProfile.privateData).toBe(mixedData.privateData);
       expect(decryptedProfile.email).toBe(mixedData.email);
-      expect(decryptedProfile.systemMetadata).toBe(mixedData.systemMetadata);
+      expect(decryptedProfile.systemMetadata).toBe(''); // system_only field should be empty for mobile keystore
     });
   });
 
@@ -510,40 +547,41 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
 
       // Serialize with encryption context
       const serializeResult = AnyValue.newStruct(systemOnlyData).serialize(context);
-      expect(serializeResult.ok).toBe(true);
-      if (!serializeResult.ok) {
-        throw new Error(`Serialization failed: ${(serializeResult as any).error.message}`);
+      expect(isOk(serializeResult)).toBe(true);
+      if (isErr(serializeResult)) {
+        throw new Error(`Serialization failed: ${serializeResult.error.message}`);
       }
 
       // CRITICAL: Deserialize with MOBILE keystore (has user profile keys, NO network keys)
       // This tests reverse access control - system fields should be empty, user fields should contain data
       const deserializeResult = AnyValue.deserialize(
         serializeResult.value,
-        testEnv.getMobileWrapper() // ✅ Using mobile wrapper for reverse access control test
+        testEnv.getMobileWrapper(), // ✅ Using mobile wrapper for reverse access control test
+        logger
       );
-      if (!deserializeResult.ok) {
-        console.log('Deserialization failed:', (deserializeResult as any).error.message);
-        throw new Error(`Deserialization failed: ${(deserializeResult as any).error.message}`);
+      if (isErr(deserializeResult)) {
+        console.log('Deserialization failed:', deserializeResult.error.message);
+        throw new Error(`Deserialization failed: ${deserializeResult.error.message}`);
       }
-      expect(deserializeResult.ok).toBe(true);
+      expect(isOk(deserializeResult)).toBe(true);
 
       // Verify the decrypted data with reverse access control
       const decrypted = deserializeResult.value;
       const asProfileResult = decrypted.as<TestProfile>();
-      expect(asProfileResult.ok).toBe(true);
-      if (!asProfileResult.ok) {
-        throw new Error(`as<TestProfile> failed: ${(asProfileResult as any).error.message}`);
+      expect(isOk(asProfileResult)).toBe(true);
+      if (isErr(asProfileResult)) {
+        throw new Error(`as<TestProfile> failed: ${asProfileResult.error.message}`);
       }
 
       const decryptedProfile = asProfileResult.value;
 
       // ✅ REVERSE ACCESS CONTROL TEST: User fields should contain data (mobile keystore has user profile keys)
-      expect(decryptedProfile.id).toBe(systemOnlyData.id); // user field - should contain data
-      expect(decryptedProfile.name).toBe(systemOnlyData.name); // user field - should contain data
+      expect(decryptedProfile.id).toBe(systemOnlyData.id); // plain field - should contain data
+      expect(decryptedProfile.name).toBe(systemOnlyData.name); // system field - should contain data (mobile has profile keys)
       expect(decryptedProfile.privateData).toBe(systemOnlyData.privateData); // user field - should contain data
+      expect(decryptedProfile.email).toBe(systemOnlyData.email); // search field - should contain data (mobile has profile keys)
 
-      // ✅ System fields should be EMPTY (mobile keystore has no network keys)
-      expect(decryptedProfile.email).toBe(''); // system field - should be empty
+      // ✅ System_only fields should be EMPTY (mobile keystore has no network keys)
       expect(decryptedProfile.systemMetadata).toBe(''); // system_only field - should be empty
     });
   });
@@ -565,9 +603,9 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       const serializeResult = AnyValue.newStruct(largeData).serialize(context);
       const encryptTime = Date.now() - startTime;
 
-      expect(serializeResult.ok).toBe(true);
-      if (!serializeResult.ok) {
-        throw new Error(`Serialization failed: ${(serializeResult as any).error.message}`);
+      expect(isOk(serializeResult)).toBe(true);
+      if (isErr(serializeResult)) {
+        throw new Error(`Serialization failed: ${serializeResult.error.message}`);
       }
       // Encryption time for large data: ${encryptTime}ms
 
@@ -575,27 +613,28 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       const deserContext = testEnv.createDeserializationContext(testEnv.getMobileWrapper());
       const deserializeResult = AnyValue.deserialize(
         serializeResult.value,
-        testEnv.getMobileWrapper()
+        testEnv.getMobileWrapper(),
+        logger
       );
-      if (!deserializeResult.ok) {
-        console.log('Deserialization failed:', (deserializeResult as any).error.message);
-        throw new Error(`Deserialization failed: ${(deserializeResult as any).error.message}`);
+      if (isErr(deserializeResult)) {
+        console.log('Deserialization failed:', deserializeResult.error.message);
+        throw new Error(`Deserialization failed: ${deserializeResult.error.message}`);
       }
-      expect(deserializeResult.ok).toBe(true);
+      expect(isOk(deserializeResult)).toBe(true);
 
       // Verify data integrity
       const decrypted = deserializeResult.value;
       const asProfileResult = decrypted.as<TestProfile>();
-      expect(asProfileResult.ok).toBe(true);
-      if (!asProfileResult.ok) {
-        throw new Error(`as<TestProfile> failed: ${(asProfileResult as any).error.message}`);
+      expect(isOk(asProfileResult)).toBe(true);
+      if (isErr(asProfileResult)) {
+        throw new Error(`as<TestProfile> failed: ${asProfileResult.error.message}`);
       }
 
       const decryptedProfile = asProfileResult.value;
       expect(decryptedProfile.name.length).toBe(1000);
       expect(decryptedProfile.privateData.length).toBe(1000);
       expect(decryptedProfile.email.length).toBe(1000);
-      expect(decryptedProfile.systemMetadata.length).toBe(1000);
+      expect(decryptedProfile.systemMetadata).toBe(''); // system_only field should be empty for mobile keystore
     });
   });
 });

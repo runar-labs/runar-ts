@@ -2,6 +2,7 @@ import { Result, ok, err } from 'runar-ts-common/src/error/Result.js';
 import { LabelResolver } from './label_resolver.js';
 import type { CommonKeysInterface } from './wire.js';
 import { encode, decode } from 'cbor-x';
+import { Logger, Component } from 'runar-ts-common/src/logging/logger.js';
 
 // ---------------------------------------------------------------------------
 // Envelope Encryption Types
@@ -70,24 +71,39 @@ export function encryptLabelGroupSync<T>(
  */
 export function decryptLabelGroupSync<T>(
   encryptedGroup: EncryptedLabelGroup,
-  keystore: CommonKeysInterface
+  keystore: CommonKeysInterface,
+  logger?: Logger
 ): Result<T, Error> {
+  const log = logger ? logger.withComponent(Component.Encryption) : Logger.newRoot(Component.Encryption);
+  
+  log.trace(`Starting decryptLabelGroupSync for label: ${encryptedGroup.label}`);
+  
   try {
     if (!encryptedGroup.envelopeCbor) {
+      log.error(`Empty encrypted group for label ${encryptedGroup.label}: no envelope data available`);
       return err(new Error('Empty encrypted group: no envelope data available'));
     }
 
     // Use original CBOR bytes from native API
     const encryptedBytes = encryptedGroup.envelopeCbor;
+    log.trace(`Attempting decryption for label ${encryptedGroup.label} with ${encryptedBytes.length} bytes`);
+
+    // Get keystore capabilities for debugging
+    const caps = keystore.getKeystoreCaps();
+    log.debug(`Keystore capabilities for label ${encryptedGroup.label}: hasProfileKeys=${caps.hasProfileKeys}, hasNetworkKeys=${caps.hasNetworkKeys}`);
 
     // Attempt decryption using the provided key manager (synchronous)
     const plaintext = keystore.decryptEnvelope(encryptedBytes);
+    log.trace(`Decryption successful for label ${encryptedGroup.label}, got ${plaintext.length} bytes of plaintext`);
 
     // Deserialize the fields struct from plaintext using CBOR
     const fieldsStruct: T = decode(plaintext);
+    log.trace(`CBOR deserialization successful for label ${encryptedGroup.label}`);
 
     return ok(fieldsStruct);
   } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    log.error(`Decryption failed for label ${encryptedGroup.label}: ${errorMsg}`);
     return err(error instanceof Error ? error : new Error(String(error)));
   }
 }

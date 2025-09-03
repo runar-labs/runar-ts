@@ -5,7 +5,7 @@ import {
   registerEncryptedCompanion,
   registerToJson,
 } from 'runar-ts-serializer/src/registry.js';
-import { isErr } from 'runar-ts-common/src/error/Result.js';
+import { isErr, isOk } from 'runar-ts-common/src/error/Result.js';
 import {
   encryptLabelGroupSync,
   decryptLabelGroupSync,
@@ -16,6 +16,7 @@ import { Result, ok, err, type Err } from 'runar-ts-common/src/error/Result.js';
 import type { EncryptedLabelGroup } from 'runar-ts-serializer/src/index.js';
 import type { LabelKeyInfo } from 'runar-ts-serializer/src/label_resolver.js';
 import { encode, decode } from 'cbor-x';
+import { Logger, Component } from 'runar-ts-common/src/logging/logger.js';
 
 // TS 5 standard decorator types
 type ClassDecoratorContext = { name: string | symbol | undefined; kind: 'class' };
@@ -62,7 +63,7 @@ type Constructor = new (...args: any[]) => any;
 
 export interface RunarEncryptable<T = any, EncryptedT = any> {
   encryptWithKeystore(keystore: CommonKeysInterface, resolver: LabelResolver): Result<EncryptedT>;
-  decryptWithKeystore(keystore: CommonKeysInterface): Result<T>;
+  decryptWithKeystore(keystore: CommonKeysInterface, logger?: Logger): Result<T>;
 }
 
 interface ClassMeta {
@@ -146,11 +147,26 @@ export function Encrypt<T extends Constructor>(value: T, context: ClassDecorator
         }
       }
 
-      decryptWithKeystore(keystore: CommonKeysInterface): Result<InstanceType<typeof value>> {
+      decryptWithKeystore(keystore: CommonKeysInterface, logger?: Logger): Result<InstanceType<typeof value>> {
+        const log = logger ? logger.withComponent(Component.Decorators) : Logger.newRoot(Component.Decorators);
+        const className = (value as Function).name || 'UnknownClass';
+        
+        log.trace(`Starting decryptWithKeystore for ${className}`);
+
+        
         const fieldEncryptions = (value as Function & { fieldEncryptions?: FieldEncryption[] }).fieldEncryptions || [];
         const labels = [...new Set(fieldEncryptions.map((e: FieldEncryption) => e.label))];
+        
+        log.debug(`Found ${labels.length} unique labels: [${labels.join(', ')}]`);
+        log.debug(`Found ${fieldEncryptions.length} field encryptions`);
+        
+        // Get keystore capabilities for debugging
+        const caps = keystore.getKeystoreCaps();
+        log.debug(`Keystore capabilities: hasProfileKeys=${caps.hasProfileKeys}, hasNetworkKeys=${caps.hasNetworkKeys}`);
+        
         // Initialize with default values (empty strings for all fields)
         const plainInstance = new (value as Constructor)('', '', '', '', '');
+        log.trace(`Initialized ${className} instance with default values`);
 
         // CRITICAL: Process each label group independently
         // If decryption fails for a label group, skip it but continue with others
@@ -159,34 +175,58 @@ export function Encrypt<T extends Constructor>(value: T, context: ClassDecorator
           const encryptedFieldName = `${label}_encrypted`;
           const encryptedGroup = this[encryptedFieldName];
 
+          log.trace(`Processing label group: ${label} (field: ${encryptedFieldName})`);
+
           if (encryptedGroup) {
+            log.trace(`Found encrypted group for label ${label}, attempting decryption`);
+            
             // Attempt decryption - if it fails, skip this label group but continue
-            const decryptedResult = decryptLabelGroupSync(encryptedGroup, keystore);
+            const decryptedResult = decryptLabelGroupSync(encryptedGroup, keystore, log);
             if (decryptedResult.ok) {
               const decryptedFields = decryptedResult.value as Record<string, unknown>;
               if (decryptedFields && typeof decryptedFields === 'object') {
+                log.trace(`Decryption successful for label ${label}, assigning ${Object.keys(decryptedFields).length} fields`);
                 // Only assign fields if decryption succeeded
                 for (const fieldName in decryptedFields) {
                   plainInstance[fieldName] = decryptedFields[fieldName];
+                  // Log field assignment but not the actual value for security
+                  const valueType = typeof decryptedFields[fieldName];
+                  const valueLength = typeof decryptedFields[fieldName] === 'string' ? 
+                    (decryptedFields[fieldName] as string).length : 'N/A';
+                  log.trace(`Assigned field ${fieldName} (${valueType}, length: ${valueLength})`);
                 }
+              } else {
+                log.warn(`Decryption succeeded for label ${label} but result is not an object`);
               }
+            } else if (isErr(decryptedResult)) {
+              log.debug(`Decryption failed for label ${label}: ${decryptedResult.error.message} (access control - continuing with other labels)`);
             }
             // If decryption fails, fields remain at their default values (access control)
             // Do NOT return error - continue processing other label groups
+          } else {
+            log.trace(`No encrypted group found for label ${label}`);
           }
         }
 
+        // Copy plaintext (non-encrypted) fields
         const allFields: string[] = Object.getOwnPropertyNames(this) as string[];
         const encryptedFieldNames = new Set(
           fieldEncryptions.map((e: FieldEncryption) => e.propertyKey.toString())
         );
 
+        log.trace(`Copying plaintext fields from ${allFields.length} total fields`);
         for (const field of allFields) {
           if (!encryptedFieldNames.has(field) && field !== 'constructor') {
             plainInstance[field] = this[field];
+            // Log field copying but not the actual value for security
+            const valueType = typeof this[field];
+            const valueLength = typeof this[field] === 'string' ? 
+              (this[field] as string).length : 'N/A';
+            log.trace(`Copied plaintext field ${field} (${valueType}, length: ${valueLength})`);
           }
         }
 
+        log.trace(`Completed decryptWithKeystore for ${className}`);
         return ok(plainInstance);
       }
     };

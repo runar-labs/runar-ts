@@ -4,7 +4,7 @@ import {
   KeystoreFactory,
   KeysWrapperMobile,
   KeysWrapperNode,
-} from 'runar-ts-node/src/keys_manager_wrapper.js';
+} from '../../runar-ts-node/src/keys_manager_wrapper.js';
 
 // Test environment for envelope dual decryption testing
 class EnvelopeTestEnvironment {
@@ -114,8 +114,8 @@ describe('Envelope Dual Decryption Tests', () => {
     console.log('   📱 Mobile encrypting with both network and profile keys...');
     const encrypted = testEnv.getMobileWrapper().encryptWithEnvelope(
       testData,
-      networkPublicKey,  // Network key
-      profileKeys        // Profile keys
+      networkPublicKey, // Network key
+      profileKeys // Profile keys
     );
 
     expect(encrypted).toBeInstanceOf(Uint8Array);
@@ -126,7 +126,7 @@ describe('Envelope Dual Decryption Tests', () => {
     // Step 2: Node decrypts using network keys
     console.log('   🖥️  Node decrypting with network keys...');
     const decryptedByNode = testEnv.getNodeWrapper().decryptEnvelope(encrypted);
-    
+
     expect(decryptedByNode).toBeInstanceOf(Uint8Array);
     expect(decryptedByNode).toEqual(testData);
     console.log('   ✅ Node decryption successful');
@@ -134,7 +134,7 @@ describe('Envelope Dual Decryption Tests', () => {
     // Step 3: Mobile decrypts using profile keys (same envelope!)
     console.log('   📱 Mobile decrypting with profile keys (same envelope)...');
     const decryptedByMobile = testEnv.getMobileWrapper().decryptEnvelope(encrypted);
-    
+
     expect(decryptedByMobile).toBeInstanceOf(Uint8Array);
     expect(decryptedByMobile).toEqual(testData);
     console.log('   ✅ Mobile decryption successful');
@@ -160,8 +160,8 @@ describe('Envelope Dual Decryption Tests', () => {
     console.log('   📱 Mobile encrypting with profile keys only...');
     const encrypted = testEnv.getMobileWrapper().encryptWithEnvelope(
       testData,
-      null,           // No network key
-      profileKeys     // Only profile keys
+      null, // No network key
+      profileKeys // Only profile keys
     );
 
     expect(encrypted).toBeInstanceOf(Uint8Array);
@@ -172,7 +172,7 @@ describe('Envelope Dual Decryption Tests', () => {
     // Mobile should be able to decrypt with profile keys
     console.log('   📱 Mobile decrypting with profile keys...');
     const decryptedByMobile = testEnv.getMobileWrapper().decryptEnvelope(encrypted);
-    
+
     expect(decryptedByMobile).toBeInstanceOf(Uint8Array);
     expect(decryptedByMobile).toEqual(testData);
     console.log('   ✅ Mobile decryption with profile keys successful');
@@ -199,8 +199,8 @@ describe('Envelope Dual Decryption Tests', () => {
     console.log('   📱 Mobile encrypting with network key only...');
     const encrypted = testEnv.getMobileWrapper().encryptWithEnvelope(
       testData,
-      networkPublicKey,  // Network key
-      []                 // No profile keys
+      networkPublicKey, // Network key
+      [] // No profile keys
     );
 
     expect(encrypted).toBeInstanceOf(Uint8Array);
@@ -211,7 +211,7 @@ describe('Envelope Dual Decryption Tests', () => {
     // Node should be able to decrypt with network keys
     console.log('   🖥️  Node decrypting with network keys...');
     const decryptedByNode = testEnv.getNodeWrapper().decryptEnvelope(encrypted);
-    
+
     expect(decryptedByNode).toBeInstanceOf(Uint8Array);
     expect(decryptedByNode).toEqual(testData);
     console.log('   ✅ Node decryption with network keys successful');

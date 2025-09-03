@@ -10,6 +10,9 @@ export enum Component {
   System = 'System',
   CLI = 'CLI',
   Keys = 'Keys',
+  Serializer = 'Serializer',
+  Encryption = 'Encryption',
+  Decorators = 'Decorators',
   Custom = 'Custom',
 }
 
@@ -94,10 +97,17 @@ export class Logger {
   }
 
   private format(line: string): string {
+    // Root logger (Node component with no parent) shows nodeId only
     if (this.component === Component.Node && !this.parentComponent) {
       return `[${this.node_id()}] ${line}`;
     }
-    return `[${this.node_id()}][${this.fullPrefix()}] ${line}`;
+    
+    // Child loggers show nodeId only if they have it, otherwise just show component hierarchy
+    if (this.nodeId) {
+      return `[${this.node_id()}][${this.fullPrefix()}] ${line}`;
+    } else {
+      return `[${this.fullPrefix()}] ${line}`;
+    }
   }
 
   debug(message: string): void {
@@ -118,6 +128,11 @@ export class Logger {
   error(message: string): void {
     if (!isLevelEnabled(LogLevel.Error, this.component)) return;
     getLogSink()(LogLevel.Error, this.format(message));
+  }
+
+  trace(message: string): void {
+    if (!isLevelEnabled(LogLevel.Trace, this.component)) return;
+    getLogSink()(LogLevel.Trace, this.format(message));
   }
 }
 

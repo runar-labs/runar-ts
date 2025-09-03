@@ -1,5 +1,6 @@
 import { encode, decode } from 'cbor-x';
 import { Result, ok, err, isErr } from 'runar-ts-common/src/error/Result.js';
+import { Logger, Component } from 'runar-ts-common/src/logging/logger.js';
 import {
   ValueCategory,
   DeserializationContext,
@@ -402,55 +403,84 @@ export class AnyValue<T = unknown> {
   // Deserialization constructor matching Rust
   static deserialize(
     bytes: Uint8Array,
-    keystore?: CommonKeysInterface
+    keystore?: CommonKeysInterface,
+    logger?: Logger
   ): Result<AnyValue<any>, Error> {
+    const log = logger ? logger.withComponent(Component.Serializer) : Logger.newRoot(Component.Serializer);
+    
+    log.trace(`Starting AnyValue.deserialize with ${bytes.length} bytes`);
+    
     if (bytes.length === 0) {
+      log.error('Empty bytes provided for deserialization');
       return err(new Error('Empty bytes provided for deserialization'));
     }
 
     if (bytes.length < 3) {
+      log.error(`Header too short: ${bytes.length} bytes (expected at least 3)`);
       return err(new Error('Header too short: expected at least 3 bytes'));
     }
 
     const categoryByte = bytes[0];
     const category = AnyValue.categoryFromByte(categoryByte);
     if (category === null) {
+      log.error(`Invalid category byte: ${categoryByte} (expected 0-6)`);
       return err(new Error(`Invalid category byte: ${categoryByte} (expected 0-6)`));
     }
 
+    log.trace(`Parsed category: ${ValueCategory[category]}`);
+
     if (category === ValueCategory.Null) {
+      log.trace('Returning null value');
       return ok(AnyValue.null());
     }
 
     const isEncryptedByte = bytes[1];
     const isEncrypted = isEncryptedByte === 0x01;
+    log.trace(`Is encrypted: ${isEncrypted}`);
 
     const typeNameLen = bytes[2] as number;
     if (typeNameLen > 255) {
+      log.error(`Type name length exceeds maximum: ${typeNameLen} (max 255)`);
       return err(new Error('Type name length exceeds maximum (255 bytes)'));
     }
 
     if (typeNameLen + 3 > bytes.length) {
+      log.error(`Type name length exceeds available data: ${typeNameLen + 3} > ${bytes.length}`);
       return err(new Error('Type name length exceeds available data'));
     }
 
     const typeNameBytes = bytes.subarray(3, 3 + typeNameLen);
     const typeName = new TextDecoder().decode(typeNameBytes);
+    log.trace(`Type name: ${typeName}`);
 
     const dataStart = 3 + typeNameLen;
     if (dataStart >= bytes.length) {
+      log.error(`No data payload after header: dataStart=${dataStart}, bytes.length=${bytes.length}`);
       return err(new Error('No data payload after header'));
     }
 
     let dataBytes = bytes.subarray(dataStart);
+    log.trace(`Data payload: ${dataBytes.length} bytes`);
 
     // Handle encrypted data
     if (isEncrypted && keystore) {
+      log.trace('Attempting to decrypt envelope');
+      
+      // Get keystore capabilities for debugging
+      const caps = keystore.getKeystoreCaps();
+      log.debug(`Keystore capabilities: hasProfileKeys=${caps.hasProfileKeys}, hasNetworkKeys=${caps.hasNetworkKeys}`);
+      
       try {
         dataBytes = keystore.decryptEnvelope(dataBytes);
+        log.trace(`Decryption successful, got ${dataBytes.length} bytes of plaintext`);
       } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        log.error(`Decryption failed: ${errorMsg}`);
         return err(new Error(`Decryption failed: ${error}`));
       }
+    } else if (isEncrypted && !keystore) {
+      log.error('Data is encrypted but no keystore provided');
+      return err(new Error('Data is encrypted but no keystore provided'));
     }
 
     // Deserialize based on category
@@ -521,7 +551,9 @@ export class AnyValue<T = unknown> {
         }
         break;
       case ValueCategory.Struct:
+        log.trace(`Decoding struct data for type: ${typeName}`);
         value = decode(dataBytes) || {};
+        log.trace(`Decoded struct with ${Object.keys(value).length} fields: [${Object.keys(value).join(', ')}]`);
         break;
       case ValueCategory.Bytes:
         value = dataBytes;
@@ -537,14 +569,27 @@ export class AnyValue<T = unknown> {
 
     // Handle encrypted instances from decorators
     if (value && typeof value === 'object' && 'decryptWithKeystore' in value && keystore) {
+      log.trace(`Found encrypted instance with decryptWithKeystore method, attempting decryption`);
+
       try {
         // This is an encrypted instance from decorators - decrypt it
-        const decrypted = value.decryptWithKeystore(keystore);
-        value = decrypted;
+        const decrypted = value.decryptWithKeystore(keystore, log);
+        if (decrypted.ok) {
+          value = decrypted.value;
+          log.trace(`Successfully decrypted instance, got ${Object.keys(value).length} fields: [${Object.keys(value).join(', ')}]`);
+        } else {
+          log.error(`Decryption failed: ${decrypted.error.message}`);
+          // If decryption fails, keep the encrypted value
+          // Error will be handled by the caller
+        }
       } catch (e) {
+        const errorMsg = e instanceof Error ? e.message : String(e);
+        log.error(`Decryption threw exception: ${errorMsg}`);
         // If decryption fails, keep the encrypted value
         // Error will be handled by the caller
       }
+    } else if (value && typeof value === 'object' && 'decryptWithKeystore' in value && !keystore) {
+      log.warn(`Found encrypted instance but no keystore provided for decryption`);
     }
 
     // For complex types (Struct, List, Map, Json), create lazy holders if encrypted

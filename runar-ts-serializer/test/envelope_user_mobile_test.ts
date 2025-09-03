@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { Keys } from 'runar-nodejs-api';
-import { KeystoreFactory, KeysWrapperMobile, KeysWrapperNode } from 'runar-ts-node/src/keys_manager_wrapper';
+import {
+  KeystoreFactory,
+  KeysWrapperMobile,
+  KeysWrapperNode,
+} from '../../runar-ts-node/src/keys_manager_wrapper.js';
 
 describe('Envelope User Mobile Test', () => {
   let masterMobileKeys: Keys;
@@ -34,7 +38,7 @@ describe('Envelope User Mobile Test', () => {
     // Generate profile keys for user mobile
     const profilePk = new Uint8Array(userMobileKeys.mobileDeriveUserProfileKey('user'));
     userProfileKeys = [profilePk]; // Use the derived profile key
-    
+
     // Flush state after deriving profile keys to ensure they're persisted
     await userMobileKeys.flushState();
 
@@ -51,22 +55,23 @@ describe('Envelope User Mobile Test', () => {
     // Install network key on node using master mobile keystore
     const token = nodeKeys.nodeGenerateCsr();
     const nodeAgreementPk = nodeKeys.nodeGetAgreementPublicKey();
-    const nkMsg = masterMobileKeys.mobileCreateNetworkKeyMessage(
-      networkPublicKey,
-      nodeAgreementPk
-    );
+    const nkMsg = masterMobileKeys.mobileCreateNetworkKeyMessage(networkPublicKey, nodeAgreementPk);
     nodeKeys.nodeInstallNetworkKey(nkMsg);
 
     // Create wrappers
     const userMobileResult = KeystoreFactory.create(userMobileKeys, 'frontend');
     if (!userMobileResult.ok) {
-      throw new Error(`Failed to create user mobile keystore wrapper: ${(userMobileResult as any).error.message}`);
+      throw new Error(
+        `Failed to create user mobile keystore wrapper: ${(userMobileResult as any).error.message}`
+      );
     }
     userMobileWrapper = userMobileResult.value as KeysWrapperMobile;
 
     const nodeResult = KeystoreFactory.create(nodeKeys, 'backend');
     if (!nodeResult.ok) {
-      throw new Error(`Failed to create node keystore wrapper: ${(nodeResult as any).error.message}`);
+      throw new Error(
+        `Failed to create node keystore wrapper: ${(nodeResult as any).error.message}`
+      );
     }
     nodeWrapper = nodeResult.value as KeysWrapperNode;
   });
@@ -76,12 +81,12 @@ describe('Envelope User Mobile Test', () => {
 
     console.log('🔐 Testing envelope encryption with user mobile keystore');
     console.log('   📱 User mobile encrypting with both network and profile keys...');
-    
+
     // Encrypt with both network and profile keys
     const encrypted = userMobileWrapper.encryptWithEnvelope(
       testData,
-      networkPublicKey,  // Network key
-      userProfileKeys    // Profile keys
+      networkPublicKey, // Network key
+      userProfileKeys // Profile keys
     );
 
     expect(encrypted).toBeInstanceOf(Uint8Array);
@@ -92,7 +97,7 @@ describe('Envelope User Mobile Test', () => {
     // User mobile should be able to decrypt with profile keys
     console.log('   📱 User mobile decrypting with profile keys...');
     const decryptedByUserMobile = userMobileWrapper.decryptEnvelope(encrypted);
-    
+
     expect(decryptedByUserMobile).toBeInstanceOf(Uint8Array);
     expect(decryptedByUserMobile).toEqual(testData);
     console.log('   ✅ User mobile decryption successful');
@@ -100,7 +105,7 @@ describe('Envelope User Mobile Test', () => {
     // Node should also be able to decrypt with network keys
     console.log('   🖥️  Node decrypting with network keys...');
     const decryptedByNode = nodeWrapper.decryptEnvelope(encrypted);
-    
+
     expect(decryptedByNode).toBeInstanceOf(Uint8Array);
     expect(decryptedByNode).toEqual(testData);
     console.log('   ✅ Node decryption successful');
@@ -113,12 +118,12 @@ describe('Envelope User Mobile Test', () => {
 
     console.log('🔐 Testing envelope encryption with profile keys only');
     console.log('   📱 User mobile encrypting with profile keys only...');
-    
+
     // Encrypt with only profile keys
     const encrypted = userMobileWrapper.encryptWithEnvelope(
       testData,
-      null,              // No network key
-      userProfileKeys    // Only profile keys
+      null, // No network key
+      userProfileKeys // Only profile keys
     );
 
     expect(encrypted).toBeInstanceOf(Uint8Array);
@@ -129,7 +134,7 @@ describe('Envelope User Mobile Test', () => {
     // User mobile should be able to decrypt with profile keys
     console.log('   📱 User mobile decrypting with profile keys...');
     const decryptedByUserMobile = userMobileWrapper.decryptEnvelope(encrypted);
-    
+
     expect(decryptedByUserMobile).toBeInstanceOf(Uint8Array);
     expect(decryptedByUserMobile).toEqual(testData);
     console.log('   ✅ User mobile decryption successful');

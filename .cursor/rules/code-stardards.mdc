@@ -17,7 +17,8 @@ alwaysApply: false
   - Never use empty catch blocks; never swallow errors.
 
 
-Use proper types, never use "as any" .. or "any" as parameter sor return types anywqhere in our APIS or internal code. 
+Use proper types, never use "as any" .. or "any" anywhere.
+Always use the proper typing
 
 NO DEPRECATIONS>> NO BACKWARDS COMPATIBILITY -  this is a new codebase. when changing somethign apply the change everyeheere needed. ABSOLUTELY NO  BACKWARDS COMPATIBILITY  or legacy code left behind. keeop the condebase clean. always
 
