@@ -117,8 +117,20 @@ Achieve 100% functional and API parity between the TypeScript LabelResolver ecos
     - Store raw CBOR bytes directly in `EncryptedLabelGroup.envelopeCbor` for optimal performance and correctness.
   - ✅ **IMPLEMENTED**: `decryptLabelGroupSync(group, keystore)`:
     - Use `group.envelopeCbor` directly for decryption via `keystore.decryptEnvelope`; then CBOR-decode to fields struct.
-- Label resolution:
+- **Access Control Logic (CRITICAL)**:
+  - **Decryption Strategy**: When `decryptLabelGroupSync` is called, it MUST attempt decryption using the provided keystore
+  - **Success Path**: If decryption succeeds, return the decrypted fields struct
+  - **Failure Path**: If decryption fails due to missing keys, return `Result<T, Error>` with appropriate error
+  - **Field Assignment**: In the generated `decryptWithKeystore` method, only assign fields if `decryptLabelGroupSync` succeeds
+  - **Default Values**: If decryption fails, fields remain at their default values (empty strings, zero numbers, etc.)
+- **Keystore Capabilities**:
+  - **Mobile Keystore**: Has user profile keys + network public key (NO network private key)
+  - **Node Keystore**: Has network private keys (NO user profile keys)
+  - **Decryption Priority**: Mobile keystore tries profile keys first, then network keys; Node keystore only tries network keys
+- **Label Resolution**:
   - ✅ **IMPLEMENTED**: Ensure labels map to keys exactly as Rust (error when label missing).
+  - **Multi-Key Labels**: Labels with both profile and network keys can be decrypted by EITHER keystore type
+  - **Single-Key Labels**: Labels with only profile keys can only be decrypted by mobile keystore; labels with only network keys can only be decrypted by node keystore
 - SerializationContext:
   - ✅ **IMPLEMENTED**: TS `SerializationContext` finalized as:
     - `{ keystore: CommonKeysInterface; resolver: LabelResolver; networkPublicKey: Uint8Array; profilePublicKeys: Uint8Array[] }` with all properties required (not optional) when encrypting.
@@ -151,9 +163,9 @@ Achieve 100% functional and API parity between the TypeScript LabelResolver ecos
   - **Syntax**: `@runar("<LABEL>")` where `<LABEL>` is a user-defined string label
   - **Flexibility**: Labels are completely user-defined and can be any string (e.g., `"user"`, `"system"`, `"search"`, `"customLabel"`, `"admin"`, etc.)
   - **Label Resolution**: The label resolver maps these user-defined labels to actual public keys via `LabelResolverConfig`
-  - **Examples**: 
+  - **Examples**:
     - `@runar("user")` - encrypts field with user profile keys
-    - `@runar("system")` - encrypts field with system/network keys  
+    - `@runar("system")` - encrypts field with system/network keys
     - `@runar("search")` - encrypts field with search-specific keys
     - `@runar("admin")` - encrypts field with admin-specific keys
     - `@runar("customLabel")` - encrypts field with custom label keys
@@ -959,6 +971,31 @@ This section reconciles the design with the exact Rust behavior and supersedes a
   - `decryptLabelGroupSync(encryptedGroup, keystore): Result<T>`
 - These are used by registry encryptors/decryptors, not by decorators directly.
 
+#### 17.6.1 Access Control Implementation Requirements (CRITICAL)
+
+**`decryptLabelGroupSync` Behavior:**
+- Attempt decryption using the provided keystore via `keystore.decryptEnvelope(encryptedGroup.envelopeCbor)`
+- If decryption succeeds, deserialize the CBOR result and return `ok(fieldsStruct)`
+- If decryption fails due to missing keys, return `err(Error)` with appropriate error message
+- Never throw exceptions - always return `Result<T, Error>`
+
+**Generated `decryptWithKeystore` Method Logic:**
+- Initialize result instance with default values (empty strings, zero numbers, etc.)
+- Process each label group independently in a loop
+- For each encrypted label group, call `decryptLabelGroupSync` with the provided keystore
+- If `decryptLabelGroupSync` returns `ok`, assign the decrypted fields to the result instance
+- If `decryptLabelGroupSync` returns `err`, skip that label group but continue processing others
+- Copy any plaintext (non-encrypted) fields from the encrypted instance to the result
+- Return `ok(resultInstance)` - never return errors for individual label group failures
+
+**Key Implementation Rules:**
+1. **No Silent Failures**: `decryptLabelGroupSync` returns `Result<T, Error>` - never throws
+2. **Independent Processing**: Each label group is processed independently - failure of one does not affect others
+3. **Access Control**: Access control is implemented by keystore's `decryptEnvelope` method failing when it lacks required keys
+4. **Default Values**: Fields that cannot be decrypted remain at their default values (empty strings, zero numbers, etc.)
+5. **Error Isolation**: Decryption errors for individual label groups are captured but don't prevent other fields from being decrypted
+6. **Success Guarantee**: `decryptWithKeystore` always returns `ok(instance)` - the instance contains whatever fields could be decrypted plus default values for inaccessible fields
+
 ### 17.7.1 Serializer Struct Path Checklist (to avoid envelope/body mix-ups)
 
 - For Struct with context present:
@@ -1063,29 +1100,36 @@ This section consolidates and reconciles the decorator system design into the ov
 - Integration: AnyValue serialize triggers registry encryptor; deserialize triggers decryptor; multiple labels and duplication validated.
 - E2E: Envelope encryption with keystore, missing-label error behavior, performance baselines.
 
-#### 18.8.1 Access Control Testing Scenarios
+#### 18.8.1 Access Control Testing Scenarios (DETAILED RUST PARITY)
 
-**Critical Test Requirements:**
-- **User-labeled fields**: Encrypt with mobile keystore (has user profile keys), decrypt with mobile keystore
-- **System-labeled fields**: Encrypt with mobile keystore, decrypt with node keystore (has network keys)
-- **Access Control Validation**: 
-  - When decrypting with **node keystore** (no user keys), **user-labeled fields** must be **empty**
-  - When decrypting with **mobile keystore** (no network keys), **system-only-labeled fields** must be **empty**
-- **Keystore Role Separation**: 
-  - Mobile keystore: `hasProfileKeys: true, hasNetworkKeys: false`
-  - Node keystore: `hasProfileKeys: false, hasNetworkKeys: true`
+**Keystore Setup Requirements (MUST match Rust exactly):**
+- **Mobile Network Master**: Generates network keys, has both public and private network keys
+- **User Mobile Keystore**: Has user profile keys + network public key (NO network private key) - can encrypt for network but cannot decrypt network-encrypted data
+- **Node Keystore**: Has network private keys (NO user profile keys) - can decrypt network-encrypted data but cannot decrypt user-encrypted data
 
-**Test Pattern:**
-```typescript
-// For user-labeled fields: use mobile keystore for both encrypt/decrypt
-const context = createSerializationContext(mobileKeystore);
-const deserializeResult = AnyValue.deserialize(bytes, mobileKeystore);
+**Label Configuration Requirements (MUST match Rust exactly):**
+- **"user" label**: `profilePublicKeys: [profilePk], networkPublicKey: undefined` - only profile keys, no network keys
+- **"system" label**: `profilePublicKeys: [profilePk], networkPublicKey: networkPublicKey` - both profile and network keys
+- **"system_only" label**: `profilePublicKeys: [], networkPublicKey: networkPublicKey` - only network keys, no profile keys
+- **"search" label**: `profilePublicKeys: [profilePk], networkPublicKey: networkPublicKey` - both profile and network keys
 
-// For system-labeled fields: use mobile keystore to encrypt, node keystore to decrypt
-const context = createSerializationContext(mobileKeystore);
-const deserializeResult = AnyValue.deserialize(bytes, nodeKeystore);
-// Verify user fields are empty, system fields contain data
-```
+**Test Struct Requirements:**
+- Plain field (no decorator): always accessible
+- `@runar("system")` field: accessible by both mobile (via profile keys) and node (via network keys)
+- `@runar("user")` field: accessible only by mobile (requires profile keys)
+- `@runar("search")` field: accessible by both mobile (via profile keys) and node (via network keys)
+- `@runar("system_only")` field: accessible only by node (requires network keys)
+
+**Expected Access Control Results (MUST match Rust exactly):**
+- **Mobile keystore decryption**: Can decrypt plain, system, user, and search fields; cannot decrypt system_only fields (remain empty)
+- **Node keystore decryption**: Can decrypt plain, system, search, and system_only fields; cannot decrypt user fields (remain empty)
+
+**Critical Implementation Requirements:**
+1. **Decryption Logic**: `decryptLabelGroupSync` MUST return `Result<T, Error>` - success if keystore has required keys, error if not
+2. **Field Assignment**: Only assign fields if `decryptLabelGroupSync` succeeds; otherwise fields remain at default values
+3. **Keystore Capabilities**: Mobile has profile keys + network public key (NO private); Node has network private keys (NO profile keys)
+4. **Multi-Key Labels**: Labels with both profile and network keys can be decrypted by EITHER keystore type
+5. **Single-Key Labels**: Labels with only profile keys require mobile keystore; labels with only network keys require node keystore
 
 This merged section supersedes standalone decorator design docs and is aligned with sections 16–17 and the overall transport/node integration in sections 10 and 15.
 

@@ -8,6 +8,7 @@ import {
   AnyValue,
   createContextLabelResolver,
   LabelKeyword,
+  ValueCategory,
 } from 'runar-ts-serializer/src/index.js';
 import {
   KeystoreFactory,
@@ -17,21 +18,21 @@ import {
 import { Encrypt, runar } from '../src/index.js';
 
 // Test data structure for encryption testing - using proper TS 5 decorators with string labels
+// This matches the Rust TestProfile struct exactly
 @Encrypt
 class TestProfile {
-  @runar("user")
-  public id: string;
+  public id: string; // plain field (no decorator)
 
-  @runar("user")
+  @runar('system')
   public name: string;
 
-  @runar("user")
+  @runar('user')
   public privateData: string;
 
-  @runar("system")
+  @runar('search')
   public email: string;
 
-  @runar("system_only")
+  @runar('system_only')
   public systemMetadata: string;
 
   constructor(
@@ -90,30 +91,55 @@ class AnyValueTestEnvironment {
   }
 
   async initialize(): Promise<void> {
-    // Initializing Test Environment with Real Keys
+    // Initializing Test Environment with Real Keys - MIRRORING RUST encryption_test.rs EXACTLY
+    // This setup simulates the real-world scenario:
+    // 1. Master Mobile: Used for setup/admin, generates network keys and certificates
+    // 2. User Mobile: End user device with only user profile keys, NO network private keys
+    // 3. Node: Backend with network private keys, NO user profile keys
 
-    // Setup mobile keys
-    this.mobileKeys.setPersistenceDir('/tmp/runar-anyvalue-test-mobile');
+    // 1. Setup MASTER mobile keystore (like mobile_network_master in Rust)
+    // This is used for setup/admin, generates network keys, never used by end users
+    this.mobileKeys.setPersistenceDir('/tmp/runar-anyvalue-test-master-mobile');
     this.mobileKeys.enableAutoPersist(true);
     this.mobileKeys.initAsMobile();
     await this.mobileKeys.mobileInitializeUserRootKey();
     await this.mobileKeys.flushState();
 
-    // Generate profile keys
-    const personalKey = new Uint8Array(this.mobileKeys.mobileDeriveUserProfileKey('personal'));
-    const workKey = new Uint8Array(this.mobileKeys.mobileDeriveUserProfileKey('work'));
-    this.userProfileKeys = [personalKey, workKey];
-
-    // Generate network key
+    // Generate network key from master mobile
     this.networkPublicKey = this.mobileKeys.mobileGenerateNetworkDataKey();
     this.networkId = 'generated-network';
 
-    // Setup node keys
+    // 2. Create USER mobile keystore (like user_mobile in Rust)
+    // This simulates an end user's mobile device with only user profile keys
+    const userMobileKeys = new Keys();
+    userMobileKeys.setPersistenceDir('/tmp/runar-anyvalue-test-user-mobile');
+    userMobileKeys.enableAutoPersist(true);
+    userMobileKeys.initAsMobile();
+    await userMobileKeys.mobileInitializeUserRootKey();
+    await userMobileKeys.flushState();
+
+    // Generate profile keys for user mobile (like profile_pk in Rust)
+    const profilePk = new Uint8Array(userMobileKeys.mobileDeriveUserProfileKey('user'));
+    this.userProfileKeys = [profilePk];
+
+    // Install ONLY the network public key on user mobile (not private key)
+    // This is the key difference - user mobile can encrypt for network but cannot decrypt network-encrypted data
+    const networkPublicKeyOnly = this.mobileKeys.mobileGetNetworkPublicKey(this.networkPublicKey);
+    userMobileKeys.mobileInstallNetworkPublicKey(networkPublicKeyOnly);
+
+    // Update mobile wrapper to use user mobile keys (not master)
+    const userMobileResult = KeystoreFactory.create(userMobileKeys, 'frontend');
+    if (!userMobileResult.ok) {
+      throw new Error(`Failed to create user mobile keystore wrapper: ${(userMobileResult as any).error.message}`);
+    }
+    this.mobileWrapper = userMobileResult.value as KeysWrapperMobile;
+
+    // Setup node keys (like node_keys in Rust)
     this.nodeKeys.setPersistenceDir('/tmp/runar-anyvalue-test-node');
     this.nodeKeys.enableAutoPersist(true);
     this.nodeKeys.initAsNode();
 
-    // Install network key on node
+    // Install network key on node using master mobile keystore
     const token = this.nodeKeys.nodeGenerateCsr();
     const nodeAgreementPk = this.nodeKeys.nodeGetAgreementPublicKey();
     const nkMsg = this.mobileKeys.mobileCreateNetworkKeyMessage(
@@ -122,34 +148,34 @@ class AnyValueTestEnvironment {
     );
     this.nodeKeys.nodeInstallNetworkKey(nkMsg);
 
-    // Create label resolver config that mirrors Rust encryption_test.rs
+    // Create label resolver config that mirrors Rust encryption_test.rs EXACTLY
     this.labelResolverConfig = {
       labelMappings: new Map([
         [
           'user',
           {
-            networkPublicKey: this.networkPublicKey,
+            networkPublicKey: undefined, // user has NO network keys (matches Rust: network_public_key: None)
             userKeySpec: LabelKeyword.CurrentUser,
           },
         ],
         [
           'system',
           {
-            networkPublicKey: this.networkPublicKey,
+            networkPublicKey: this.networkPublicKey, // system has BOTH user + network keys (matches Rust: both profile and network keys)
             userKeySpec: LabelKeyword.CurrentUser,
           },
         ],
         [
           'system_only',
           {
-            networkPublicKey: this.networkPublicKey,
-            userKeySpec: undefined,
+            networkPublicKey: this.networkPublicKey, // system_only has ONLY network keys (matches Rust: profile_public_keys: [], network_public_key: Some)
+            userKeySpec: undefined, // NO user profile keys (matches Rust: profile_public_keys: vec![])
           },
         ],
         [
           'search',
           {
-            networkPublicKey: this.networkPublicKey,
+            networkPublicKey: this.networkPublicKey, // search has BOTH user + network keys (matches Rust: both profile and network keys)
             userKeySpec: LabelKeyword.CurrentUser,
           },
         ],
@@ -233,104 +259,152 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
     await testEnv.cleanup();
   });
 
-  describe('Basic Struct Encryption', () => {
-    it('should encrypt and decrypt user-only fields', async () => {
-      const userData = new TestProfile(
-        'user-123',
-        'John Doe',
-        'private info',
-        'john@example.com',
-        'user metadata'
+  describe('Access Control Tests (Rust Parity)', () => {
+    it('should test encryption basic - direct encryptWithKeystore/decryptWithKeystore calls', async () => {
+      // This matches Rust test_encryption_basic() exactly
+      const original = new TestProfile(
+        '123',
+        'Test User',
+        'secret123',
+        'test@example.com',
+        'system_data'
       );
 
-      // Create serialization context with mobile keystore
-      const context = testEnv.createSerializationContext(testEnv.getMobileWrapper());
-
-      // Serialize with encryption context
-      const serializeResult = AnyValue.newStruct(userData).serialize(context);
-      expect(serializeResult.ok).toBe(true);
-      if (!serializeResult.ok) {
-        throw new Error(`Serialization failed: ${(serializeResult as any).error.message}`);
-      }
-      expect(serializeResult.value.length).toBeGreaterThan(0);
-
-      // Deserialize with keystore
-      // Note: deserContext is not used in this test as we pass keystore directly to deserialize
-      const deserializeResult = AnyValue.deserialize(
-        serializeResult.value,
-        testEnv.getMobileWrapper()
-      );
-      expect(deserializeResult.ok).toBe(true);
-      if (!deserializeResult.ok) {
-        throw new Error(`Deserialization failed: ${(deserializeResult as any).error.message}`);
+      // Test encryption (matches Rust: original.encrypt_with_keystore(&mobile_ks, resolver.as_ref()))
+      const encryptResult = (original as any).encryptWithKeystore(testEnv.getMobileWrapper(), testEnv.getResolver());
+      expect(encryptResult.ok).toBe(true);
+      if (!encryptResult.ok) {
+        throw new Error(`Encryption failed: ${(encryptResult as any).error.message}`);
       }
 
-      // Verify the decrypted data
-      const decrypted = deserializeResult.value;
+      const encrypted = encryptResult.value;
 
-      const asProfileResult = decrypted.as<TestProfile>();
-      expect(asProfileResult.ok).toBe(true);
-      if (!asProfileResult.ok) {
-        throw new Error(`as<TestProfile> failed: ${(asProfileResult as any).error.message}`);
+      // Verify encrypted struct has the expected fields (matches Rust assertions)
+      expect(encrypted.id).toBe('123');
+      expect(encrypted.user_encrypted).toBeDefined();
+      expect(encrypted.system_encrypted).toBeDefined();
+      expect(encrypted.search_encrypted).toBeDefined();
+      expect(encrypted.system_only_encrypted).toBeDefined();
+
+      // Test decryption with mobile (matches Rust: encrypted.decrypt_with_keystore(&mobile_ks))
+      const decryptedMobile = (encrypted as any).decryptWithKeystore(testEnv.getMobileWrapper());
+      expect(decryptedMobile.ok).toBe(true);
+      if (!decryptedMobile.ok) {
+        throw new Error(`Mobile decryption failed: ${(decryptedMobile as any).error.message}`);
       }
 
-      const decryptedProfile = asProfileResult.value;
-      expect(decryptedProfile.id).toBe(userData.id);
-      expect(decryptedProfile.name).toBe(userData.name);
-      expect(decryptedProfile.privateData).toBe(userData.privateData);
-      expect(decryptedProfile.email).toBe(userData.email);
-      expect(decryptedProfile.systemMetadata).toBe(userData.systemMetadata);
+      const mobileProfile = decryptedMobile.value;
+      expect(mobileProfile.id).toBe(original.id);
+      expect(mobileProfile.name).toBe(original.name);
+      expect(mobileProfile.privateData).toBe(original.privateData);
+      expect(mobileProfile.email).toBe(original.email);
+      expect(mobileProfile.systemMetadata).toBe(''); // Mobile should NOT have access to system_metadata
+
+      // Test decryption with node (matches Rust: encrypted.decrypt_with_keystore(&node_ks))
+      const decryptedNode = (encrypted as any).decryptWithKeystore(testEnv.getNodeWrapper());
+      expect(decryptedNode.ok).toBe(true);
+      if (!decryptedNode.ok) {
+        throw new Error(`Node decryption failed: ${(decryptedNode as any).error.message}`);
+      }
+
+      const nodeProfile = decryptedNode.value;
+      expect(nodeProfile.id).toBe(original.id);
+      expect(nodeProfile.name).toBe(original.name);
+      expect(nodeProfile.privateData).toBe(''); // Should be empty for node
+      expect(nodeProfile.email).toBe(original.email);
+      expect(nodeProfile.systemMetadata).toBe(original.systemMetadata); // Node should have access to system_metadata
     });
 
-    it('should encrypt and decrypt system-only fields with proper access control', async () => {
-      const systemData = new TestProfile(
-        'system-456',
-        'System User',
-        'system private',
-        'system@example.com',
-        'system metadata'
+    it('should test encryption in AnyValue - AnyValue.deserialize calls', async () => {
+      // This matches Rust test_encryption_in_arcvalue() exactly
+      const profile = new TestProfile(
+        '789',
+        'ArcValue Test',
+        'arc_secret',
+        'arc@example.com',
+        'arc_system_data'
       );
 
-      // Create serialization context with mobile keystore (has user profile keys)
+      // Create AnyValue with struct (matches Rust: ArcValue::new_struct(profile.clone()))
+      const val = AnyValue.newStruct(profile);
+      expect(val.getCategory()).toBe(ValueCategory.Struct);
+
+      // Create serialization context (matches Rust SerializationContext creation)
       const context = testEnv.createSerializationContext(testEnv.getMobileWrapper());
 
-      // Serialize with encryption context
-      const serializeResult = AnyValue.newStruct(systemData).serialize(context);
-      expect(serializeResult.ok).toBe(true);
-      if (!serializeResult.ok) {
-        throw new Error(`Serialization failed: ${(serializeResult as any).error.message}`);
-      }
-      expect(serializeResult.value.length).toBeGreaterThan(0);
-
-      // CRITICAL: Deserialize with NODE keystore (has network keys, NO user profile keys)
-      // This tests access control - user fields should be empty, system fields should contain data
-      const deserializeResult = AnyValue.deserialize(
-        serializeResult.value,
-        testEnv.getNodeWrapper()  // ✅ Using node wrapper for access control test
-      );
-      expect(deserializeResult.ok).toBe(true);
-      if (!deserializeResult.ok) {
-        throw new Error(`Deserialization failed: ${(deserializeResult as any).error.message}`);
+      // Serialize with encryption (matches Rust: val.serialize(Some(&context)))
+      const ser = val.serialize(context);
+      expect(ser.ok).toBe(true);
+      if (!ser.ok) {
+        throw new Error(`Serialization failed: ${(ser as any).error.message}`);
       }
 
-      // Verify the decrypted data with proper access control
-      const decrypted = deserializeResult.value;
-      const asProfileResult = decrypted.as<TestProfile>();
-      expect(asProfileResult.ok).toBe(true);
-      if (!asProfileResult.ok) {
-        throw new Error(`as<TestProfile> failed: ${(asProfileResult as any).error.message}`);
+      // Deserialize with node (matches Rust: ArcValue::deserialize(&ser, Some(node_ks.clone())))
+      const deNode = AnyValue.deserialize(ser.value, testEnv.getNodeWrapper());
+      expect(deNode.ok).toBe(true);
+      if (!deNode.ok) {
+        throw new Error(`Node deserialization failed: ${(deNode as any).error.message}`);
       }
 
-      const decryptedProfile = asProfileResult.value;
-      
-      // ✅ ACCESS CONTROL TEST: User fields should be EMPTY (no user profile keys in node keystore)
-      expect(decryptedProfile.id).toBe("");           // user field - should be empty
-      expect(decryptedProfile.name).toBe("");         // user field - should be empty  
-      expect(decryptedProfile.privateData).toBe("");  // user field - should be empty
-      
-      // ✅ System fields should contain data (node keystore has network keys)
-      expect(decryptedProfile.email).toBe(systemData.email);           // system field - should contain data
-      expect(decryptedProfile.systemMetadata).toBe(systemData.systemMetadata); // system_only field - should contain data
+      const nodeProfileResult = deNode.value.as<TestProfile>();
+      expect(nodeProfileResult.ok).toBe(true);
+      if (!nodeProfileResult.ok) {
+        throw new Error(`Node as<TestProfile> failed: ${(nodeProfileResult as any).error.message}`);
+      }
+
+      const nodeProfile = nodeProfileResult.value;
+      expect(nodeProfile.id).toBe(profile.id);
+      expect(nodeProfile.name).toBe(profile.name);
+      expect(nodeProfile.privateData).toBe(''); // Should be empty for node
+      expect(nodeProfile.email).toBe(profile.email);
+      expect(nodeProfile.systemMetadata).toBe(profile.systemMetadata); // Node should have access to system_metadata
+
+      // Deserialize with mobile (matches Rust: ArcValue::deserialize(&ser, Some(mobile_ks.clone())))
+      const deMobile = AnyValue.deserialize(ser.value, testEnv.getMobileWrapper());
+      expect(deMobile.ok).toBe(true);
+      if (!deMobile.ok) {
+        throw new Error(`Mobile deserialization failed: ${(deMobile as any).error.message}`);
+      }
+
+      const mobileProfileResult = deMobile.value.as<TestProfile>();
+      expect(mobileProfileResult.ok).toBe(true);
+      if (!mobileProfileResult.ok) {
+        throw new Error(`Mobile as<TestProfile> failed: ${(mobileProfileResult as any).error.message}`);
+      }
+
+      const mobileProfile = mobileProfileResult.value;
+      expect(mobileProfile.id).toBe(profile.id);
+      expect(mobileProfile.name).toBe(profile.name);
+      expect(mobileProfile.privateData).toBe(profile.privateData);
+      expect(mobileProfile.email).toBe(profile.email);
+      expect(mobileProfile.systemMetadata).toBe(''); // Mobile should NOT have access to system_metadata
+
+      // Test encrypted struct access (matches Rust: node_profile_encrypted.decrypt_with_keystore(&node_ks))
+      const nodeProfileEncryptedResult = deNode.value.as<any>();
+      expect(nodeProfileEncryptedResult.ok).toBe(true);
+      if (!nodeProfileEncryptedResult.ok) {
+        throw new Error(`Node encrypted as failed: ${(nodeProfileEncryptedResult as any).error.message}`);
+      }
+
+      const nodeProfileEncrypted = nodeProfileEncryptedResult.value;
+      expect(nodeProfileEncrypted.id).toBe(profile.id);
+      expect(nodeProfileEncrypted.search_encrypted).toBeDefined();
+      expect(nodeProfileEncrypted.system_encrypted).toBeDefined();
+      expect(nodeProfileEncrypted.system_only_encrypted).toBeDefined();
+      expect(nodeProfileEncrypted.user_encrypted).toBeDefined();
+
+      const finalNodeProfile = (nodeProfileEncrypted as any).decryptWithKeystore(testEnv.getNodeWrapper());
+      expect(finalNodeProfile.ok).toBe(true);
+      if (!finalNodeProfile.ok) {
+        throw new Error(`Final node decryption failed: ${(finalNodeProfile as any).error.message}`);
+      }
+
+      const finalProfile = finalNodeProfile.value;
+      expect(finalProfile.id).toBe(profile.id);
+      expect(finalProfile.name).toBe(profile.name);
+      expect(finalProfile.privateData).toBe(''); // Should be empty for node
+      expect(finalProfile.email).toBe(profile.email);
+      expect(finalProfile.systemMetadata).toBe(profile.systemMetadata);
     });
 
     it('should encrypt and decrypt mixed system+user fields', async () => {
@@ -359,10 +433,11 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
         serializeResult.value,
         testEnv.getMobileWrapper()
       );
-      expect(deserializeResult.ok).toBe(true);
       if (!deserializeResult.ok) {
+        console.log('Deserialization failed:', (deserializeResult as any).error.message);
         throw new Error(`Deserialization failed: ${(deserializeResult as any).error.message}`);
       }
+      expect(deserializeResult.ok).toBe(true);
 
       // Verify the decrypted data
       const decrypted = deserializeResult.value;
@@ -431,12 +506,13 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       // This tests reverse access control - system fields should be empty, user fields should contain data
       const deserializeResult = AnyValue.deserialize(
         serializeResult.value,
-        testEnv.getMobileWrapper()  // ✅ Using mobile wrapper for reverse access control test
+        testEnv.getMobileWrapper() // ✅ Using mobile wrapper for reverse access control test
       );
-      expect(deserializeResult.ok).toBe(true);
       if (!deserializeResult.ok) {
+        console.log('Deserialization failed:', (deserializeResult as any).error.message);
         throw new Error(`Deserialization failed: ${(deserializeResult as any).error.message}`);
       }
+      expect(deserializeResult.ok).toBe(true);
 
       // Verify the decrypted data with reverse access control
       const decrypted = deserializeResult.value;
@@ -447,15 +523,15 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       }
 
       const decryptedProfile = asProfileResult.value;
-      
+
       // ✅ REVERSE ACCESS CONTROL TEST: User fields should contain data (mobile keystore has user profile keys)
-      expect(decryptedProfile.id).toBe(systemOnlyData.id);           // user field - should contain data
-      expect(decryptedProfile.name).toBe(systemOnlyData.name);       // user field - should contain data  
+      expect(decryptedProfile.id).toBe(systemOnlyData.id); // user field - should contain data
+      expect(decryptedProfile.name).toBe(systemOnlyData.name); // user field - should contain data
       expect(decryptedProfile.privateData).toBe(systemOnlyData.privateData); // user field - should contain data
-      
+
       // ✅ System fields should be EMPTY (mobile keystore has no network keys)
-      expect(decryptedProfile.email).toBe("");                      // system field - should be empty
-      expect(decryptedProfile.systemMetadata).toBe("");             // system_only field - should be empty
+      expect(decryptedProfile.email).toBe(''); // system field - should be empty
+      expect(decryptedProfile.systemMetadata).toBe(''); // system_only field - should be empty
     });
   });
 
@@ -488,10 +564,11 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
         serializeResult.value,
         testEnv.getMobileWrapper()
       );
-      expect(deserializeResult.ok).toBe(true);
       if (!deserializeResult.ok) {
+        console.log('Deserialization failed:', (deserializeResult as any).error.message);
         throw new Error(`Deserialization failed: ${(deserializeResult as any).error.message}`);
       }
+      expect(deserializeResult.ok).toBe(true);
 
       // Verify data integrity
       const decrypted = deserializeResult.value;

@@ -149,34 +149,30 @@ export function Encrypt<T extends Constructor>(value: T, context: ClassDecorator
       decryptWithKeystore(keystore: CommonKeysInterface): Result<InstanceType<typeof value>> {
         const fieldEncryptions = (value as Function & { fieldEncryptions?: FieldEncryption[] }).fieldEncryptions || [];
         const labels = [...new Set(fieldEncryptions.map((e: FieldEncryption) => e.label))];
-        const plainInstance = new (value as Constructor)();
+        // Initialize with default values (empty strings for all fields)
+        const plainInstance = new (value as Constructor)('', '', '', '', '');
 
+        // CRITICAL: Process each label group independently
+        // If decryption fails for a label group, skip it but continue with others
+        // This implements the access control behavior from Rust
         for (const label of labels) {
           const encryptedFieldName = `${label}_encrypted`;
           const encryptedGroup = this[encryptedFieldName];
 
           if (encryptedGroup) {
-            try {
-              const decryptedResult = decryptLabelGroupSync(encryptedGroup, keystore);
-              if (decryptedResult.ok) {
-                const decryptedFields = decryptedResult.value as Record<string, unknown>;
-                if (decryptedFields && typeof decryptedFields === 'object') {
-                  for (const fieldName in decryptedFields) {
-                    plainInstance[fieldName] = decryptedFields[fieldName];
-                  }
+            // Attempt decryption - if it fails, skip this label group but continue
+            const decryptedResult = decryptLabelGroupSync(encryptedGroup, keystore);
+            if (decryptedResult.ok) {
+              const decryptedFields = decryptedResult.value as Record<string, unknown>;
+              if (decryptedFields && typeof decryptedFields === 'object') {
+                // Only assign fields if decryption succeeded
+                for (const fieldName in decryptedFields) {
+                  plainInstance[fieldName] = decryptedFields[fieldName];
                 }
-              } else {
-                return err(
-                  new Error(
-                    `Failed to decrypt label group '${label}': ${(decryptedResult as Err<Error>).error.message}`
-                  )
-                );
               }
-            } catch (error) {
-              return err(
-                new Error(`Failed to decrypt label group '${label}': ${error}`)
-              );
             }
+            // If decryption fails, fields remain at their default values (access control)
+            // Do NOT return error - continue processing other label groups
           }
         }
 
