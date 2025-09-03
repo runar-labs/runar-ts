@@ -11,6 +11,15 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 
+// Helper function to handle newPrimitive Result return type
+function createPrimitive<T>(value: T): AnyValue<T> {
+  const result = AnyValue.newPrimitive(value);
+  if (!result.ok) {
+    throw new Error(`Failed to create primitive AnyValue: ${result.error.message}`);
+  }
+  return result.value;
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -47,10 +56,10 @@ function main(): void {
   console.log(`Writing TypeScript serializer vectors to ${out}`);
 
   // Primitives
-  serializeAndWrite(out, 'prim_string.bin', AnyValue.newPrimitive('hello'));
-  serializeAndWrite(out, 'prim_bool.bin', AnyValue.newPrimitive(true));
-  serializeAndWrite(out, 'prim_i64.bin', AnyValue.newPrimitive(42));
-  serializeAndWrite(out, 'prim_u64.bin', AnyValue.newPrimitive(7));
+  serializeAndWrite(out, 'prim_string.bin', createPrimitive('hello'));
+  serializeAndWrite(out, 'prim_bool.bin', createPrimitive(true));
+  serializeAndWrite(out, 'prim_i64.bin', createPrimitive(42));
+  serializeAndWrite(out, 'prim_u64.bin', createPrimitive(7));
 
   // Bytes
   serializeAndWrite(out, 'bytes.bin', AnyValue.newBytes(new Uint8Array([1, 2, 3])));
@@ -60,14 +69,14 @@ function main(): void {
   serializeAndWrite(out, 'json.bin', AnyValue.newJson(json));
 
   // Heterogeneous list - use binary serialization for mixed types
-  const listAny = AnyValue.newList([AnyValue.newPrimitive(1), AnyValue.newPrimitive('two')]);
+  const listAny = AnyValue.newList([createPrimitive(1), createPrimitive('two')]);
   serializeAndWrite(out, 'list_any.bin', listAny);
 
   // Heterogeneous map - use binary serialization for mixed types
   const mapAny = AnyValue.newMap(
     new Map<string, AnyValue<any>>([
-      ['x', AnyValue.newPrimitive(10)],
-      ['y', AnyValue.newPrimitive('ten')],
+      ['x', createPrimitive(10)],
+      ['y', createPrimitive('ten')],
     ])
   );
   serializeAndWrite(out, 'map_any.bin', mapAny);
@@ -146,26 +155,26 @@ function main(): void {
   // Map containing lists of maps
   const user1Profile = AnyValue.newMap(
     new Map<string, AnyValue>([
-      ['verified', AnyValue.newPrimitive(true)],
-      ['premium', AnyValue.newPrimitive(false)],
+      ['verified', createPrimitive(true)],
+      ['premium', createPrimitive(false)],
     ])
   );
   const user1Map = AnyValue.newMap(
     new Map<string, AnyValue>([
-      ['id', AnyValue.newPrimitive(1)],
+      ['id', createPrimitive(1)],
       ['profile', user1Profile],
     ])
   );
 
   const user2Profile = AnyValue.newMap(
     new Map<string, AnyValue>([
-      ['verified', AnyValue.newPrimitive(false)],
-      ['premium', AnyValue.newPrimitive(true)],
+      ['verified', createPrimitive(false)],
+      ['premium', createPrimitive(true)],
     ])
   );
   const user2Map = AnyValue.newMap(
     new Map<string, AnyValue>([
-      ['id', AnyValue.newPrimitive(2)],
+      ['id', createPrimitive(2)],
       ['profile', user2Profile],
     ])
   );
@@ -175,7 +184,7 @@ function main(): void {
   const featuresList = AnyValue.newList(['auth', 'profile', 'settings']);
   const metadataMap = AnyValue.newMap(
     new Map<string, AnyValue>([
-      ['version', AnyValue.newPrimitive('1.0')],
+      ['version', createPrimitive('1.0')],
       ['features', featuresList],
     ])
   );
@@ -210,10 +219,10 @@ function main(): void {
 
   // 8. LARGE DATA - Big Strings and Numbers
   const largeString = 'x'.repeat(1000); // 1KB string
-  serializeAndWrite(out, 'large_string.bin', AnyValue.newPrimitive(largeString));
+  serializeAndWrite(out, 'large_string.bin', createPrimitive(largeString));
 
   const bigNumber = Number.MAX_SAFE_INTEGER;
-  serializeAndWrite(out, 'big_number.bin', AnyValue.newPrimitive(bigNumber));
+  serializeAndWrite(out, 'big_number.bin', createPrimitive(bigNumber));
 
   // 9. MIXED TYPE COMPLEXITY
   const mixedComplexity = AnyValue.newMap(
@@ -221,11 +230,11 @@ function main(): void {
       [
         'primitives',
         AnyValue.newList([
-          AnyValue.newPrimitive(42),
-          AnyValue.newPrimitive('string'),
-          AnyValue.newPrimitive(true),
-          AnyValue.newPrimitive(3.14),
-          AnyValue.newPrimitive(null),
+          createPrimitive(42),
+          createPrimitive('string'),
+          createPrimitive(true),
+          createPrimitive(3.14),
+          createPrimitive(null),
         ]),
       ],
       ['bytes', AnyValue.newBytes(new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]))],
@@ -255,11 +264,11 @@ function main(): void {
 
   // 11. HETEROGENEOUS COLLECTIONS WITH ALL TYPES
   const allTypesList = AnyValue.newList([
-    AnyValue.newPrimitive(42), // integer
-    AnyValue.newPrimitive('string'), // string
-    AnyValue.newPrimitive(true), // boolean
-    AnyValue.newPrimitive(3.14159), // float
-    AnyValue.newPrimitive(null), // null
+    createPrimitive(42), // integer
+    createPrimitive('string'), // string
+    createPrimitive(true), // boolean
+    createPrimitive(3.14159), // float
+    createPrimitive(null), // null
     AnyValue.newBytes(new Uint8Array([1, 2, 3])), // bytes
     AnyValue.newJson({ key: 'value' }), // json
     AnyValue.newStruct({ id: 'test' }), // struct
@@ -271,20 +280,20 @@ function main(): void {
   // 12. MAP WITH COMPLEX KEYS AND VALUES
   const complexMap = AnyValue.newMap(
     new Map<string, AnyValue<any>>([
-      ['simple_string', AnyValue.newPrimitive('value')],
-      ['simple_number', AnyValue.newPrimitive(123)],
+      ['simple_string', createPrimitive('value')],
+      ['simple_number', createPrimitive(123)],
       ['nested_list', AnyValue.newList([AnyValue.newMap(new Map([['inner', 'data']]))])],
       [
         'nested_map',
         AnyValue.newMap(
           new Map([
-            ['level1', AnyValue.newMap(new Map([['level2', AnyValue.newPrimitive('deep')]]))],
+            ['level1', AnyValue.newMap(new Map([['level2', createPrimitive('deep')]]))],
           ])
         ),
       ],
       [
         'mixed_array',
-        AnyValue.newList(['string', 42, true, 'null', AnyValue.newPrimitive('nested')]),
+        AnyValue.newList(['string', 42, true, 'null', createPrimitive('nested')]),
       ],
     ])
   );
@@ -301,12 +310,12 @@ function main(): void {
   serializeAndWrite(out, 'very_large_map.bin', AnyValue.newMap(veryLargeMap));
 
   // 14. NULL AND UNDEFINED HANDLING
-  serializeAndWrite(out, 'null_value.bin', AnyValue.newPrimitive(null));
-  serializeAndWrite(out, 'undefined_like.bin', AnyValue.newPrimitive(undefined));
+  serializeAndWrite(out, 'null_value.bin', createPrimitive(null));
+  serializeAndWrite(out, 'undefined_like.bin', createPrimitive(undefined));
 
   // 15. SPECIAL CHARACTERS AND UNICODE
   const unicodeString = 'Hello 世界 🌍 Test: áéíóú ñ';
-  serializeAndWrite(out, 'unicode_string.bin', AnyValue.newPrimitive(unicodeString));
+  serializeAndWrite(out, 'unicode_string.bin', createPrimitive(unicodeString));
 
   const specialChars = new Map<string, string>([
     ['normal', 'value'],

@@ -109,10 +109,10 @@ export class AnyValue<T = unknown> {
     return new AnyValue(ValueCategory.Null, null, null, null);
   }
 
-  static newPrimitive<T>(value: T): AnyValue<T> {
+  static newPrimitive<T>(value: T): Result<AnyValue<T>, Error> {
     const typeName = AnyValue.getTypeName(value);
     if (!AnyValue.isPrimitive(typeName)) {
-      throw new Error(`Not a primitive type: ${typeName}`);
+      return err(new Error(`Not a primitive type: ${typeName}`));
     }
 
     const serializeFn: SerializeFn = () => {
@@ -125,7 +125,7 @@ export class AnyValue<T = unknown> {
       }
     };
 
-    return new AnyValue(ValueCategory.Primitive, value, serializeFn, typeName);
+    return ok(new AnyValue(ValueCategory.Primitive, value, serializeFn, typeName));
   }
 
   static newList<T>(list: T[]): AnyValue<T[]> {
@@ -475,7 +475,11 @@ export class AnyValue<T = unknown> {
             } else if (Array.isArray(item)) {
               return AnyValue.newList(item);
             } else {
-              return AnyValue.newPrimitive(item);
+              const primitiveResult = AnyValue.newPrimitive(item);
+              if (!primitiveResult.ok) {
+                throw new Error(`Failed to create primitive AnyValue: ${(primitiveResult as Err<Error>).error.message}`);
+              }
+              return primitiveResult.value;
             }
           });
         } else {
@@ -499,7 +503,11 @@ export class AnyValue<T = unknown> {
               } else if (Array.isArray(val)) {
                 map.set(key, AnyValue.newList(val));
               } else {
-                map.set(key, AnyValue.newPrimitive(val));
+                const primitiveResult = AnyValue.newPrimitive(val);
+                if (!primitiveResult.ok) {
+                  throw new Error(`Failed to create primitive AnyValue: ${(primitiveResult as Err<Error>).error.message}`);
+                }
+                map.set(key, primitiveResult.value);
               }
             }
           }
@@ -1030,10 +1038,10 @@ export class AnyValue<T = unknown> {
   // Lazy deserialization accessors according to design plan - REMOVED, replaced by performLazyDecrypt
 
   // Core API method for creating AnyValue from JavaScript/TypeScript values
-  static from<T>(value: T): AnyValue<T> {
+  static from<T>(value: T): Result<AnyValue<T>, Error> {
     // Special handling for null
     if (value === null) {
-      return AnyValue.null() as AnyValue<T>;
+      return ok(AnyValue.null() as AnyValue<T>);
     }
 
     const category = AnyValue.determineCategory(value);
@@ -1041,37 +1049,41 @@ export class AnyValue<T = unknown> {
     // Create appropriate factory method based on category
     switch (category) {
       case ValueCategory.Primitive:
-        return AnyValue.newPrimitive(value) as AnyValue<T>;
+        const primitiveResult = AnyValue.newPrimitive(value);
+        if (!primitiveResult.ok) {
+          return err(new Error(`Failed to create primitive AnyValue: ${(primitiveResult as Err<Error>).error.message}`));
+        }
+        return ok(primitiveResult.value as AnyValue<T>);
       case ValueCategory.List:
         // For lists, we need to handle the raw array elements properly
         // The AnyValue.newList constructor expects AnyValue objects for the AnyValue path
         // but can handle raw values for the regular path
-        return AnyValue.newList(value as any[]) as AnyValue<T>;
+        return ok(AnyValue.newList(value as any[]) as AnyValue<T>);
       case ValueCategory.Map:
         if (value instanceof Map) {
-          return AnyValue.newMap(value) as AnyValue<T>;
+          return ok(AnyValue.newMap(value) as AnyValue<T>);
         }
-        throw new Error(`Expected Map instance for ValueCategory.Map, but got ${typeof value}`);
+        return err(new Error(`Expected Map instance for ValueCategory.Map, but got ${typeof value}`));
       case ValueCategory.Struct:
-        return AnyValue.newStruct(value as any) as AnyValue<T>;
+        return ok(AnyValue.newStruct(value as any) as AnyValue<T>);
       case ValueCategory.Bytes:
         if (value instanceof Uint8Array) {
-          return AnyValue.newBytes(value as Uint8Array) as AnyValue<T>;
+          return ok(AnyValue.newBytes(value as Uint8Array) as AnyValue<T>);
         }
       // Fall through to default
       case ValueCategory.Json:
       default:
-        return AnyValue.newJson(value as any) as AnyValue<T>;
+        return ok(AnyValue.newJson(value as any) as AnyValue<T>);
     }
   }
 
   // Core API method for deserializing AnyValue from wire format bytes
-  static fromBytes<T = unknown>(bytes: Uint8Array, keystore?: CommonKeysInterface): AnyValue<T> {
+  static fromBytes<T = unknown>(bytes: Uint8Array, keystore?: CommonKeysInterface): Result<AnyValue<T>, Error> {
     const result = AnyValue.deserialize(bytes, keystore);
     if (!result.ok) {
-      throw new Error(`Failed to deserialize AnyValue: ${(result as any).error}`);
+      return err(new Error(`Failed to deserialize AnyValue: ${(result as Err<Error>).error.message}`));
     }
-    return result.value as AnyValue<T>;
+    return ok(result.value as AnyValue<T>);
   }
 }
 
@@ -1087,7 +1099,11 @@ export { ValueCategory, readHeader, writeHeader, bodyOffset } from './wire.js';
 // Export function to serialize entities
 export function serializeEntity(entity: any): Uint8Array | Promise<Uint8Array> {
   // Serialize the entity directly
-  const av = AnyValue.from(entity);
+  const avResult = AnyValue.from(entity);
+  if (!avResult.ok) {
+    throw new Error(`Failed to create AnyValue: ${(avResult as Err<Error>).error.message}`);
+  }
+  const av = avResult.value;
   const result = av.serialize();
 
   if (result instanceof Promise) {
@@ -1102,6 +1118,10 @@ export function deserializeEntity<T>(
   bytes: Uint8Array,
   keystore?: CommonKeysInterface
 ): Result<T, Error> {
-  const av = AnyValue.fromBytes<T>(bytes, keystore);
+  const avResult = AnyValue.fromBytes<T>(bytes, keystore);
+  if (!avResult.ok) {
+    return err(new Error(`Failed to deserialize AnyValue: ${(avResult as Err<Error>).error.message}`));
+  }
+  const av = avResult.value;
   return av.as<T>();
 }
