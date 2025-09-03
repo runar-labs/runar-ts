@@ -1,4 +1,4 @@
-import { Result, ok, err } from './result.js';
+import { Result, ok, err } from 'runar-ts-common/src/error/Result.js';
 
 // Device capabilities interface as specified in Section 25.5
 export interface DeviceKeystoreCaps {

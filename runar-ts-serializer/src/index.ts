@@ -1,5 +1,5 @@
 import { encode, decode } from 'cbor-x';
-import { Result, ok, err } from './result.js';
+import { Result, ok, err } from 'runar-ts-common/src/error/Result.js';
 import {
   ValueCategory,
   DeserializationContext,
@@ -362,7 +362,7 @@ export class AnyValue<T = unknown> {
             if (encryptedResult.ok) {
               return ok(encryptedResult.value);
             } else {
-              return err(encryptedResult.error);
+              return err((encryptedResult as any).error);
             }
           }
         }
@@ -871,7 +871,7 @@ export class AnyValue<T = unknown> {
         return err(new Error('Asynchronous serialization function called in synchronous context'));
       }
       if (!bytesResult.ok) {
-        return err(bytesResult.error);
+        return err((bytesResult as any).error);
       }
       // Store the result for building the wire format
       bytes = bytesResult;
@@ -999,7 +999,7 @@ export class AnyValue<T = unknown> {
               if (decrypted.ok) {
                 return ok(decrypted.value as U);
               } else {
-                return err(new Error(`Registry decryptor failed: ${decrypted.error.message}`));
+                return err(new Error(`Registry decryptor failed: ${(decrypted as any).error}`));
               }
             } catch (decryptorError) {
               return err(new Error(`Registry decryptor execution error: ${decryptorError}`));
@@ -1064,7 +1064,7 @@ export class AnyValue<T = unknown> {
   static fromBytes<T = unknown>(bytes: Uint8Array, keystore?: CommonKeysInterface): AnyValue<T> {
     const result = AnyValue.deserialize(bytes, keystore);
     if (!result.ok) {
-      throw new Error(`Failed to deserialize AnyValue: ${result.error}`);
+      throw new Error(`Failed to deserialize AnyValue: ${(result as any).error}`);
     }
     return result.value as AnyValue<T>;
   }
@@ -1073,8 +1073,8 @@ export class AnyValue<T = unknown> {
 // Export the wire types
 
 // Export the result types
-export { ok, err } from './result.js';
-export type { Result } from './result.js';
+export { ok, err } from 'runar-ts-common/src/error/Result.js';
+export type { Result } from 'runar-ts-common/src/error/Result.js';
 
 // Export the wire types
 export { ValueCategory, readHeader, writeHeader, bodyOffset } from './wire.js';

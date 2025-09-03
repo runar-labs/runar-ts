@@ -14,13 +14,24 @@ import {
   KeysWrapperMobile,
   KeysWrapperNode,
 } from '../../runar-ts-node/src/keys_manager_wrapper.js';
+import { Encrypt, runar } from '../../runar-ts-decorators/src/index.js';
 
-// Test data structure for encryption testing - manually configured to avoid decorator compatibility issues
+// Test data structure for encryption testing - using proper TS 5 decorators
+@Encrypt
 class TestProfile {
+  @runar({ user: true })
   public id: string;
+  
+  @runar({ user: true })
   public name: string;
+  
+  @runar({ user: true })
   public privateData: string;
+  
+  @runar({ system: true })
   public email: string;
+  
+  @runar({ systemOnly: true })
   public systemMetadata: string;
 
   constructor(
@@ -35,21 +46,6 @@ class TestProfile {
     this.privateData = privateData;
     this.email = email;
     this.systemMetadata = systemMetadata;
-  }
-
-  // Add field encryption metadata manually to avoid decorator compatibility issues
-  static fieldEncryptions = [
-    { label: 'user', propertyKey: 'id', priority: 1 },
-    { label: 'user', propertyKey: 'name', priority: 1 },
-    { label: 'user', propertyKey: 'privateData', priority: 1 },
-    { label: 'system', propertyKey: 'email', priority: 0 },
-    { label: 'system_only', propertyKey: 'systemMetadata', priority: 0 },
-  ];
-
-  // Mock encryption method to satisfy the AnyValue.newStruct requirements
-  encryptWithKeystore(keystore: any, resolver: any): any {
-    // This is a mock implementation for testing
-    return { ok: true, value: this };
   }
 }
 
@@ -227,7 +223,7 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
   beforeAll(async () => {
     testEnv = new AnyValueTestEnvironment();
     await testEnv.initialize();
-  }, 60000); // 60 second timeout for setup
+  });
 
   afterAll(async () => {
     await testEnv.cleanup();
@@ -249,22 +245,25 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       // Serialize with encryption context
       const serializeResult = AnyValue.newStruct(userData).serialize(context);
       expect(serializeResult.ok).toBe(true);
-      expect(serializeResult.value!.length).toBeGreaterThan(0);
+      if (!serializeResult.ok) return;
+      expect(serializeResult.value.length).toBeGreaterThan(0);
 
       // Deserialize with keystore
       const deserContext = testEnv.createDeserializationContext(testEnv.getNodeWrapper());
       const deserializeResult = AnyValue.deserialize(
-        serializeResult.value!,
+        serializeResult.value,
         testEnv.getNodeWrapper()
       );
       expect(deserializeResult.ok).toBe(true);
+      if (!deserializeResult.ok) return;
 
       // Verify the decrypted data
-      const decrypted = deserializeResult.value!;
+      const decrypted = deserializeResult.value;
       const asProfileResult = decrypted.as<TestProfile>();
       expect(asProfileResult.ok).toBe(true);
+      if (!asProfileResult.ok) return;
 
-      const decryptedProfile = asProfileResult.value!;
+      const decryptedProfile = asProfileResult.value;
       expect(decryptedProfile.id).toBe(userData.id);
       expect(decryptedProfile.name).toBe(userData.name);
       expect(decryptedProfile.privateData).toBe(userData.privateData);
@@ -287,22 +286,25 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       // Serialize with encryption context
       const serializeResult = AnyValue.newStruct(systemData).serialize(context);
       expect(serializeResult.ok).toBe(true);
-      expect(serializeResult.value!.length).toBeGreaterThan(0);
+      if (!serializeResult.ok) return;
+      expect(serializeResult.value.length).toBeGreaterThan(0);
 
       // Deserialize with keystore
       const deserContext = testEnv.createDeserializationContext(testEnv.getNodeWrapper());
       const deserializeResult = AnyValue.deserialize(
-        serializeResult.value!,
+        serializeResult.value,
         testEnv.getNodeWrapper()
       );
       expect(deserializeResult.ok).toBe(true);
+      if (!deserializeResult.ok) return;
 
       // Verify the decrypted data
-      const decrypted = deserializeResult.value!;
+      const decrypted = deserializeResult.value;
       const asProfileResult = decrypted.as<TestProfile>();
       expect(asProfileResult.ok).toBe(true);
+      if (!asProfileResult.ok) return;
 
-      const decryptedProfile = asProfileResult.value!;
+      const decryptedProfile = asProfileResult.value;
       expect(decryptedProfile.id).toBe(systemData.id);
       expect(decryptedProfile.name).toBe(systemData.name);
       expect(decryptedProfile.privateData).toBe(systemData.privateData);
@@ -325,22 +327,25 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       // Serialize with encryption context
       const serializeResult = AnyValue.newStruct(mixedData).serialize(context);
       expect(serializeResult.ok).toBe(true);
-      expect(serializeResult.value!.length).toBeGreaterThan(0);
+      if (!serializeResult.ok) return;
+      expect(serializeResult.value.length).toBeGreaterThan(0);
 
       // Deserialize with keystore
       const deserContext = testEnv.createDeserializationContext(testEnv.getNodeWrapper());
       const deserializeResult = AnyValue.deserialize(
-        serializeResult.value!,
+        serializeResult.value,
         testEnv.getNodeWrapper()
       );
       expect(deserializeResult.ok).toBe(true);
+      if (!deserializeResult.ok) return;
 
       // Verify the decrypted data
-      const decrypted = deserializeResult.value!;
+      const decrypted = deserializeResult.value;
       const asProfileResult = decrypted.as<TestProfile>();
       expect(asProfileResult.ok).toBe(true);
+      if (!asProfileResult.ok) return;
 
-      const decryptedProfile = asProfileResult.value!;
+      const decryptedProfile = asProfileResult.value;
       expect(decryptedProfile.id).toBe(mixedData.id);
       expect(decryptedProfile.name).toBe(mixedData.name);
       expect(decryptedProfile.privateData).toBe(mixedData.privateData);
@@ -395,22 +400,25 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       const encryptTime = Date.now() - startTime;
 
       expect(serializeResult.ok).toBe(true);
+      if (!serializeResult.ok) return;
       console.log(`📈 Encryption time for large data: ${encryptTime}ms`);
 
       // Test decryption
       const deserContext = testEnv.createDeserializationContext(testEnv.getNodeWrapper());
       const deserializeResult = AnyValue.deserialize(
-        serializeResult.value!,
+        serializeResult.value,
         testEnv.getNodeWrapper()
       );
       expect(deserializeResult.ok).toBe(true);
+      if (!deserializeResult.ok) return;
 
       // Verify data integrity
-      const decrypted = deserializeResult.value!;
+      const decrypted = deserializeResult.value;
       const asProfileResult = decrypted.as<TestProfile>();
       expect(asProfileResult.ok).toBe(true);
+      if (!asProfileResult.ok) return;
 
-      const decryptedProfile = asProfileResult.value!;
+      const decryptedProfile = asProfileResult.value;
       expect(decryptedProfile.name.length).toBe(1000);
       expect(decryptedProfile.privateData.length).toBe(1000);
       expect(decryptedProfile.email.length).toBe(1000);

@@ -1559,10 +1559,16 @@ Notes to resolve "expected 1 arg, got 2" mismatches:
 - Single source of truth: `Result<T, Error>` from `runar-ts-common`.
   - ok(value): `{ ok: true, value }`
   - err(error): `{ ok: false, error }`
+- Enhanced Error Handling:
+  - Default error type: `Error` (not `string`) for structured error information
+  - Enhanced `err()` function supports both string messages and Error objects
+  - Error chaining: `err(message, previousError)` preserves original error using ES2022 `Error.cause`
+  - Stack trace preservation: Manual concatenation for better debugging experience
 - Rules:
   - Public APIs return `Result` (never throw). Internal calls to native APIs can throw; wrap in try/catch and return `err(new Error(message))`.
   - Do not mix other ad-hoc Result shapes. If found, replace with the canonical Result and update tests to assert `.ok`, `.value`, `.error`.
   - No implicit fallbacks. On error, return `err` with a precise message (aligned with Rust where asserted).
+  - Use `err(message, previousError)` for error chaining to preserve full error context
 
 ## 29. Project-wide Compliance Checklist (Decorators + Signatures + Result)
 

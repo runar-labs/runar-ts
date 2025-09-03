@@ -1,4 +1,4 @@
-import { Result, ok, err } from './result.js';
+import { Result, ok, err } from 'runar-ts-common/src/error/Result.js';
 import { LabelResolver } from './label_resolver.js';
 import type { CommonKeysInterface } from './wire.js';
 import { encode, decode } from 'cbor-x';
@@ -40,7 +40,7 @@ export function encryptLabelGroupSync<T>(
     const infoResult = resolver.resolveLabelInfo(label);
     if (!infoResult.ok) {
       return err(
-        new Error(`Failed to resolve label info for '${label}': ${infoResult.error.message}`)
+        new Error(`Failed to resolve label info for '${label}': ${(infoResult as any).error}`)
       );
     }
 

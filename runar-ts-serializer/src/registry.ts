@@ -1,4 +1,4 @@
-import { Result } from './result.js';
+import { Result } from 'runar-ts-common/src/error/Result.js';
 import type { CommonKeysInterface } from './wire.js';
 import type { LabelResolver } from './label_resolver.js';
 
