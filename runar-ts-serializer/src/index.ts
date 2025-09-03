@@ -989,8 +989,16 @@ export class AnyValue<T = unknown> {
         // Try direct decode into requested T first
         try {
           const decoded = decode(decryptedBytes);
+          console.log(`🔍 Direct decode succeeded for ${this.lazyData.typeName}:`, Object.keys(decoded));
+          // If we're requesting a plain type but got an encrypted companion, we need to decrypt it
+          if (this.lazyData.typeName && !decoded.constructor.name.startsWith('Encrypted')) {
+            console.log(`🔍 Requesting plain type ${this.lazyData.typeName}, but got encrypted companion, need to decrypt`);
+            // Fall through to registry decryptor
+            throw new Error('Need registry decryptor for plain type');
+          }
           return ok(decoded as U);
         } catch (directDecodeError) {
+          console.log(`🔍 Direct decode failed for ${this.lazyData.typeName}:`, directDecodeError instanceof Error ? directDecodeError.message : String(directDecodeError));
           // If direct decode fails, try registry decryptor for the target type
           const decryptor = lookupDecryptorByTypeName(this.lazyData.typeName || '');
           if (decryptor) {

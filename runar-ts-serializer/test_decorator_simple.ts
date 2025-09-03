@@ -5,10 +5,10 @@ import { Encrypt, runar } from '../runar-ts-decorators/src/index.js';
 class TestProfile {
   @runar({ user: true })
   public id: string;
-  
+
   @runar({ user: true })
   public name: string;
-  
+
   @runar({ system: true })
   public email: string;
 

@@ -14,9 +14,10 @@ import type { LabelResolver } from 'runar-ts-serializer/src/label_resolver.js';
 import { Result, ok, err } from 'runar-ts-common/src/error/Result.js';
 import type { EncryptedLabelGroup } from 'runar-ts-serializer/src/index.js';
 import type { LabelKeyInfo } from 'runar-ts-serializer/src/label_resolver.js';
+import { encode, decode } from 'cbor-x';
 
 // TS 5 standard decorator types
-type ClassDecoratorContext = { name: string | symbol; kind: 'class' };
+type ClassDecoratorContext = { name: string | symbol | undefined; kind: 'class' };
 type ClassFieldDecoratorContext<T, V> = { 
   name: string | symbol; 
   kind: 'field';
@@ -129,7 +130,7 @@ export function EncryptField(options: EncryptFieldOptions) {
 
 // Design Section 18.4: @Encrypt decorator with runtime code generation (TS 5 standard)
 export function Encrypt<T extends Function>(value: T, context: ClassDecoratorContext): void {
-    const className = context.name;
+    const className = context.name || 'AnonymousClass';
     const typeName = String(className);
     const encryptedClassName = `Encrypted${String(className)}`;
 
@@ -270,6 +271,57 @@ export function Encrypt<T extends Function>(value: T, context: ClassDecoratorCon
     };
 
     classMetaRegistry.set(value, classMeta);
+
+    // CRITICAL: Register decryptor with the serializer registry
+    // This is what was missing and causing the as<TestProfile>() to fail
+    registerDecrypt(typeName, (encryptedBytes: Uint8Array, keystore: CommonKeysInterface): Result<typeof value, Error> => {
+      try {
+        console.log(`🔍 Decryptor called for ${typeName}`);
+        
+        // Decode the encrypted companion from CBOR bytes
+        const encrypted = decode(encryptedBytes) as any;
+        console.log(`🔍 Decoded encrypted companion:`, Object.keys(encrypted));
+        
+        // Create a proper instance of the encrypted companion class
+        const encryptedInstance = new EncryptedClass();
+        
+        // Copy the decoded data to the instance
+        for (const [key, val] of Object.entries(encrypted)) {
+          encryptedInstance[key] = val;
+        }
+        
+        console.log(`🔍 Encrypted instance fields:`, Object.keys(encryptedInstance));
+        
+        // Call the decryptWithKeystore method to get the plain struct
+        const result = encryptedInstance.decryptWithKeystore(keystore);
+        console.log(`🔍 Decrypt result:`, result.ok ? 'SUCCESS' : 'FAILED', result.ok ? Object.keys(result.value) : (result as any).error);
+        
+        return result;
+      } catch (error) {
+        console.log(`🔍 Decryptor error:`, error);
+        return err(new Error(`Failed to decrypt ${typeName}: ${error}`));
+      }
+    });
+
+    // Register encryptor with the serializer registry
+    registerEncrypt(typeName, (plainInstance: any, keystore: CommonKeysInterface, resolver: LabelResolver): Result<Uint8Array, Error> => {
+      try {
+        // Call the encryptWithKeystore method to get the encrypted companion
+        const encResult = plainInstance.encryptWithKeystore(keystore, resolver);
+        if (!encResult.ok) {
+          return err(new Error(`Failed to encrypt ${typeName}: ${(encResult as any).error.message}`));
+        }
+        
+        // Encode the encrypted companion to CBOR bytes
+        const encoded = encode(encResult.value);
+        return ok(encoded);
+      } catch (error) {
+        return err(new Error(`Failed to encrypt ${typeName}: ${error}`));
+      }
+    });
+
+    // Register wire name for the type
+    registerWireName(typeName, typeName);
 
     // Auto-register the class immediately when decorator is applied
     ensureClassRegistered(value as unknown as Constructor);

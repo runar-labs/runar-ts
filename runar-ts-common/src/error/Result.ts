@@ -39,12 +39,9 @@ export function ok<V>(value: V): Ok<V> {
  * Create an error Result with an error value
  * Supports both string messages and Error objects with optional error chaining
  */
-export function err<E = Error>(
-  message: string | Error, 
-  previousError?: Error
-): Err<E> {
+export function err<E = Error>(message: string | Error, previousError?: Error): Err<E> {
   let error: Error;
-  
+
   if (typeof message === 'string') {
     // Create new Error with message and preserve previous error
     error = new Error(message);
@@ -72,7 +69,7 @@ export function err<E = Error>(
       }
     }
   }
-  
+
   return { ok: false, error: error as E };
 }
 
@@ -125,7 +122,10 @@ export function map<V, E, U>(result: Result<V, E>, fn: (value: V) => U): Result<
 /**
  * Map a function over the error of a failed Result
  */
-export function mapErr<V, E, F extends string | Error>(result: Result<V, E>, fn: (error: E) => F): Result<V, F> {
+export function mapErr<V, E, F extends string | Error>(
+  result: Result<V, E>,
+  fn: (error: E) => F
+): Result<V, F> {
   if (!result.ok) {
     const mappedError = fn((result as Err<E>).error);
     return err(mappedError);
@@ -149,9 +149,13 @@ export function andThen<V, E, U>(
 /**
  * Convert a Promise<Result<V, E>> to Result<Promise<V>, E>
  */
-export function transpose<V, E extends string | Error>(result: Result<Promise<V>, E>): Promise<Result<V, E>> {
+export function transpose<V, E extends string | Error>(
+  result: Result<Promise<V>, E>
+): Promise<Result<V, E>> {
   if (result.ok) {
-    return (result as Ok<Promise<V>>).value.then(ok).catch(e => err(e instanceof Error ? e : new Error(String(e)))) as Promise<Result<V, E>>;
+    return (result as Ok<Promise<V>>).value
+      .then(ok)
+      .catch(e => err(e instanceof Error ? e : new Error(String(e)))) as Promise<Result<V, E>>;
   }
   return Promise.resolve(result as Result<V, E>);
 }
@@ -165,8 +169,12 @@ export function fromPromise<V, E extends string | Error = Error>(
 ): Promise<Result<V, E>> {
   return promise
     .then(ok)
-    .catch(e =>
-      err(errorMapper ? errorMapper(e) : (e instanceof Error ? e : new Error(String(e)))) as Result<V, E>
+    .catch(
+      e =>
+        err(errorMapper ? errorMapper(e) : e instanceof Error ? e : new Error(String(e))) as Result<
+          V,
+          E
+        >
     );
 }
 

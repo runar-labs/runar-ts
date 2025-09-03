@@ -8,29 +8,29 @@ import {
   AnyValue,
   createContextLabelResolver,
   LabelKeyword,
-} from '../src/index.js';
+} from 'runar-ts-serializer/src/index.js';
 import {
   KeystoreFactory,
   KeysWrapperMobile,
   KeysWrapperNode,
-} from '../../runar-ts-node/src/keys_manager_wrapper.js';
-import { Encrypt, runar } from '../../runar-ts-decorators/src/index.js';
+} from 'runar-ts-node/src/keys_manager_wrapper.js';
+import { Encrypt, runar } from '../src/index.js';
 
 // Test data structure for encryption testing - using proper TS 5 decorators
 @Encrypt
 class TestProfile {
   @runar({ user: true })
   public id: string;
-  
+
   @runar({ user: true })
   public name: string;
-  
+
   @runar({ user: true })
   public privateData: string;
-  
+
   @runar({ system: true })
   public email: string;
-  
+
   @runar({ systemOnly: true })
   public systemMetadata: string;
 
@@ -70,10 +70,14 @@ class AnyValueTestEnvironment {
     const nodeResult = KeystoreFactory.create(this.nodeKeys, 'backend');
 
     if (!mobileResult.ok) {
-      throw new Error(`Failed to create mobile keystore wrapper: ${mobileResult.error.message}`);
+      throw new Error(
+        `Failed to create mobile keystore wrapper: ${(mobileResult as any).error.message}`
+      );
     }
     if (!nodeResult.ok) {
-      throw new Error(`Failed to create node keystore wrapper: ${nodeResult.error.message}`);
+      throw new Error(
+        `Failed to create node keystore wrapper: ${(nodeResult as any).error.message}`
+      );
     }
 
     this.mobileWrapper = mobileResult.value as KeysWrapperMobile;
@@ -124,7 +128,7 @@ class AnyValueTestEnvironment {
         [
           'user',
           {
-            networkPublicKey: undefined,
+            networkPublicKey: this.networkPublicKey,
             userKeySpec: LabelKeyword.CurrentUser,
           },
         ],
@@ -158,7 +162,7 @@ class AnyValueTestEnvironment {
       this.userProfileKeys
     );
     if (!resolverResult.ok) {
-      throw new Error(`Failed to create resolver: ${resolverResult.error.message}`);
+      throw new Error(`Failed to create resolver: ${(resolverResult as any).error.message}`);
     }
     this.resolver = resolverResult.value;
 
@@ -200,7 +204,7 @@ class AnyValueTestEnvironment {
     };
   }
 
-  createDeserializationContext(keystore: KeysWrapperNode): DeserializationContext {
+  createDeserializationContext(keystore: KeysWrapperNode | KeysWrapperMobile): DeserializationContext {
     return {
       keystore,
       resolver: this.resolver,
@@ -245,25 +249,31 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       // Serialize with encryption context
       const serializeResult = AnyValue.newStruct(userData).serialize(context);
       expect(serializeResult.ok).toBe(true);
-      if (!serializeResult.ok) return;
+      if (!serializeResult.ok) return; //TODO this shuold faile the test with a proper message.. not just return.
       expect(serializeResult.value.length).toBeGreaterThan(0);
 
       // Deserialize with keystore
-      const deserContext = testEnv.createDeserializationContext(testEnv.getNodeWrapper());
+      const deserContext = testEnv.createDeserializationContext(testEnv.getMobileWrapper());//TODO this is never used
       const deserializeResult = AnyValue.deserialize(
         serializeResult.value,
-        testEnv.getNodeWrapper()
+        testEnv.getMobileWrapper()
       );
       expect(deserializeResult.ok).toBe(true);
-      if (!deserializeResult.ok) return;
+      if (!deserializeResult.ok) return;//TODO this shuold faile the test with a proper message.. not just return.
 
       // Verify the decrypted data
       const decrypted = deserializeResult.value;
+      console.log('🔍 Decrypted AnyValue:', decrypted);
+      console.log('🔍 Decrypted category:', (decrypted as any).category);
+      console.log('🔍 Decrypted isEncrypted:', (decrypted as any).isEncrypted);
+
       const asProfileResult = decrypted.as<TestProfile>();
+      console.log('🔍 as<TestProfile> result:', asProfileResult);
       expect(asProfileResult.ok).toBe(true);
-      if (!asProfileResult.ok) return;
+      if (!asProfileResult.ok) return;//TODO this shuold faile the test with a proper message.. not just return.
 
       const decryptedProfile = asProfileResult.value;
+      console.log('🔍 Decrypted profile:', decryptedProfile);
       expect(decryptedProfile.id).toBe(userData.id);
       expect(decryptedProfile.name).toBe(userData.name);
       expect(decryptedProfile.privateData).toBe(userData.privateData);
@@ -290,10 +300,10 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       expect(serializeResult.value.length).toBeGreaterThan(0);
 
       // Deserialize with keystore
-      const deserContext = testEnv.createDeserializationContext(testEnv.getNodeWrapper());
+      const deserContext = testEnv.createDeserializationContext(testEnv.getMobileWrapper());
       const deserializeResult = AnyValue.deserialize(
         serializeResult.value,
-        testEnv.getNodeWrapper()
+        testEnv.getMobileWrapper()
       );
       expect(deserializeResult.ok).toBe(true);
       if (!deserializeResult.ok) return;
@@ -331,10 +341,10 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       expect(serializeResult.value.length).toBeGreaterThan(0);
 
       // Deserialize with keystore
-      const deserContext = testEnv.createDeserializationContext(testEnv.getNodeWrapper());
+      const deserContext = testEnv.createDeserializationContext(testEnv.getMobileWrapper());
       const deserializeResult = AnyValue.deserialize(
         serializeResult.value,
-        testEnv.getNodeWrapper()
+        testEnv.getMobileWrapper()
       );
       expect(deserializeResult.ok).toBe(true);
       if (!deserializeResult.ok) return;
@@ -369,8 +379,8 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       expect(mobileCaps.hasProfileKeys).toBe(true);
       expect(mobileCaps.hasNetworkKeys).toBe(false);
 
-      // Test node keystore capabilities
-      const nodeCaps = testEnv.getNodeWrapper().getKeystoreCaps();
+                  // Test node keystore capabilities
+            const nodeCaps = testEnv.getNodeWrapper().getKeystoreCaps();
       expect(nodeCaps.hasProfileKeys).toBe(false);
       expect(nodeCaps.hasNetworkKeys).toBe(true);
 
@@ -404,10 +414,10 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       console.log(`📈 Encryption time for large data: ${encryptTime}ms`);
 
       // Test decryption
-      const deserContext = testEnv.createDeserializationContext(testEnv.getNodeWrapper());
+      const deserContext = testEnv.createDeserializationContext(testEnv.getMobileWrapper());
       const deserializeResult = AnyValue.deserialize(
         serializeResult.value,
-        testEnv.getNodeWrapper()
+        testEnv.getMobileWrapper()
       );
       expect(deserializeResult.ok).toBe(true);
       if (!deserializeResult.ok) return;
