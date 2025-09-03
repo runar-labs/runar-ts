@@ -7,6 +7,19 @@ alwaysApply: false
 
  Use bun as our TS toolchain.. no npm and not node.. always use bun
 
+- No fallbacks without explicit approval
+  - Code must be predictable. Do not introduce implicit fallbacks or hidden heuristics.
+  - Any fallback behavior must be explicitly pre‑approved, documented, validated, . Otherwise, fail fast with a precise `Result` error.
+
+- Error handling (never throw; no empty catch)
+  - Public APIs return `Result<T, Error>`; do not throw for expected error paths.
+  - When calling external/native APIs that may throw, wrap in `try/catch`; either resolve the condition or return a meaningful `Error` in `Result`.
+  - Never use empty catch blocks; never swallow errors.
+
+
+Use proper types, never use "as any" .. or "any" as parameter sor return types anywqhere in our APIS or internal code. 
+
+NO DEPRECATIONS>> NO BACKWARDS COMPATIBILITY -  this is a new codebase. when changing somethign apply the change everyeheere needed. ABSOLUTELY NO  BACKWARDS COMPATIBILITY  or legacy code left behind. keeop the condebase clean. always
 
 *Logging*
 When developing runar framework core code NEVER use console.log(). use our proper logger mechanism
@@ -33,7 +46,7 @@ sould receive a string, but then at the first step it shuold create a TopicPath 
 all internal methods.
 
 100% Aligment with RUST.
-When develoing RUnar features you shuold not add anytihg that is not in the rust IMPL.. and you shuold always match the full API. same method name (using proper TS stanards e.g. add_service in rust will ne addService in TS) same argumets and same argument names.
+When develoing Runar features in TS you shuold not add anything that is not in the rust implementation and you shuold always match the full API. same method name (using proper TS stanards e.g. add_service in rust will ne addService in TS) same argumets and same argument names.
 same data flow.. for each features map the full dataflow and rules from the rust codebases (check tests also to help your understanding) and make sure the TS version has the exact same dataflow, and rules.
 
 

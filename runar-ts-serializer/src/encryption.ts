@@ -31,7 +31,7 @@ export function encryptLabelGroupSync<T>(
   fieldsStruct: T,
   keystore: CommonKeysInterface,
   resolver: LabelResolver
-): Result<EncryptedLabelGroup> {
+): Result<EncryptedLabelGroup, Error> {
   try {
     // Serialize the fields within this label group using CBOR
     const plainBytes = encode(fieldsStruct);
@@ -46,7 +46,7 @@ export function encryptLabelGroupSync<T>(
 
     const info = infoResult.value;
     if (!info) {
-      return err(new Error(`Label not found`));
+      return err(new Error('Label not found in resolver configuration'));
     }
 
     // Convert to Uint8Array for native API
@@ -71,10 +71,10 @@ export function encryptLabelGroupSync<T>(
 export function decryptLabelGroupSync<T>(
   encryptedGroup: EncryptedLabelGroup,
   keystore: CommonKeysInterface
-): Result<T> {
+): Result<T, Error> {
   try {
     if (!encryptedGroup.envelopeCbor) {
-      return err(new Error('Empty encrypted group - no envelope data'));
+      return err(new Error('Empty encrypted group: no envelope data available'));
     }
 
     // Use original CBOR bytes from native API
@@ -98,7 +98,7 @@ export function decryptLabelGroupSync<T>(
 export function decryptBytesSync(
   bytes: Uint8Array,
   keystore: CommonKeysInterface
-): Result<Uint8Array> {
+): Result<Uint8Array, Error> {
   try {
     // The bytes parameter contains the CBOR-encoded EnvelopeEncryptedData structure
     // The native API expects the same format, so pass it through

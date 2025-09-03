@@ -29,7 +29,6 @@ import {
   decryptLabelGroupSync,
   decryptBytesSync,
   EncryptedLabelGroup,
-  EnvelopeEncryptedData,
 } from './encryption.js';
 
 // Export LabelResolver types and functions
@@ -46,7 +45,7 @@ export type { CacheStats } from './resolver_cache.js';
 export { ResolverCache } from './resolver_cache.js';
 
 // Export encryption functions
-export type { EnvelopeEncryptedData, EncryptedLabelGroup } from './encryption.js';
+export type { EncryptedLabelGroup } from './encryption.js';
 export { encryptLabelGroupSync, decryptLabelGroupSync, decryptBytesSync } from './encryption.js';
 
 // Re-export registry functions
@@ -113,7 +112,7 @@ export class AnyValue<T = unknown> {
   static newPrimitive<T>(value: T): AnyValue<T> {
     const typeName = AnyValue.getTypeName(value);
     if (!AnyValue.isPrimitive(typeName)) {
-      throw new Error(`Not a primitive: ${typeName}`);
+      throw new Error(`Not a primitive type: ${typeName}`);
     }
 
     const serializeFn: SerializeFn = () => {
@@ -153,8 +152,19 @@ export class AnyValue<T = unknown> {
                 break;
               }
             } else {
-              allElementsEncrypted = false;
-              break;
+              // Check if element is a decorated class with encryption methods
+              if (element && typeof element === 'object' && 'encryptWithKeystore' in element) {
+                const encryptedResult = element.encryptWithKeystore(keystore, resolver);
+                if (encryptedResult.ok) {
+                  encryptedElements.push(encode(encryptedResult.value));
+                } else {
+                  allElementsEncrypted = false;
+                  break;
+                }
+              } else {
+                allElementsEncrypted = false;
+                break;
+              }
             }
           }
 
@@ -223,8 +233,19 @@ export class AnyValue<T = unknown> {
                   break;
                 }
               } else {
-                allValuesEncrypted = false;
-                break;
+                // Check if value is a decorated class with encryption methods
+                if (val && typeof val === 'object' && 'encryptWithKeystore' in val) {
+                  const encryptedResult = val.encryptWithKeystore(keystore, resolver);
+                  if (encryptedResult.ok) {
+                    encryptedMap.set(key, encode(encryptedResult.value));
+                  } else {
+                    allValuesEncrypted = false;
+                    break;
+                  }
+                } else {
+                  allValuesEncrypted = false;
+                  break;
+                }
               }
             }
 
@@ -338,11 +359,23 @@ export class AnyValue<T = unknown> {
           }
           // Return CBOR of Encrypted{T} - this will be outer-enveloped by AnyValue.serialize
           return ok(encode(encryptedResult.value));
-        } else {
-          // Regular struct serialization (no encryption)
-          const bytes = encode(value);
-          return ok(bytes);
+        } else if (keystore && resolver) {
+          // Check if there's a registry encryptor for this type
+          const encryptor = lookupEncryptorByTypeName(typeName);
+          if (encryptor) {
+            // Use registry encryptor
+            const encryptedResult = encryptor(value, keystore, resolver);
+            if (encryptedResult.ok) {
+              return ok(encryptedResult.value);
+            } else {
+              return err(encryptedResult.error);
+            }
+          }
         }
+        
+        // Regular struct serialization (no encryption)
+        const bytes = encode(value);
+        return ok(bytes);
       } catch (e) {
         return err(e as Error);
       }
@@ -373,15 +406,19 @@ export class AnyValue<T = unknown> {
   }
 
   // Deserialization constructor matching Rust
-  static deserialize(bytes: Uint8Array, ctx?: DeserializationContext): Result<AnyValue<any>> {
+  static deserialize(bytes: Uint8Array, keystore?: CommonKeysInterface): Result<AnyValue<any>, Error> {
     if (bytes.length === 0) {
-      return err(new Error('Empty bytes for deserialization'));
+      return err(new Error('Empty bytes provided for deserialization'));
+    }
+
+    if (bytes.length < 3) {
+      return err(new Error('Header too short: expected at least 3 bytes'));
     }
 
     const categoryByte = bytes[0];
     const category = AnyValue.categoryFromByte(categoryByte);
     if (category === null) {
-      return err(new Error(`Invalid category byte: ${categoryByte}`));
+      return err(new Error(`Invalid category byte: ${categoryByte} (expected 0-6)`));
     }
 
     if (category === ValueCategory.Null) {
@@ -392,23 +429,31 @@ export class AnyValue<T = unknown> {
     const isEncrypted = isEncryptedByte === 0x01;
 
     const typeNameLen = bytes[2] as number;
+    if (typeNameLen > 255) {
+      return err(new Error('Type name length exceeds maximum (255 bytes)'));
+    }
+    
     if (typeNameLen + 3 > bytes.length) {
-      return err(new Error('Invalid type name length'));
+      return err(new Error('Type name length exceeds available data'));
     }
 
     const typeNameBytes = bytes.subarray(3, 3 + typeNameLen);
     const typeName = new TextDecoder().decode(typeNameBytes);
 
     const dataStart = 3 + typeNameLen;
+    if (dataStart >= bytes.length) {
+      return err(new Error('No data payload after header'));
+    }
+    
     let dataBytes = bytes.subarray(dataStart);
 
     // Handle encrypted data
-    if (isEncrypted && ctx?.decryptEnvelope) {
-      const decryptResult = ctx.decryptEnvelope(dataBytes);
-      if (!decryptResult.ok) {
-        return err(decryptResult.error);
+    if (isEncrypted && keystore) {
+      try {
+        dataBytes = keystore.decryptEnvelope(dataBytes);
+      } catch (error) {
+        return err(new Error(`Decryption failed: ${error}`));
       }
-      dataBytes = decryptResult.value;
     }
 
     // Deserialize based on category
@@ -433,14 +478,14 @@ export class AnyValue<T = unknown> {
         value = decode(dataBytes);
         break;
       default:
-        return err(new Error(`Unsupported category for deserialization: ${category}`));
+        return err(new Error(`Unsupported category for deserialization: ${category} (expected 0-6)`));
     }
 
     // Handle encrypted instances from decorators
-    if (value && typeof value === 'object' && 'decryptWithKeystore' in value && ctx?.keystore) {
+    if (value && typeof value === 'object' && 'decryptWithKeystore' in value && keystore) {
       try {
         // This is an encrypted instance from decorators - decrypt it
-        const decrypted = value.decryptWithKeystore(ctx.keystore);
+        const decrypted = value.decryptWithKeystore(keystore);
         value = decrypted;
       } catch (e) {
         // If decryption fails, keep the encrypted value but log the error
@@ -452,7 +497,7 @@ export class AnyValue<T = unknown> {
     // According to the design plan, this should only happen for specific cases
     if (
       isEncrypted &&
-      ctx?.keystore &&
+      keystore &&
       (category === ValueCategory.Struct ||
         category === ValueCategory.List ||
         category === ValueCategory.Map ||
@@ -465,7 +510,7 @@ export class AnyValue<T = unknown> {
         true,
         dataStart,
         bytes.length,
-        ctx.keystore
+        keystore
       );
 
       // Create AnyValue with lazy data
@@ -614,15 +659,13 @@ export class AnyValue<T = unknown> {
   // Static method to deserialize with encryption support
   static deserializeWithDecryption(
     bytes: Uint8Array,
-    context?: {
-      keystore?: any;
-    }
-  ): Result<AnyValue<any>> {
-    return AnyValue.deserialize(bytes, context);
+    keystore?: CommonKeysInterface
+  ): Result<AnyValue<any>, Error> {
+    return AnyValue.deserialize(bytes, keystore);
   }
 
   // Serialization method matching Rust exactly (synchronous only)
-  serialize(context?: any): Result<Uint8Array> {
+  serialize(context?: SerializationContext): Result<Uint8Array, Error> {
     return this.serializeSync(context);
   }
 
@@ -633,7 +676,7 @@ export class AnyValue<T = unknown> {
     }
 
     if (!this.serializeFn) {
-      return err(new Error('No serialize function available'));
+      return err(new Error('No serialization function available for this value'));
     }
 
     const categoryByte = this.category;
@@ -644,7 +687,7 @@ export class AnyValue<T = unknown> {
     switch (this.category) {
       case ValueCategory.Primitive:
         if (!this.typeName) {
-          return err(new Error('Missing type name for primitive'));
+          return err(new Error('Missing type name for primitive value'));
         }
         wireName = this.typeName;
         break;
@@ -694,7 +737,7 @@ export class AnyValue<T = unknown> {
         break;
       case ValueCategory.Struct:
         if (!this.typeName) {
-          return err(new Error('Missing type name for struct'));
+          return err(new Error('Missing type name for struct value'));
         }
         wireName = this.typeName;
         break;
@@ -702,12 +745,12 @@ export class AnyValue<T = unknown> {
         wireName = 'null';
         break;
       default:
-        return err(new Error(`Unknown category: ${this.category}`));
+        return err(new Error(`Unknown value category: ${this.category} (expected 0-6)`));
     }
 
     const typeNameBytes = new TextEncoder().encode(wireName);
     if (typeNameBytes.length > 255) {
-      return err(new Error(`Wire type name too long: ${wireName}`));
+      return err(new Error(`Wire type name too long: ${wireName} (exceeds 255 bytes)`));
     }
 
     // Serialize the value (sync version) - handle both sync and async serializeFn
@@ -716,7 +759,7 @@ export class AnyValue<T = unknown> {
       const bytesResult = this.serializeFn(this.value, context?.keystore, context?.resolver);
       // If it's a promise, we can't handle it in sync mode
       if (bytesResult instanceof Promise) {
-        return err(new Error('Async serialization function called in sync context'));
+        return err(new Error('Asynchronous serialization function called in synchronous context'));
       }
       if (!bytesResult.ok) {
         return err(bytesResult.error);
@@ -756,7 +799,7 @@ export class AnyValue<T = unknown> {
   }
 
   // Type conversion methods - TS semantic adjustment: single method for lazy decrypt-on-access
-  asType<U = T>(): Result<U> {
+  asType<U = T>(): Result<U, Error> {
     // If we have lazy data, use the lazy deserialization path
     if (this.lazyData) {
       return this.performLazyDecrypt<U>();
@@ -764,20 +807,20 @@ export class AnyValue<T = unknown> {
 
     // Otherwise use the regular value
     if (this.value === null) {
-      return err(new Error('No value to convert'));
+      return err(new Error('No value available for type conversion'));
     }
     return ok(this.value as unknown as U);
   }
 
   // Alias for backward compatibility
-  as<U = T>(): Result<U> {
+  as<U = T>(): Result<U, Error> {
     return this.asType<U>();
   }
 
   // Perform lazy decrypt-on-access logic exactly like Rust
   private performLazyDecrypt<U>(): Result<U> {
     if (!this.lazyData || !this.lazyData.originalBuffer) {
-      return err(new Error('No lazy data available'));
+      return err(new Error('No lazy data available for decryption'));
     }
 
     // Slice the payload from startOffset..endOffset (that is the envelope CBOR)
@@ -807,10 +850,10 @@ export class AnyValue<T = unknown> {
                 return err(new Error(`Registry decryptor failed: ${decrypted.error.message}`));
               }
             } catch (decryptorError) {
-              return err(new Error(`Registry decryptor error: ${decryptorError}`));
+              return err(new Error(`Registry decryptor execution error: ${decryptorError}`));
             }
           } else {
-            return err(new Error(`No decryptor found for type: ${this.lazyData.typeName}`));
+            return err(new Error(`No decryptor registered for type: ${this.lazyData.typeName}`));
           }
         }
       } catch (envelopeDecryptError) {
@@ -852,7 +895,7 @@ export class AnyValue<T = unknown> {
           return AnyValue.newMap(value) as AnyValue<T>;
         }
         throw new Error(
-          `Expected Map instance for ValueCategory.Map, but got ${typeof value}: ${value}`
+          `Expected Map instance for ValueCategory.Map, but got ${typeof value}`
         );
       case ValueCategory.Struct:
         return AnyValue.newStruct(value as any) as AnyValue<T>;
@@ -868,10 +911,10 @@ export class AnyValue<T = unknown> {
   }
 
   // Core API method for deserializing AnyValue from wire format bytes
-  static fromBytes<T = unknown>(bytes: Uint8Array, ctx?: DeserializationContext): AnyValue<T> {
-    const result = AnyValue.deserialize(bytes, ctx);
+  static fromBytes<T = unknown>(bytes: Uint8Array, keystore?: CommonKeysInterface): AnyValue<T> {
+    const result = AnyValue.deserialize(bytes, keystore);
     if (!result.ok) {
-      throw new Error(`Failed to deserialize: ${result.error.message}`);
+      throw new Error(`Failed to deserialize AnyValue: ${result.error}`);
     }
     return result.value as AnyValue<T>;
   }
@@ -900,7 +943,7 @@ export function serializeEntity(entity: any): Uint8Array | Promise<Uint8Array> {
 }
 
 // Export function to deserialize entities
-export function deserializeEntity<T>(bytes: Uint8Array, ctx?: DeserializationContext): Result<T> {
-  const av = AnyValue.fromBytes<T>(bytes, ctx);
+export function deserializeEntity<T>(bytes: Uint8Array, keystore?: CommonKeysInterface): Result<T, Error> {
+  const av = AnyValue.fromBytes<T>(bytes, keystore);
   return av.as<T>();
 }

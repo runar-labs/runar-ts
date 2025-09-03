@@ -365,7 +365,7 @@ describe('Cross-Language Compatibility Tests', () => {
       expect(serialized.ok).toBe(true);
 
       // Test deserialization with keystore
-      const deserialized = AnyValue.deserialize(serialized.value, { keystore: realKeystore });
+      const deserialized = AnyValue.deserialize(serialized.value, realKeystore);
       expect(deserialized.ok).toBe(true);
       expect(deserialized.value.getCategory()).toBe(ValueCategory.Struct);
 
@@ -465,7 +465,7 @@ describe('Cross-Language Compatibility Tests', () => {
       expect(serialized.ok).toBe(true);
 
       // Test deserialization with keystore
-      const deserialized = AnyValue.deserialize(serialized.value, { keystore: realKeystore });
+      const deserialized = AnyValue.deserialize(serialized.value, realKeystore);
       expect(deserialized.ok).toBe(true);
       expect(deserialized.value.getCategory()).toBe(ValueCategory.List);
 
@@ -484,7 +484,7 @@ describe('Cross-Language Compatibility Tests', () => {
       expect(serialized.ok).toBe(true);
 
       // The wire format should include proper type information
-      const deserialized = AnyValue.deserialize(serialized.value, { keystore: realKeystore });
+      const deserialized = AnyValue.deserialize(serialized.value, realKeystore);
       expect(deserialized.ok).toBe(true);
       expect(deserialized.value.getCategory()).toBe(ValueCategory.List);
     });
@@ -504,7 +504,7 @@ describe('Cross-Language Compatibility Tests', () => {
       expect(serialized.ok).toBe(true);
 
       // Deserialize with keystore (should use registered decryptors)
-      const deserialized = AnyValue.deserialize(serialized.value, { keystore: realKeystore });
+      const deserialized = AnyValue.deserialize(serialized.value, realKeystore);
       expect(deserialized.ok).toBe(true);
 
       // Test lazy deserialization (should use registry decryptors)

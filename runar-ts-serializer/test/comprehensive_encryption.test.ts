@@ -12,7 +12,7 @@ import {
   decryptBytesSync,
 } from '../src/index.js';
 import { Keys } from 'runar-nodejs-api';
-import { KeysManagerWrapper } from '../../runar-ts-node/src/keys_manager_wrapper.js';
+import { KeystoreFactory, KeysWrapperMobile, KeysWrapperNode } from '../../runar-ts-node/src/keys_manager_wrapper.js';
 
 /**
  * Comprehensive Encryption Tests
@@ -23,24 +23,48 @@ import { KeysManagerWrapper } from '../../runar-ts-node/src/keys_manager_wrapper
  * NO MOCKS, NO STUBS, NO SHORTCUTS - Real cryptographic operations only
  */
 
-// Test environment that mirrors Rust TestEnvironment
-class TestEnvironment {
+export class ComprehensiveEncryptionTestContext {
   private mobileKeys: Keys;
   private nodeKeys: Keys;
-  private mobileWrapper: KeysManagerWrapper;
-  private nodeWrapper: KeysManagerWrapper;
+  private mobileWrapper: KeysWrapperMobile;
+  private nodeWrapper: KeysWrapperNode;
+  private userPublicKey: Uint8Array;
+  private nodePublicKey: Uint8Array;
   private networkId: string;
-  private userProfileKeys: Uint8Array[];
   private networkPublicKey: Uint8Array;
+  private personalKey: Uint8Array;
+  private workKey: Uint8Array;
+  private profileKeys: Uint8Array[];
+  private labelResolverConfig: LabelResolverConfig;
+  private resolverCache: ResolverCache;
 
   constructor() {
     this.mobileKeys = new Keys();
     this.nodeKeys = new Keys();
-    this.mobileWrapper = new KeysManagerWrapper(this.mobileKeys);
-    this.nodeWrapper = new KeysManagerWrapper(this.nodeKeys);
-    this.userProfileKeys = [];
-    this.networkPublicKey = new Uint8Array(0);
+    
+    // Use the new keystore factory to create role-specific wrappers
+    const mobileResult = KeystoreFactory.create(this.mobileKeys, 'frontend');
+    const nodeResult = KeystoreFactory.create(this.nodeKeys, 'backend');
+    
+    if (!mobileResult.ok) {
+      throw new Error(`Failed to create mobile keystore wrapper: ${mobileResult.error.message}`);
+    }
+    if (!nodeResult.ok) {
+      throw new Error(`Failed to create node keystore wrapper: ${nodeResult.error.message}`);
+    }
+    
+    this.mobileWrapper = mobileResult.value as KeysWrapperMobile;
+    this.nodeWrapper = nodeResult.value as KeysWrapperNode;
+    
+    this.userPublicKey = new Uint8Array(0);
+    this.nodePublicKey = new Uint8Array(0);
     this.networkId = '';
+    this.networkPublicKey = new Uint8Array(0);
+    this.personalKey = new Uint8Array(0);
+    this.workKey = new Uint8Array(0);
+    this.profileKeys = [];
+    this.labelResolverConfig = { labelMappings: new Map() };
+    this.resolverCache = ResolverCache.newDefault();
   }
 
   async initialize(): Promise<void> {
@@ -69,7 +93,7 @@ class TestEnvironment {
     // Generate profile keys (mirrors Rust profile key derivation)
     const personalKey = new Uint8Array(this.mobileKeys.mobileDeriveUserProfileKey('personal'));
     const workKey = new Uint8Array(this.mobileKeys.mobileDeriveUserProfileKey('work'));
-    this.userProfileKeys = [personalKey, workKey];
+    this.profileKeys = [personalKey, workKey];
 
     console.log(`   ✅ Profile keys generated: personal, work`);
 
@@ -90,11 +114,11 @@ class TestEnvironment {
     console.log('🧹 Cleaning up test environment');
   }
 
-  getMobileWrapper(): KeysManagerWrapper {
+  getMobileWrapper(): KeysWrapperMobile {
     return this.mobileWrapper;
   }
 
-  getNodeWrapper(): KeysManagerWrapper {
+  getNodeWrapper(): KeysWrapperNode {
     return this.nodeWrapper;
   }
 
@@ -107,7 +131,7 @@ class TestEnvironment {
   }
 
   getUserProfileKeys(): Uint8Array[] {
-    return this.userProfileKeys;
+    return this.profileKeys;
   }
 }
 
@@ -121,12 +145,12 @@ interface TestProfile {
 }
 
 describe('Comprehensive Encryption Tests', () => {
-  let testEnv: TestEnvironment;
+  let testEnv: ComprehensiveEncryptionTestContext;
   let labelResolverConfig: LabelResolverConfig;
   let resolverCache: ResolverCache;
 
   beforeAll(async () => {
-    testEnv = new TestEnvironment();
+    testEnv = new ComprehensiveEncryptionTestContext();
     await testEnv.initialize();
 
     // Create label resolver configuration that mirrors Rust encryption_test.rs
@@ -540,9 +564,7 @@ describe('Comprehensive Encryption Tests', () => {
       expect(serializedBytes.length).toBeGreaterThan(0);
 
       // Deserialize with keystore
-      const deserializeResult = AnyValue.deserialize(serializedBytes, {
-        keystore: testEnv.getMobileWrapper(),
-      });
+      const deserializeResult = AnyValue.deserialize(serializedBytes, testEnv.getMobileWrapper());
       expect(deserializeResult.ok).toBe(true);
 
       const deserialized = deserializeResult.value!;

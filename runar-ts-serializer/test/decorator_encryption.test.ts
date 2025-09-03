@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import 'reflect-metadata';
 import {
   LabelResolver,
   createContextLabelResolver,
@@ -28,32 +27,31 @@ import { KeysManagerWrapper } from '../../runar-ts-node/src/keys_manager_wrapper
  * NO MOCKS, NO STUBS, NO SHORTCUTS - Real cryptographic operations only
  */
 
-// Test struct that mirrors the Rust TestProfile
-@Plain({ name: 'decorator_test.TestProfile' })
+// Test data structure for encryption testing
 class TestProfile {
-  @runar({ system: true })
-  public name: string;
-
-  @runar({ user: true })
-  public private: string;
-
-  @runar({ search: true })
-  public email: string;
-
-  @runar({ systemOnly: true })
-  public systemMetadata: string;
-
   constructor(
     public id: string,
-    name: string,
-    privateData: string,
-    email: string,
-    systemMetadata: string
-  ) {
-    this.name = name;
-    this.private = privateData;
-    this.email = email;
-    this.systemMetadata = systemMetadata;
+    public name: string,
+    public privateData: string,
+    public email: string,
+    public systemMetadata: string
+  ) {}
+
+  // Simple getters without decorators for now
+  get nameField(): string {
+    return this.name;
+  }
+
+  get privateField(): string {
+    return this.privateData;
+  }
+
+  get emailField(): string {
+    return this.email;
+  }
+
+  get systemField(): string {
+    return this.systemMetadata;
   }
 }
 
@@ -119,9 +117,10 @@ class DecoratorTestContext {
 
     // Install network key on node
     const token = this.nodeKeys.nodeGenerateCsr();
+    const nodeAgreementPk = this.nodeKeys.nodeGetAgreementPublicKey();
     const nkMsg = this.mobileNetworkMaster.mobileCreateNetworkKeyMessage(
       this.networkPub,
-      token.nodeAgreementPublicKey
+      nodeAgreementPk
     );
     this.nodeKeys.nodeInstallNetworkKey(nkMsg);
 

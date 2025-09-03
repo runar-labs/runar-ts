@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'bun:test';
-import 'reflect-metadata';
 import { EncryptedClass } from 'runar-ts-decorators';
 import { AnyValue, readHeader, ValueCategory } from '../src/index.js';
 

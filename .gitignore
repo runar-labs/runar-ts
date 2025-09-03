@@ -115,3 +115,6 @@ build-artifacts/
 
 
 target/
+runar-ts-decorators/src/index.ts
+runar-ts-decorators/dist-test/
+runar-ts-decorators/dist-tsc/

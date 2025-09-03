@@ -1,8 +1,16 @@
 import { Result, ok, err } from './result.js';
 
+// Device capabilities interface as specified in Section 25.5
+export interface DeviceKeystoreCaps {
+  readonly canEncrypt: boolean;
+  readonly canDecrypt: boolean;
+  readonly hasNetworkKeys: boolean;
+  readonly hasProfileKeys: boolean;
+}
+
 // Common interface for serialization and functionality that should NOT be aware of platform differences
 export interface CommonKeysInterface {
-  // === ENVELOPE ENCRYPTION (WORKS ON BOTH) ===
+  // === CORE SERIALIZER METHODS (Section 25.5) ===
   encryptWithEnvelope(
     data: Uint8Array,
     networkPublicKey: Uint8Array | undefined | null,
@@ -11,22 +19,18 @@ export interface CommonKeysInterface {
 
   decryptEnvelope(eedCbor: Uint8Array): Uint8Array;
 
-  // === UTILITY METHODS (BOTH PLATFORMS) ===
-  ensureSymmetricKey(keyName: string): Uint8Array;
-  setLabelMapping(mappingCbor: Uint8Array): void;
-  setLocalNodeInfo(nodeInfoCbor: Uint8Array): void;
+  getKeystoreState(): number;
 
-  // === CONFIGURATION (BOTH PLATFORMS) ===
+  getKeystoreCaps(): DeviceKeystoreCaps;
+
+  // === ADMINISTRATIVE/UTILITY METHODS (Section 25.5) ===
+  ensureSymmetricKey(keyName: string): Uint8Array;
+  setLocalNodeInfo(nodeInfoCbor: Uint8Array): void;
   setPersistenceDir(dir: string): void;
   enableAutoPersist(enabled: boolean): void;
   wipePersistence(): Promise<void>;
   flushState(): Promise<void>;
-
-  // === STATE QUERIES (BOTH PLATFORMS) ===
-  getKeystoreState(): number; // Common method, not platform-specific
-
-  // === CAPABILITIES ===
-  getKeystoreCaps(): any; // DeviceKeystoreCaps type
+  setLabelMapping(label: string, networkPublicKey?: Uint8Array, userKeySpec?: unknown): void;
 }
 
 // Value categories exactly matching Rust runar-serializer
@@ -81,19 +85,19 @@ export interface WireHeader {
 // Minimal wire reader/writer scaffolding; will be extended to match Rust byte-for-byte
 export function readHeader(bytes: Uint8Array): Result<WireHeader> {
   if (bytes.length < 3) {
-    return err(new Error('Invalid header: too short'));
+    return err(new Error('Header too short: expected at least 3 bytes'));
   }
   const category = bytes[0] as ValueCategory;
   const encFlag = bytes[1];
   const typeLen = bytes[2];
   if (category > ValueCategory.Json) {
-    return err(new Error('Invalid category'));
+    return err(new Error(`Invalid category: ${category} (expected 0-6)`));
   }
   if (typeLen > 0) {
     const start = 3;
     const end = 3 + typeLen;
     if (end > bytes.length) {
-      return err(new Error('Invalid type name length'));
+      return err(new Error('Type name length exceeds available data'));
     }
     const typeName = new TextDecoder().decode(bytes.subarray(start, end));
     return ok({ category, isEncrypted: encFlag !== 0, typeName });

@@ -1,9 +1,8 @@
 import { describe, it, expect } from 'bun:test';
-import 'reflect-metadata';
-import { EncryptedClass, getTypeName } from 'runar-ts-decorators';
+import { Encrypt, getTypeName } from '../runar-ts-decorators/dist/index.js';
 import { registerType, resolveType, clearRegistry } from '../src/registry';
 
-@EncryptedClass({ network: 'default', typeName: 'com.runar.TestProfile' })
+@Encrypt({ name: 'com.runar.TestProfile' })
 class TestProfile {
   constructor(
     public id: string,

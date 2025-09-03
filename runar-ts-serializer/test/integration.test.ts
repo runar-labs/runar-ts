@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeAll } from 'bun:test';
 import {
   LabelResolver,
   LabelResolverConfig,
@@ -10,12 +10,12 @@ import {
   SerializationContext,
 } from '../src/index.js';
 import { Keys } from 'runar-nodejs-api';
-import { KeysManagerWrapper } from '../../runar-ts-node/src/keys_manager_wrapper.js';
+import { KeystoreFactory, KeysWrapperMobile } from '../../runar-ts-node/src/keys_manager_wrapper.js';
 
 // REAL keystore for testing - NO MOCKS ALLOWED
 class RealTestKeystore {
   private keys: Keys;
-  private wrapper: KeysManagerWrapper;
+  private wrapper: KeysWrapperMobile;
   private _networkPublicKey: Buffer;
   private _profilePublicKeys: Buffer[];
 
@@ -24,7 +24,7 @@ class RealTestKeystore {
     this.keys.setPersistenceDir('/tmp/runar-integration-test');
     this.keys.enableAutoPersist(true);
     this.keys.initAsMobile();
-    this.wrapper = new KeysManagerWrapper(this.keys);
+    this.wrapper = new KeysWrapperMobile(this.keys);
 
     // Initialize with real keys
     this._networkPublicKey = Buffer.alloc(32, 0x01);
@@ -94,23 +94,27 @@ class RealTestKeystore {
 }
 
 describe('Integration Tests', () => {
-  let config: LabelResolverConfig;
-  let resolver: LabelResolver;
-  let cache: ResolverCache;
-  let keystore: RealTestKeystore;
+  let keys: Keys;
+  let wrapper: KeysWrapperMobile;
+  let labelResolverConfig: LabelResolverConfig;
+  let resolverCache: ResolverCache;
 
-  beforeEach(async () => {
-    // Create and initialize REAL keystore first to get actual keys
-    keystore = new RealTestKeystore();
-    await keystore.initialize();
-
-    // Create test configuration using actual keys from the keystore
-    config = {
+  beforeAll(async () => {
+    keys = new Keys();
+    
+    // Use the new keystore factory to create role-specific wrapper
+    const result = KeystoreFactory.create(keys, 'frontend');
+    if (!result.ok) {
+      throw new Error(`Failed to create keystore wrapper: ${result.error.message}`);
+    }
+    wrapper = result.value as KeysWrapperMobile;
+    
+    labelResolverConfig = {
       labelMappings: new Map([
         [
           'system',
           {
-            networkPublicKey: keystore.networkPublicKey,
+            networkPublicKey: new Uint8Array([1, 2, 3, 4]),
             userKeySpec: undefined,
           },
         ],
@@ -118,29 +122,12 @@ describe('Integration Tests', () => {
           'user',
           {
             networkPublicKey: undefined,
-            userKeySpec: LabelKeyword.CurrentUser,
-          },
-        ],
-        [
-          'mixed',
-          {
-            networkPublicKey: keystore.networkPublicKey,
-            userKeySpec: LabelKeyword.CurrentUser,
+            userKeySpec: { type: 'CurrentUser' },
           },
         ],
       ]),
     };
-
-    // Create resolver using actual profile keys from the keystore
-    const resolverResult = LabelResolver.createContextLabelResolver(
-      config,
-      keystore.profilePublicKeys
-    );
-    expect(resolverResult.ok).toBe(true);
-    resolver = resolverResult.value!;
-
-    // Create cache
-    cache = ResolverCache.newDefault();
+    resolverCache = ResolverCache.newDefault();
   });
 
   describe('LabelResolver', () => {

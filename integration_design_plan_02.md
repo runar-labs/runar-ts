@@ -1,3 +1,21 @@
+## Engineering Principles (Enforced)
+
+- Keystore role separation (mobile vs node)
+  - Role comes from `NodeConfig.role: 'frontend' | 'backend'` (TS only). Once initialized, role MUST NOT change for the lifetime of the process.
+  - Use distinct wrappers (`KeysWrapperMobile` for frontend, `KeysWrapperNode` for backend) created by `KeystoreFactory` based on `NodeConfig.role`.
+  - No mixing of mobile and node logic anywhere. Calling a method not supported by the current role MUST return a `Result` error (no fallback, no internal branching to emulate the other role).
+
+- No fallbacks without explicit approval
+  - Code must be predictable. Do not introduce implicit fallbacks or hidden heuristics.
+  - Any fallback behavior must be explicitly documented, validated, and pre‑approved. Otherwise, fail fast with a precise `Result` error.
+
+- Error handling (never throw; no empty catch)
+  - Public APIs return `Result<T, Error>`; do not throw for expected error paths.
+  - When calling external/native APIs that may throw, wrap in `try/catch`; either resolve the condition or return a meaningful `Error` in `Result`.
+  - Never use empty catch blocks; never swallow errors.
+
+---
+
 ## Integration Design Plan (02): TypeScript LabelResolver Parity with Rust
 
 ### Objective
@@ -6,7 +24,7 @@ Achieve 100% functional and API parity between the TypeScript LabelResolver ecos
 
 ## 1. Current State Analysis
 
-### 1.1 What’s Already Implemented (TypeScript)
+### 1.1 What's Already Implemented (TypeScript)
 
 - LabelResolver core (`runar-ts-serializer/src/label_resolver.ts`):
   - Types: `LabelKeyInfo`, `LabelValue`, `LabelKeyword`, `LabelResolverConfig`, `KeyMappingConfig`.
@@ -14,7 +32,7 @@ Achieve 100% functional and API parity between the TypeScript LabelResolver ecos
   - Parity: Mirrors Rust structures and validation semantics including CurrentUser dynamic resolution and strict validation for empty config and empty network keys.
 - ResolverCache (`runar-ts-serializer/src/resolver_cache.ts`):
   - LRU+TTL cache with size-based eviction and expiration cleanup, keying by user profile public keys.
-  - Parity: Matches Rust’s intention (age/lastAccessed, TTL, LRU) and cache key derived from sorted keys.
+  - Parity: Matches Rust's intention (age/lastAccessed, TTL, LRU) and cache key derived from sorted keys.
 - Encryption helpers (`runar-ts-serializer/src/encryption.ts`):
   - ✅ **COMPLETE**: `encryptLabelGroupSync`, `decryptLabelGroupSync`, `decryptBytesSync` with full `CommonKeysInterface` integration.
   - ✅ **COMPLETE**: `EncryptedLabelGroup` stores raw CBOR bytes directly from native API, ensuring 100% Rust parity and optimal performance.
@@ -25,7 +43,7 @@ Achieve 100% functional and API parity between the TypeScript LabelResolver ecos
   - Local request/subscribe/publish paths are implemented with `AnyValue` integration.
 - Tests present for label resolver, resolver cache, wire types, and encryption roundtrips.
 
-### 1.2 What’s Missing / Gaps (vs. Rust)
+### 1.2 What's Missing / Gaps (vs. Rust)
 
 - SerializationContext parity:
   - Rust: `SerializationContext { keystore: Arc<KeyStore>, resolver: Arc<LabelResolver>, network_public_key: Vec<u8>, profile_public_keys: Vec<Vec<u8>> }`.
@@ -75,7 +93,7 @@ Achieve 100% functional and API parity between the TypeScript LabelResolver ecos
 - Context creation:
   - `createContextLabelResolver(systemConfig, userProfileKeys)` replicates Rust: for each label resolve pre-resolved `networkPublicKey` (use empty for user-only), attach all `userProfileKeys` when `CurrentUser`.
 - Error handling:
-  - Stabilize error messages to exactly match Rust tests (e.g., “Label '{label}' must specify either network_public_key or user_key_spec (or both)”).
+  - Stabilize error messages to exactly match Rust tests (e.g., "Label '{label}' must specify either network_public_key or user_key_spec (or both)").
 
 ### 2.2 ResolverCache Implementation
 
@@ -84,7 +102,7 @@ Achieve 100% functional and API parity between the TypeScript LabelResolver ecos
 - Cache key generation:
   - Deterministic hashing of sorted user profile keys (byte-wise). Replace ad-hoc JS hash with stable string digest:
     - Use `crypto.subtle.digest('SHA-256', concat(sortedKeys))` when available, with a synchronous fallback using a fast JS hash for Node without subtle.
-  - Sorting by length then lexicographical byte compare to match Rust’s `DefaultHasher` stable ordering; document any differences and ensure cross-language cache behavior is not externally observable.
+  - Sorting by length then lexicographical byte compare to match Rust's `DefaultHasher` stable ordering; document any differences and ensure cross-language cache behavior is not externally observable.
 - Concurrency:
   - Single-threaded Node minimizes races; ensure methods are pure and idempotent. For shared contexts, avoid mutation of inputs. Provide `cleanupExpired()` and `clear()`.
 - Performance:
@@ -141,16 +159,16 @@ Achieve 100% functional and API parity between the TypeScript LabelResolver ecos
   - Add `role: 'frontend' | 'backend'` field (defaults to 'backend' for TypeScript).
 - Node constructor:
   - Initialize `ResolverCache.newDefault()`.
-  - Derive `networkPublicKey` via keys wrapper for the node’s default network when needed.
+  - Derive `networkPublicKey` via keys wrapper for the node's default network when needed.
 - Serialization Context creation:
   - Implement `createSerializationContext(userProfileKeys?: Uint8Array[])`:
     - Use `resolverCache.getOrCreate(config, userProfileKeys ?? [])`.
-    - Resolve `networkPublicKey` from keystore for the node’s default network id.
+    - Resolve `networkPublicKey` from keystore for the node's default network id.
     - Return fully-populated `SerializationContext`.
 - Remote Services:
   - Implement `RemoteService` in TS Node following Rust:
     - During request: build `SerializationContext` with cached resolver and pre-resolved keys, call `AnyValue.serialize(context)` to encrypt, send via transport.
-    - On response: `AnyValue.deserialize(bytes, keystore)` with node’s keystore.
+    - On response: `AnyValue.deserialize(bytes, keystore)` with node's keystore.
 
 ### 2.7 Native API Integration
 
@@ -580,8 +598,8 @@ This plan expands 02 to fully cover the areas detailed in 01 and adds transporte
   - `cleanupExpired(): number`, `stats(): { totalEntries, maxSize, ttlSeconds }`, `clear(): void`
 - Encryption (synchronous serializer helpers) ✅ **IMPLEMENTED**
   - `encryptLabelGroupSync(label, fields, keystore, resolver): Result<EncryptedLabelGroup, Error>`
-  - `decryptLabelGroupSync(group, keystore): Result<T, Error>`
-  - `decryptBytesSync(bytes, keystore): Result<Uint8Array, Error>`
+  - `decryptLabelGroupSync<T>(group: EncryptedLabelGroup, keystore: CommonKeysInterface): Result<T, Error>`
+  - `decryptBytesSync(bytes: Uint8Array, keystore: CommonKeysInterface): Result<Uint8Array, Error>`
   - **Note**: `EncryptedLabelGroup` contains only `envelopeCbor: Uint8Array` (raw CBOR bytes from native API)
 - AnyValue
   - `serialize(ctx?: SerializationContext): Result<Uint8Array, Error>`
@@ -744,7 +762,7 @@ This ensures the TS implementation uses the native transporter/discovery exactly
 
 ## 16. Critique Integration: Precise Implementation Details
 
-This section incorporates the review’s valid points, adding concrete algorithms and structures to remove ambiguity and ensure 100% Rust parity.
+This section incorporates the review's valid points, adding concrete algorithms and structures to remove ambiguity and ensure 100% Rust parity.
 
 ### 16.1 Wire Format: Exact Algorithms and Envelope CBOR
 
@@ -761,7 +779,7 @@ This section incorporates the review’s valid points, adding concrete algorithm
   - Lists: `list<wireElem>` where `wireElem` is resolved from registry; heterogeneous lists fallback to `list<any>`.
   - Maps: `map<string,wireVal>` if values homogeneous and resolvable; else `map<string,any>`.
 - Algorithm (TS):
-  - Resolve `wireName` using registry and container parameterization logic mirroring Rust’s `wire_name_for_container`.
+  - Resolve `wireName` using registry and container parameterization logic mirroring Rust's `wire_name_for_container`.
   - If `context` present:
     - `bytes = ser_fn(inner, keystore, resolver)` with element encryption support (see 16.3).
     - `envelope = keystore.encryptWithEnvelope(bytes, networkPublicKey?, profilePublicKeys[])` (native returns CBOR bytes of `EnvelopeEncryptedData`).
@@ -867,7 +885,7 @@ This section incorporates the review’s valid points, adding concrete algorithm
 - Transport end-to-end tests for request/publish including `requestToPublicKey` and publish variants.
 - Decorator idempotent registration and generated companion correctness.
 
-With these additions, the plan specifies the “how” with enough detail to implement without ambiguity and ensures strict alignment with Rust behavior and the updated NodeJS transporter API.
+With these additions, the plan specifies the "how" with enough detail to implement without ambiguity and ensures strict alignment with Rust behavior and the updated NodeJS transporter API.
 
 ## 17. Final Corrections: Encryption Flow, Decorators, Registry (Rust-Parity)
 
@@ -905,7 +923,7 @@ This section reconciles the design with the exact Rust behavior and supersedes a
 
 ### 17.4 AnyValue (TS) Serialize/Deserialize MUST be Synchronous
 
-- Match Rust’s synchronous API:
+- Match Rust's synchronous API:
   - `serialize(context?: SerializationContext): Result<Uint8Array>`
   - `deserialize(bytes: Uint8Array, keystore?: CommonKeysInterface): Result<AnyValue>`
 - Under the hood, the NodeJS API `Keys` methods used by the serializer are synchronous (per NAPI surface), so no async/await in serializer paths.
@@ -951,7 +969,7 @@ This section reconciles the design with the exact Rust behavior and supersedes a
 ### 17.8 Field Duplication Semantics (Labels)
 
 - A field can appear in more than one label group (e.g., `user`, `search`).
-- Grouping must include the field in every matching label’s `<Class><Label>Fields` sub-struct.
+- Grouping must include the field in every matching label's `<Class><Label>Fields` sub-struct.
 - The serializer encryptor produces distinct `EncryptedLabelGroup` entries per label.
 
 ### 17.9 Tests to Validate Corrections
@@ -1031,7 +1049,7 @@ This section consolidates and reconciles the decorator system design into the ov
 
 ### 18.8 Testing (Decorators)
 
-- Unit: metadata capture, label grouping/ordering, codegen naming, idempotent registration, sync methods’ structural correctness.
+- Unit: metadata capture, label grouping/ordering, codegen naming, idempotent registration, sync methods' structural correctness.
 - Integration: AnyValue serialize triggers registry encryptor; deserialize triggers decryptor; multiple labels and duplication validated.
 - E2E: Envelope encryption with keystore, missing-label error behavior, performance baselines.
 
@@ -1157,8 +1175,8 @@ Given `bytes` from the wire:
   - List/Map with element encryptor: CBOR(Vec/Map of bytes where bytes = CBOR(Encrypted<Elem>))
   - List/Map without encryptor: CBOR(Vec/Map of plain values)
 - AnyValue.serialize(context?) MUST:
-  - With context: envelope the serializeFn’s CBOR with `keystore.encryptWithEnvelope` and write CBOR(EnvelopeEncryptedData)
-  - Without context: write serializeFn’s CBOR directly
+  - With context: envelope the serializeFn's CBOR with `keystore.encryptWithEnvelope` and write CBOR(EnvelopeEncryptedData)
+  - Without context: write serializeFn's CBOR directly
 - decryptBytesSync(bytes, keystore): expects `bytes = CBOR(EnvelopeEncryptedData)`; returns plaintext `Uint8Array`
 - keystore.decryptEnvelope(cborEnvelopeBytes): same as decryptBytesSync but calls native decrypt directly
 
@@ -1172,19 +1190,19 @@ Given `bytes` from the wire:
   - decryptor: decodes `Encrypted{T}` and calls `decryptWithKeystore` to return Plain T
 - Without proper registration, step 6 in 21.3 will fail; tests expecting inner decrypts will not pass
 
-### 21.6 Byte Slicing & CBOR Pitfalls (Do/Don’t)
+### 21.6 Byte Slicing & CBOR Pitfalls (Do/Don't)
 
 - DO: Slice `body = bytes.subarray(3 + typeNameLen)`
 - DO: Pass `body` (CBOR(EnvelopeEncryptedData)) directly to `keystore.decryptEnvelope`
 - DO: Treat all binary fields of `EnvelopeEncryptedData` as `Uint8Array`
-- DON’T: JSON.stringify/parse `Uint8Array` (you’ll get numeric-keyed objects)
-- DON’T: Reconstruct envelope from partial fields; prefer passing exact CBOR from the wire
+- DON'T: JSON.stringify/parse `Uint8Array` (you'll get numeric-keyed objects)
+- DON'T: Reconstruct envelope from partial fields; prefer passing exact CBOR from the wire
 - If you must reconstruct (tests/tools), normalize binary fields:
   - `toU8 = v => (v instanceof Uint8Array ? v : Uint8Array.from(Object.values(v)))`
 
 ### 21.7 TS-only API Adjustment (Refs → Values)
 
-- TS replaces Rust’s `as_type_ref<T>` with `asType<T>(): Result<T, Error>`
+- TS replaces Rust's `as_type_ref<T>` with `asType<T>(): Result<T, Error>`
 - The internal lazy decrypt-on-access logic is identical in functionality
 - Performance impact is negligible for our use; document rationale where ref-methods are mentioned
 
@@ -1213,7 +1231,7 @@ Rust parity requirement: For an encrypted payload, callers can either obtain the
 - Algorithm:
   1. If not lazy (plain body): decode directly to `T`. If decoding fails, error `InvalidTypeForPlainBody`.
   2. If lazy (encrypted body):
-     - If `T` is `Encrypted{U}` (detected via registry “encrypted companion” metadata):
+     - If `T` is `Encrypted{U}` (detected via registry "encrypted companion" metadata):
        a) Decrypt outer envelope → innerBytes
        b) Decode innerBytes as `Encrypted{U}` and return
      - Else (plain `U` requested):
@@ -1344,3 +1362,279 @@ All comprehensive encryption tests (19/19) pass, confirming:
 - Cross-keystore access control
 - Performance benchmarks
 - Error handling scenarios
+
+## 25. Keystore Role Separation (Mobile vs Node) — Detailed Design
+
+### 25.1 Role source of truth
+- `NodeConfig.role?: 'frontend' | 'backend'` (defaults to `'backend'`)
+- Role is read exactly once during node initialization; after selection, role is immutable for the process lifetime.
+- Any attempt to reconfigure or reconstruct a wrapper of a different role MUST return `Err(RoleImmutable)`.
+
+### 25.2 Wrappers and responsibilities
+- KeysWrapperNode (backend)
+  - Wraps native `Keys` in node mode; sync methods used by serializer and networking.
+  - Provides: `nodeEncryptWithEnvelope`, `nodeDecryptEnvelope`, `nodeGetKeystoreState`, `nodeGetPublicKey`, `nodeGenerateCsr`, `nodeInstallCertificate`, `nodeInstallNetworkKey`, `encrypt_local_data`, `decrypt_local_data`, QUIC certificate accessors, etc.
+  - Returns `Result` for all public calls; never throws.
+  - Prohibits mobile-only operations (returns `Err(UnsupportedInBackendRole)`).
+- KeysWrapperMobile (frontend)
+  - Wraps native `Keys` in mobile mode; sync methods used by serializer (mobile app context).
+  - Provides: `mobileEncryptWithEnvelope`, `mobileDecryptEnvelope`, `mobileInitializeUserRootKey`, `mobileDeriveUserProfileKey`, `mobileInstallNetworkPublicKey`, etc.
+  - Returns `Result`; prohibits node-only operations (returns `Err(UnsupportedInFrontendRole)`).
+
+### 25.3 KeystoreFactory
+- Input: `NodeConfig.role`
+- Output: a single concrete wrapper instance (`KeysWrapperNode` or `KeysWrapperMobile`)
+- Invariants:
+  - Only one wrapper instance is constructed per `Node` instance
+  - Wrapper role matches `NodeConfig.role`
+  - Exposes a unified `CommonKeysInterface` (runtime class) with a subset of common methods used by the serializer (encrypt/decrypt envelope, get caps/state)
+- Example (TS):
+```ts
+export class KeystoreFactory {
+  static create(config: NodeConfig): Result<CommonKeysInterface, Error> {
+    if (config.role === 'frontend') return ok(new KeysWrapperMobile(/* native */));
+    return ok(new KeysWrapperNode(/* native */));
+  }
+}
+```
+
+### 25.4 Lifecycle
+- Node initialization
+  1) Read `NodeConfig.role` (default `'backend'`)
+  2) `KeystoreFactory.create(config)` → `CommonKeysInterface` (KeysWrapperNode or KeysWrapperMobile)
+  3) Store wrapper on `Node` as `this.keystore` (immutable)
+  4) For backend role, initialize QUIC/transport/discovery if networking is enabled
+- Wrapper disposal (optional)
+  - Provide `close()` if native resources must be freed; otherwise rely on process lifetime
+
+### 25.5 CommonKeysInterface (runtime class)
+- Purpose: unify serializer access without leaking role specifics
+- Methods (sync) exposed to serializer:
+  - `encryptWithEnvelope(plaintext: Uint8Array, networkPublicKey?: Uint8Array, profilePublicKeys?: Uint8Array[]): Uint8Array`
+  - `decryptEnvelope(envelopeCbor: Uint8Array): Uint8Array`
+  - `getKeystoreState(): number`
+  - `getKeystoreCaps(): DeviceKeystoreCaps` (as plain object or small class)
+- Administrative and persistence methods (role-guarded; used by node setup, $keys service, and tests; not used by serializer hot-path):
+  - `ensureSymmetricKey(keyName: string): Uint8Array`
+    - Native mapping: `Keys.ensureSymmetricKey(name)`
+    - Usage: required by `$keys` service and tests; KEEP
+  - `setLocalNodeInfo(nodeInfoCbor: Uint8Array): void`
+    - Native mapping: `Keys.setLocalNodeInfo(nodeInfoCbor)`
+    - Usage: node setup/discovery (inversion of control vs Rust callbacks); KEEP
+  - `setPersistenceDir(dir: string): void`
+    - Native mapping: `Keys.setPersistenceDir(dir)`
+    - Usage: keystore configuration for persistence path; KEEP
+  - `enableAutoPersist(enabled: boolean): void`
+    - Native mapping: `Keys.enableAutoPersist(enabled)`
+    - Usage: keystore persistence policy toggle; KEEP
+  - `wipePersistence(): Promise<void>`
+    - Native mapping: `Keys.wipePersistence()`
+    - Usage: test cleanup and admin flows; KEEP
+  - `flushState(): Promise<void>`
+    - Native mapping: `Keys.flushState()`
+    - Usage: test setup/teardown; admin durability; KEEP
+  - `setLabelMapping(label: string, networkPublicKey?: Uint8Array, userKeySpec?: unknown): void`
+    - Native mapping: none (wrapper-maintained mapping for testing only)
+    - Usage: test utilities to simulate label resolution without full config; KEEP as test-only shim
+- Implementation
+  - KeysWrapperNode/KeysWrapperMobile adapt Uint8Array <-> Buffer with zero-copy conversions at the native boundary
+  - All methods return `Result` at public surface where failures are expected; internal helpers may throw but must be caught and mapped to `Result`
+  - Role guards: frontend (mobile) vs backend (node); methods not applicable to a role must return `Err(UnsupportedIn<role>Role)`
+
+### 25.6 Invariants and validations
+- Role immutability:
+  - After wrapper creation, calling a method not supported by the role MUST return `Err(UnsupportedIn<role>Role)`
+- No fallbacks:
+  - If a consumer calls a role-incompatible method, do not forward to an alternative implementation; return explicit error
+- Type discipline at boundary:
+  - Public serializer APIs use `Uint8Array`
+  - Wrappers convert to/from `Buffer` (zero-copy) for NAPI calls
+
+### 25.7 Integration points
+- Node
+  - `constructor(config: NodeConfig)` calls `KeystoreFactory.create(config)` and stores `this.keystore`
+  - `createSerializationContext()` uses `this.keystore` directly
+- Serializer
+  - Uses only `CommonKeysInterface` methods for envelope operations
+  - No direct coupling to role-specific methods
+- Transport/Discovery
+  - Backend role: wrappers provide required node keystore functions (e.g., QUIC certs) via role-specific interfaces; these are used in `runar-ts-node` only (not in serializer)
+
+### 25.8 Error contracts (Result only)
+- `RoleImmutable`: attempting to change role or rebuild opposing wrapper
+- `UnsupportedInFrontendRole` / `UnsupportedInBackendRole`: method not allowed for role
+- `NativeCallFailed`: any native error mapped with context string
+- `InvalidArgument`: wrong parameters or missing inputs
+
+### 25.9 Tests
+- Construction
+  - `KeystoreFactory.create({ role: 'backend' })` → `KeysWrapperNode`; `frontend` → `KeysWrapperMobile`
+  - Reinitialization attempts with different role return `Err(RoleImmutable)` (if process-bound), or new `Node` instance required
+- Role enforcement
+  - Mobile wrapper calling node-only method → `Err(UnsupportedInFrontendRole)`
+  - Node wrapper calling mobile-only method → `Err(UnsupportedInBackendRole)`
+- Serializer integration
+  - `encryptWithEnvelope`/`decryptEnvelope` work for both roles in serializer flows
+
+This design removes ambiguity for implementers, enforces strict role separation, and defines how wrappers are created, validated, and consumed without mixing mobile/node semantics.
+
+## 26. TypeScript 5 Decorators: Exact Contracts and Project Settings
+
+- Strategy: Use standard (TC39) decorators in TypeScript ≥ 5.x. Do not use legacy experimental decorators.
+- tsconfig (project-level) requirements (no legacy fallbacks):
+  - Do not enable `experimentalDecorators`. Implement against the new standard API.
+  - Keep target/module as ES2022 (current). No metadata emit is required for our design.
+  - Bun toolchain is the default runner (no npm/node scripts).
+- Class decorator (Encrypt) signature:
+  - `(value: Function, context: ClassDecoratorContext) => void`
+  - Use `context.name` for diagnostics; use `context.addInitializer(() => { ... })` if registration must run after class definition.
+  - Responsibilities: generate and memoize `Encrypted{T}` and `{T}{Label}Fields`, register encrypt/decrypt handlers and wire names (idempotent via WeakMap flags).
+- Field decorator (@runar) signature:
+  - `(initialValue: unknown, context: ClassFieldDecoratorContext<any, unknown>) => (instance: any, value: unknown) => void | void`
+  - Use `context.kind === 'field'` and `context.name` (string | symbol) for the field key.
+  - Prefer `context.addInitializer(function() { /* per-instance init or attach metadata */ })` to set up instance-time behavior.
+  - Responsibilities: capture label metadata for the field, store in per-class WeakMap, used by registry encryptor to form `{T}{Label}Fields`.
+- Storage & Idempotency:
+  - `const META = new WeakMap<Function, ClassMeta>()`
+  - `ClassMeta = { wireName: string, encryptedCtor: Function, fieldLabels: Map<string, Set<string>>, orderedLabels: string[], registered: boolean }`
+  - Class decorator ensures registration once per class (`registered` flag) and memoizes generated constructors.
+
+## 27. Canonical API Signatures (Authoritative)
+
+Adopt these signatures across the codebase; update all call sites. Do not support multiple shapes.
+
+- AnyValue (runar-ts-serializer)
+  - `serialize(context?: SerializationContext): Result<Uint8Array, Error>`
+  - `deserialize(bytes: Uint8Array, keystore?: CommonKeysInterface): Result<AnyValue, Error>`
+  - `asType<T>(): Result<T, Error>`
+
+- Serializer helpers (runar-ts-serializer/src/encryption.ts)
+  - `encryptLabelGroupSync(label: string, fieldsStruct: object, keystore: CommonKeysInterface, resolver: LabelResolver): Result<EncryptedLabelGroup, Error>`
+  - `decryptLabelGroupSync<T>(group: EncryptedLabelGroup, keystore: CommonKeysInterface): Result<T, Error>`
+  - `decryptBytesSync(bytes: Uint8Array, keystore: CommonKeysInterface): Result<Uint8Array, Error>`
+
+- CommonKeysInterface (serializer-facing core + admin; see 25.5)
+  - Core (serializer hot path):
+    - `encryptWithEnvelope(data: Uint8Array, networkPublicKey?: Uint8Array | null, profilePublicKeys: Uint8Array[]): Uint8Array`
+    - `decryptEnvelope(eedCbor: Uint8Array): Uint8Array`
+    - `getKeystoreState(): number`
+    - `getKeystoreCaps(): DeviceKeystoreCaps`
+  - Administrative (role-guarded; not hot path):
+    - `ensureSymmetricKey(keyName: string): Uint8Array`
+    - `setLocalNodeInfo(nodeInfoCbor: Uint8Array): void`
+    - `setPersistenceDir(dir: string): void`
+    - `enableAutoPersist(enabled: boolean): void`
+    - `wipePersistence(): Promise<void>`
+    - `flushState(): Promise<void>`
+    - `setLabelMapping(label: string, networkPublicKey?: Uint8Array, userKeySpec?: unknown): void` (test-only shim)
+
+- Transport facade (runar-ts-node)
+  - `request(path: string, correlationId: string, payload: Uint8Array, destPeerId: string, networkPublicKey?: Uint8Array | null, profilePublicKeys?: Uint8Array[] | null): Promise<Uint8Array>`
+  - `publish(path: string, correlationId: string, payload: Uint8Array, destPeerId: string, networkPublicKey?: Uint8Array | null): Promise<void>`
+
+- RemoteService (runar-ts-node)
+  - `request(action: string, params: AnyValue, req: RequestContext): Promise<Result<AnyValue, Error>>`
+
+- Decorator trait-like methods (runtime, generated)
+  - On plain class T: `encryptWithKeystore(keystore: CommonKeysInterface, resolver: LabelResolver): Result<EncryptedT, Error>`
+  - On EncryptedT: `decryptWithKeystore(keystore: CommonKeysInterface): Result<T, Error>`
+
+Notes to resolve "expected 1 arg, got 2" mismatches:
+- AnyValue.deserialize takes `(bytes, keystore?)` only. Remove context-objects or extra params and update all sites accordingly.
+- Registry encrypt/decrypt handlers accept exactly (value, keystore, resolver) for encrypt; (bytes, keystore) for decrypt, returning CBOR bytes or plain T respectively, wrapped in Result at the call boundary.
+
+## 28. Result Monad Standardization (runar-ts-common)
+
+- Single source of truth: `Result<T, Error>` from `runar-ts-common`.
+  - ok(value): `{ ok: true, value }`
+  - err(error): `{ ok: false, error }`
+- Rules:
+  - Public APIs return `Result` (never throw). Internal calls to native APIs can throw; wrap in try/catch and return `err(new Error(message))`.
+  - Do not mix other ad-hoc Result shapes. If found, replace with the canonical Result and update tests to assert `.ok`, `.value`, `.error`.
+  - No implicit fallbacks. On error, return `err` with a precise message (aligned with Rust where asserted).
+
+## 29. Project-wide Compliance Checklist (Decorators + Signatures + Result)
+
+- TS 5 decorators used everywhere; no `experimentalDecorators`.
+- Decorators implemented with `ClassDecoratorContext` and `ClassFieldDecoratorContext` using `context.addInitializer` as needed.
+- AnyValue/Serializer/Transport/RemoteService interfaces match Section 27 exactly; all call sites updated.
+- CommonKeysInterface provides the 4 core methods and the 7 admin methods with role guards (Section 25.5).
+- All modules import and return `Result` from `runar-ts-common`; no custom variants.
+- Bun is the build/test runner; scripts align accordingly.
+
+## 30. Decorator Standardization and Legacy Removal (Authoritative)
+
+- Repository-wide policy
+  - Use TS 5 standard decorators everywhere. Do not use legacy experimental decorators.
+  - Never import or rely on `reflect-metadata` anywhere (tests or packages).
+  - Do not enable `experimentalDecorators`; do not enable `emitDecoratorMetadata`.
+  - Bun is the only toolchain; no npm/node scripts. No special flags are required for standard decorators.
+
+### 30.1 TS 5 Decorator Compilation Strategy (SOLUTION)
+
+**ISSUE IDENTIFIED**: Bun's TypeScript transpiler does not support TS 5 standard decorators yet. When Bun runs TypeScript files directly, it doesn't provide the `ClassDecoratorContext` object that TS 5 decorators expect.
+
+**SOLUTION CONFIRMED**: Use TypeScript compilation + Bun runtime for decorator testing and execution.
+
+**Implementation Strategy**:
+1. **Compile decorators with TypeScript**: 
+   ```bash
+   bunx tsc --experimentalDecorators false --emitDecoratorMetadata false --skipLibCheck
+   ```
+
+2. **Run tests with Bun**: 
+   ```bash
+   bun dist/test.js
+   ```
+
+3. **Benefits**:
+   - ✅ **TS 5 standard decorators** (no experimental decorators needed)
+   - ✅ **Bun runtime** (fast execution)
+   - ✅ **Full decorator functionality** (all features work)
+   - ✅ **Proper context objects** (`ClassDecoratorContext` and `ClassFieldDecoratorContext`)
+
+**Verification**: Confirmed that TS 5 decorators work perfectly when compiled with TypeScript and run with Bun. The `__esDecorate` and `__runInitializers` functions work correctly, providing proper context objects with `context.name`, `context.kind`, and `context.addInitializer`.
+
+**Usage Pattern**:
+- For decorator development: Use TypeScript compilation + Bun runtime
+- For production builds: Use standard Bun build process (which will support TS 5 decorators in future versions)
+- For tests: Compile with TypeScript, run with Bun
+
+- Project configuration (tsconfig)
+  - Base (`tsconfig.base.json`): keep as-is (ES2022 target/module, strict mode).
+  - Per-package tsconfig where decorators are defined/consumed (e.g., `runar-ts-decorators`, any tests touching decorators):
+    - `"experimentalDecorators": false`
+    - `"emitDecoratorMetadata": false`
+  - Do not introduce package-level overrides that enable legacy behavior.
+
+- Prohibited dependency
+  - Remove `reflect-metadata` from the repo.
+    - Delete imports in:
+      - `runar-ts-serializer/test/decorator_registry.test.ts`
+      - `runar-ts-serializer/test/decorator_encryption.test.ts`
+      - `runar-ts-serializer/test/wire_typename.test.ts`
+      - `runar-ts-decorators/src/index.ts` (first line)
+    - Remove from `runar-ts-decorators/package.json` dependencies.
+
+- Standard decorator contracts (recap; TS 5)
+  - Class decorator (`@Encrypt`): `(value: Function, context: ClassDecoratorContext) => void`
+    - Use `context.name` and `context.addInitializer` as needed for idempotent registration.
+  - Field decorator (`@runar`): `(initialValue: unknown, context: ClassFieldDecoratorContext<any, unknown>) => void | ((instance: unknown, value: unknown) => void)`
+    - Use `context.kind === 'field'`, `context.name` (string | symbol), and `context.addInitializer` for per-instance setup.
+  - Metadata storage: `WeakMap<Function, ClassMeta>`; idempotency via `registered` flag (see Sections 16.6 and 26).
+
+- Tests and runtime expectations
+  - Tests must not import `reflect-metadata`.
+  - Tests that needed RTTI should instead interact with decorator-provided runtime metadata (WeakMap) and registry APIs.
+  - With TS 5 standard decorators, `context.name` and `ClassDecoratorContext`/`ClassFieldDecoratorContext` are always defined; failures due to undefined indicate legacy API leakage.
+
+- Enforcement checklist
+  - [ ] No `reflect-metadata` imports remain in the codebase.
+  - [ ] `runar-ts-decorators/package.json` no longer lists `reflect-metadata`.
+  - [ ] All packages that touch decorators have `experimentalDecorators: false` and `emitDecoratorMetadata: false`.
+  - [ ] Decorators use TS 5 signatures only; no legacy overloads or shims.
+  - [ ] Tests compile and run under Bun using the standard decorator runtime.
+
+- Non-compliance handling
+  - Any attempt to reintroduce legacy decorators or `reflect-metadata` is rejected. No fallbacks, no dual modes.
+  - If a test requires metadata, extend the decorator runtime metadata (WeakMap) rather than enabling legacy metadata emit.

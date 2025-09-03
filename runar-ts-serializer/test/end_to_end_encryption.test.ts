@@ -13,7 +13,7 @@ import {
   decryptBytesSync,
 } from '../src/index.js';
 import { Keys } from 'runar-nodejs-api';
-import { KeysManagerWrapper } from '../../runar-ts-node/src/keys_manager_wrapper.js';
+import { KeystoreFactory, KeysWrapperMobile, KeysWrapperNode } from '../../runar-ts-node/src/keys_manager_wrapper.js';
 
 /**
  * End-to-End Encryption Tests
@@ -48,33 +48,39 @@ interface NetworkMessage {
   timestamp: number;
 }
 
-class EndToEndTestEnvironment {
-  // Mobile side (CA + user operations)
+export class EndToEndEncryptionTestContext {
   private mobileKeys: Keys;
-  private mobileWrapper: KeysManagerWrapper;
-  private userPublicKey: Uint8Array;
-
-  // Node side (certificate + network operations)
   private nodeKeys: Keys;
-  private nodeWrapper: KeysManagerWrapper;
+  private mobileWrapper: KeysWrapperMobile;
+  private nodeWrapper: KeysWrapperNode;
+  private userPublicKey: Uint8Array;
   private nodePublicKey: Uint8Array;
-
-  // Network and profile keys
   private networkId: string;
   private networkPublicKey: Uint8Array;
   private personalKey: Uint8Array;
   private workKey: Uint8Array;
   private profileKeys: Uint8Array[];
-
-  // Resolver configuration
   private labelResolverConfig: LabelResolverConfig;
   private resolverCache: ResolverCache;
 
   constructor() {
     this.mobileKeys = new Keys();
     this.nodeKeys = new Keys();
-    this.mobileWrapper = new KeysManagerWrapper(this.mobileKeys);
-    this.nodeWrapper = new KeysManagerWrapper(this.nodeKeys);
+    
+    // Use the new keystore factory to create role-specific wrappers
+    const mobileResult = KeystoreFactory.create(this.mobileKeys, 'frontend');
+    const nodeResult = KeystoreFactory.create(this.nodeKeys, 'backend');
+    
+    if (!mobileResult.ok) {
+      throw new Error(`Failed to create mobile keystore wrapper: ${mobileResult.error.message}`);
+    }
+    if (!nodeResult.ok) {
+      throw new Error(`Failed to create node keystore wrapper: ${nodeResult.error.message}`);
+    }
+    
+    this.mobileWrapper = mobileResult.value as KeysWrapperMobile;
+    this.nodeWrapper = nodeResult.value as KeysWrapperNode;
+    
     this.userPublicKey = new Uint8Array(0);
     this.nodePublicKey = new Uint8Array(0);
     this.networkId = '';
@@ -307,11 +313,11 @@ class EndToEndTestEnvironment {
     console.log('   ✅ All operations work correctly after state persistence');
   }
 
-  getMobileWrapper(): KeysManagerWrapper {
+  getMobileWrapper(): KeysWrapperMobile {
     return this.mobileWrapper;
   }
 
-  getNodeWrapper(): KeysManagerWrapper {
+  getNodeWrapper(): KeysWrapperNode {
     return this.nodeWrapper;
   }
 
@@ -337,11 +343,11 @@ class EndToEndTestEnvironment {
 }
 
 describe('End-to-End Encryption Tests', () => {
-  let testEnv: EndToEndTestEnvironment;
+  let testEnv: EndToEndEncryptionTestContext;
 
   beforeAll(async () => {
     console.log('🚀 Starting comprehensive end-to-end encryption test');
-    testEnv = new EndToEndTestEnvironment();
+    testEnv = new EndToEndEncryptionTestContext();
 
     // Follow exact Rust end-to-end workflow
     await testEnv.initializeMobileCA();
