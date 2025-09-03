@@ -124,13 +124,14 @@ class AnyValueTestEnvironment {
 
     // Install ONLY the network public key on user mobile (not private key)
     // This is the key difference - user mobile can encrypt for network but cannot decrypt network-encrypted data
-    const networkPublicKeyOnly = this.mobileKeys.mobileGetNetworkPublicKey(this.networkPublicKey);
-    userMobileKeys.mobileInstallNetworkPublicKey(networkPublicKeyOnly);
+    userMobileKeys.mobileInstallNetworkPublicKey(this.networkPublicKey);
 
     // Update mobile wrapper to use user mobile keys (not master)
     const userMobileResult = KeystoreFactory.create(userMobileKeys, 'frontend');
     if (!userMobileResult.ok) {
-      throw new Error(`Failed to create user mobile keystore wrapper: ${(userMobileResult as any).error.message}`);
+      throw new Error(
+        `Failed to create user mobile keystore wrapper: ${(userMobileResult as any).error.message}`
+      );
     }
     this.mobileWrapper = userMobileResult.value as KeysWrapperMobile;
 
@@ -271,7 +272,10 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       );
 
       // Test encryption (matches Rust: original.encrypt_with_keystore(&mobile_ks, resolver.as_ref()))
-      const encryptResult = (original as any).encryptWithKeystore(testEnv.getMobileWrapper(), testEnv.getResolver());
+      const encryptResult = (original as any).encryptWithKeystore(
+        testEnv.getMobileWrapper(),
+        testEnv.getResolver()
+      );
       expect(encryptResult.ok).toBe(true);
       if (!encryptResult.ok) {
         throw new Error(`Encryption failed: ${(encryptResult as any).error.message}`);
@@ -331,6 +335,9 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
 
       // Create serialization context (matches Rust SerializationContext creation)
       const context = testEnv.createSerializationContext(testEnv.getMobileWrapper());
+      console.log('🔍 Serialization context keys:');
+      console.log('  - networkPublicKey:', context.networkPublicKey ? 'present (' + context.networkPublicKey.length + ' bytes)' : 'null');
+      console.log('  - profilePublicKeys:', context.profilePublicKeys ? context.profilePublicKeys.length + ' keys' : 'null');
 
       // Serialize with encryption (matches Rust: val.serialize(Some(&context)))
       const ser = val.serialize(context);
@@ -369,7 +376,9 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       const mobileProfileResult = deMobile.value.as<TestProfile>();
       expect(mobileProfileResult.ok).toBe(true);
       if (!mobileProfileResult.ok) {
-        throw new Error(`Mobile as<TestProfile> failed: ${(mobileProfileResult as any).error.message}`);
+        throw new Error(
+          `Mobile as<TestProfile> failed: ${(mobileProfileResult as any).error.message}`
+        );
       }
 
       const mobileProfile = mobileProfileResult.value;
@@ -383,7 +392,9 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       const nodeProfileEncryptedResult = deNode.value.as<any>();
       expect(nodeProfileEncryptedResult.ok).toBe(true);
       if (!nodeProfileEncryptedResult.ok) {
-        throw new Error(`Node encrypted as failed: ${(nodeProfileEncryptedResult as any).error.message}`);
+        throw new Error(
+          `Node encrypted as failed: ${(nodeProfileEncryptedResult as any).error.message}`
+        );
       }
 
       const nodeProfileEncrypted = nodeProfileEncryptedResult.value;
@@ -393,7 +404,9 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       expect(nodeProfileEncrypted.system_only_encrypted).toBeDefined();
       expect(nodeProfileEncrypted.user_encrypted).toBeDefined();
 
-      const finalNodeProfile = (nodeProfileEncrypted as any).decryptWithKeystore(testEnv.getNodeWrapper());
+      const finalNodeProfile = (nodeProfileEncrypted as any).decryptWithKeystore(
+        testEnv.getNodeWrapper()
+      );
       expect(finalNodeProfile.ok).toBe(true);
       if (!finalNodeProfile.ok) {
         throw new Error(`Final node decryption failed: ${(finalNodeProfile as any).error.message}`);

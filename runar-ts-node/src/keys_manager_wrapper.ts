@@ -68,8 +68,10 @@ export class KeysWrapperMobile implements CommonKeysInterface {
   }
 
   // Core decryption method for mobile keystore
+  // For dual-encrypted envelopes, mobile should use profile keys for decryption
   decryptEnvelope(eedCbor: Uint8Array): Uint8Array {
     try {
+      // Mobile keystore should use its profile keys for decryption
       const result = this.keys.mobileDecryptEnvelope(Buffer.from(eedCbor));
       return new Uint8Array(result);
     } catch (error) {

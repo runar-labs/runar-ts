@@ -974,12 +974,14 @@ This section reconciles the design with the exact Rust behavior and supersedes a
 #### 17.6.1 Access Control Implementation Requirements (CRITICAL)
 
 **`decryptLabelGroupSync` Behavior:**
+
 - Attempt decryption using the provided keystore via `keystore.decryptEnvelope(encryptedGroup.envelopeCbor)`
 - If decryption succeeds, deserialize the CBOR result and return `ok(fieldsStruct)`
 - If decryption fails due to missing keys, return `err(Error)` with appropriate error message
 - Never throw exceptions - always return `Result<T, Error>`
 
 **Generated `decryptWithKeystore` Method Logic:**
+
 - Initialize result instance with default values (empty strings, zero numbers, etc.)
 - Process each label group independently in a loop
 - For each encrypted label group, call `decryptLabelGroupSync` with the provided keystore
@@ -989,6 +991,7 @@ This section reconciles the design with the exact Rust behavior and supersedes a
 - Return `ok(resultInstance)` - never return errors for individual label group failures
 
 **Key Implementation Rules:**
+
 1. **No Silent Failures**: `decryptLabelGroupSync` returns `Result<T, Error>` - never throws
 2. **Independent Processing**: Each label group is processed independently - failure of one does not affect others
 3. **Access Control**: Access control is implemented by keystore's `decryptEnvelope` method failing when it lacks required keys
@@ -1103,17 +1106,20 @@ This section consolidates and reconciles the decorator system design into the ov
 #### 18.8.1 Access Control Testing Scenarios (DETAILED RUST PARITY)
 
 **Keystore Setup Requirements (MUST match Rust exactly):**
+
 - **Mobile Network Master**: Generates network keys, has both public and private network keys
 - **User Mobile Keystore**: Has user profile keys + network public key (NO network private key) - can encrypt for network but cannot decrypt network-encrypted data
 - **Node Keystore**: Has network private keys (NO user profile keys) - can decrypt network-encrypted data but cannot decrypt user-encrypted data
 
 **Label Configuration Requirements (MUST match Rust exactly):**
+
 - **"user" label**: `profilePublicKeys: [profilePk], networkPublicKey: undefined` - only profile keys, no network keys
 - **"system" label**: `profilePublicKeys: [profilePk], networkPublicKey: networkPublicKey` - both profile and network keys
 - **"system_only" label**: `profilePublicKeys: [], networkPublicKey: networkPublicKey` - only network keys, no profile keys
 - **"search" label**: `profilePublicKeys: [profilePk], networkPublicKey: networkPublicKey` - both profile and network keys
 
 **Test Struct Requirements:**
+
 - Plain field (no decorator): always accessible
 - `@runar("system")` field: accessible by both mobile (via profile keys) and node (via network keys)
 - `@runar("user")` field: accessible only by mobile (requires profile keys)
@@ -1121,10 +1127,12 @@ This section consolidates and reconciles the decorator system design into the ov
 - `@runar("system_only")` field: accessible only by node (requires network keys)
 
 **Expected Access Control Results (MUST match Rust exactly):**
+
 - **Mobile keystore decryption**: Can decrypt plain, system, user, and search fields; cannot decrypt system_only fields (remain empty)
 - **Node keystore decryption**: Can decrypt plain, system, search, and system_only fields; cannot decrypt user fields (remain empty)
 
 **Critical Implementation Requirements:**
+
 1. **Decryption Logic**: `decryptLabelGroupSync` MUST return `Result<T, Error>` - success if keystore has required keys, error if not
 2. **Field Assignment**: Only assign fields if `decryptLabelGroupSync` succeeds; otherwise fields remain at default values
 3. **Keystore Capabilities**: Mobile has profile keys + network public key (NO private); Node has network private keys (NO profile keys)
