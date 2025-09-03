@@ -101,7 +101,7 @@ export class Logger {
     if (this.component === Component.Node && !this.parentComponent) {
       return `[${this.node_id()}] ${line}`;
     }
-    
+
     // Child loggers show nodeId only if they have it, otherwise just show component hierarchy
     if (this.nodeId) {
       return `[${this.node_id()}][${this.fullPrefix()}] ${line}`;

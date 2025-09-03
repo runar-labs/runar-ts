@@ -66,6 +66,8 @@ export interface RunarEncryptable<T = any, EncryptedT = any> {
   decryptWithKeystore(keystore: CommonKeysInterface, logger?: Logger): Result<T>;
 }
 
+
+
 interface ClassMeta {
   wireName: string;
   encryptedCtor: Constructor | null;

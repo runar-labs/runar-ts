@@ -1303,19 +1303,20 @@ Given `bytes` from the wire:
 
 This section, together with 17.7.1 and 17.7.2, defines the unambiguous contract for serializeFn and AnyValue.serialize and a precise decrypt path to avoid envelope/body mix-ups.
 
-## 22. asType<T> Dual‑Mode Semantics (Decrypted Plain vs Encrypted{T})
+## 22. asType<T> Dual‑Mode Semantics (Decrypted Plain vs Encrypted{T}) ✅ **IMPLEMENTED**
 
 Rust parity requirement: For an encrypted payload, callers can either obtain the decrypted original struct (subject to keystore permissions) or the encrypted companion type for persistence. TS MUST mirror this with a single API: `asType<T>()`.
 
-### 22.1 Decision logic (TS, mirrors Rust)
+### 22.1 Decision logic (TS, mirrors Rust) ✅ **IMPLEMENTED**
 
 - Inputs:
   - `T` (constructor or branded type tag)
+  - `targetConstructor` (optional constructor parameter for runtime type detection)
   - `lazy` (whether body is a lazy encrypted payload)
   - `registry` (provides decoders for `T` and `Encrypted{T}`)
   - `keystore` (optional; if absent, only encrypted result is possible)
 - Algorithm:
-  1. If not lazy (plain body): decode directly to `T`. If decoding fails, error `InvalidTypeForPlainBody`.
+  1. If not lazy (plain body): decode directly to `T`. If requesting encrypted companion type, error `InvalidTypeForPlainBody`.
   2. If lazy (encrypted body):
      - If `T` is `Encrypted{U}` (detected via registry "encrypted companion" metadata):
        a) Decrypt outer envelope → innerBytes
@@ -1326,7 +1327,7 @@ Rust parity requirement: For an encrypted payload, callers can either obtain the
        c) If (b) fails, decode innerBytes as `Encrypted{U}`, then call registry `decryptor(U)` to produce plain `U` using current `keystore`
        d) If decryptor fails due to missing keys, return `Err(AccessDenied)` (match Rust message)
 
-### 22.2 Contracts and types
+### 22.2 Contracts and types ✅ **IMPLEMENTED**
 
 - `asType<T>()` returns `Result<T>`
   - On success: instance of `T`
@@ -1334,8 +1335,11 @@ Rust parity requirement: For an encrypted payload, callers can either obtain the
 - Type-only vs runtime:
   - `Encrypted{T}` is a runtime class exported by decorators (not interface-only), so it can be returned at runtime.
   - Plain `T` may be a class (recommended) or decoded POJO matching a type-only interface; tests expect structural equality.
+- **API Signature**: `asType<U = T>(targetConstructor?: new (...args: any[]) => U): Result<U, Error>`
+  - Optional `targetConstructor` parameter enables runtime type detection for encrypted companion types
+  - Registry integration via `isEncryptedCompanion()` function for type detection
 
-### 22.3 Examples (pseudocode)
+### 22.3 Examples (pseudocode) ✅ **IMPLEMENTED**
 
 - Request decrypted struct:
 
@@ -1346,7 +1350,7 @@ const user = anyValue.asType<User>(); // decrypts envelope → innerBytes; decod
 - Request encrypted companion for persistence:
 
 ```ts
-const encUser = anyValue.asType<EncryptedUser>(); // decrypts envelope → innerBytes; decodes Encrypted<User>; returns it
+const encUser = anyValue.asType<EncryptedUser>(EncryptedUser); // decrypts envelope → innerBytes; decodes Encrypted<User>; returns it
 ```
 
 - Plain body path:
@@ -1355,32 +1359,44 @@ const encUser = anyValue.asType<EncryptedUser>(); // decrypts envelope → inner
 const profile = anyValue.asType<Profile>(); // body is plain; decodes directly
 ```
 
-### 22.4 Edge cases and error behavior
+- Error cases:
+
+```ts
+// Requesting encrypted companion on plain data
+const result = anyValue.asType<EncryptedUser>(EncryptedUser); // Returns Err("InvalidTypeForPlainBody")
+
+// Missing keystore for encrypted data
+const result = anyValue.asType<User>(); // Returns Err("AccessDenied")
+```
+
+### 22.4 Edge cases and error behavior ✅ **IMPLEMENTED**
 
 - No keystore provided + plain `T` requested on encrypted body → `AccessDenied`
 - Keystore provided but lacks keys → `AccessDenied`
 - Registry lacks companion or decryptor for `T` → `UnknownEncryptedCompanion`
 - InnerBytes decode fails for both `T` and `Encrypted{T}` → `DecodeError`
+- Requesting encrypted companion type on plain data → `InvalidTypeForPlainBody`
 
-### 22.5 Implementation mapping (Exists vs New)
+### 22.5 Implementation mapping (Exists vs New) ✅ **COMPLETED**
 
-- AnyValue — EXISTING (new behavior)
-  - File: `runar-ts-serializer/src/index.ts` (if AnyValue lives here) or `any_value.ts`
-  - Action: Update `asType<T>()` to implement decision logic above; add helper `isEncryptedCompanion(targetCtor)` via registry
-- Registry — EXISTING (update)
+- AnyValue — EXISTING (updated behavior)
+  - File: `runar-ts-serializer/src/index.ts`
+  - Action: ✅ Updated `asType<T>()` to implement decision logic above; added helper `isEncryptedCompanionType(targetCtor)` via registry
+- Registry — EXISTING (updated)
   - File: `runar-ts-serializer/src/registry.ts`
-  - Action: Ensure metadata to map `T ↔ Encrypted{T}`; expose `getEncryptedCompanion(T)`, `isEncryptedCompanion(ctor)`, and `decryptor(T)`
-- Decorator output — NEW/EXISTING depending on status
+  - Action: ✅ Ensured metadata to map `T ↔ Encrypted{T}`; exposed `getEncryptedCompanion(T)`, `isEncryptedCompanion(ctor)`, and `decryptor(T)`
+- Decorator output — EXISTING
   - Files: `runar-ts-decorators/src/index.ts` generation outputs
-  - Action: Generate runtime class `Encrypted{T}` and `{T}{Label}Fields`; register both in registry with companion links
+  - Action: ✅ Generates runtime class `Encrypted{T}` and `{T}{Label}Fields`; registers both in registry with companion links
 
-### 22.6 Test checklist (must pass)
+### 22.6 Test checklist (must pass) ✅ **IMPLEMENTED**
 
-- Encrypted struct → asType<PlainT>() returns decrypted PlainT with correct fields
-- Encrypted struct → asType<EncryptedT>() returns EncryptedT structurally equal to inner CBOR
-- Plain struct → asType<PlainT>() works; asType<EncryptedT>() yields `InvalidTypeForPlainBody`
-- Access control: missing/insufficient keys → `AccessDenied`
-- Registry gaps: missing companion/decryptor → `UnknownEncryptedCompanion`
+- ✅ Encrypted struct → asType<PlainT>() returns decrypted PlainT with correct fields
+- ✅ Encrypted struct → asType<EncryptedT>(EncryptedT) returns EncryptedT structurally equal to inner CBOR
+- ✅ Plain struct → asType<PlainT>() works; asType<EncryptedT>(EncryptedT) yields `InvalidTypeForPlainBody`
+- ✅ Access control: missing/insufficient keys → `AccessDenied`
+- ✅ Registry gaps: missing companion/decryptor → `UnknownEncryptedCompanion`
+- ✅ Test file: `runar-ts-serializer/test/anyvalue_dual_mode.test.ts` demonstrates all scenarios
 
 ## 23. Key Architectural Decision: Raw CBOR Bytes Only (No Envelope Objects)
 
@@ -1665,7 +1681,129 @@ Notes to resolve "expected 1 arg, got 2" mismatches:
 - All modules import and return `Result` from `runar-ts-common`; no custom variants.
 - Bun is the build/test runner; scripts align accordingly.
 
-## 30. Decorator Standardization and Legacy Removal (Authoritative)
+## 30. Logging System Design and Usage (Hierarchical)
+
+### 30.1 Logging Architecture
+
+- **Hierarchical Logger System**: Root loggers create context, child loggers inherit and extend context
+- **Component-Based Logging**: Each subsystem has its own component for granular control
+- **Security-First Logging**: No private information (keys, sensitive data) is ever logged
+- **Performance-Optimized**: Logging can be disabled per component without overhead
+
+### 30.2 Logger Components
+
+```typescript
+export enum Component {
+  Node = 'Node',           // Root node operations
+  Registry = 'Registry',   // Service registry operations  
+  Service = 'Service',     // Service lifecycle
+  Database = 'DB',         // Database operations
+  Transporter = 'Network', // Network transport
+  NetworkDiscovery = 'NetworkDiscovery', // Peer discovery
+  System = 'System',       // System-level operations
+  CLI = 'CLI',            // Command-line interface
+  Keys = 'Keys',          // Keystore operations
+  Serializer = 'Serializer', // Serialization/deserialization
+  Encryption = 'Encryption', // Encryption/decryption operations
+  Decorators = 'Decorators', // Decorator runtime operations
+  Custom = 'Custom',      // User-defined components
+}
+```
+
+### 30.3 Logger Usage Patterns
+
+**Root Logger Creation:**
+```typescript
+const rootLogger = Logger.newRoot(Component.Node)
+  .setNodeId('node-123');
+```
+
+**Child Logger Creation:**
+```typescript
+const childLogger = rootLogger.withComponent(Component.Serializer);
+```
+
+**Optional Logger Handling:**
+```typescript
+const log = logger ? logger.withComponent(Component.Encryption) : Logger.newRoot(Component.Encryption);
+```
+
+### 30.4 Log Display Format
+
+- **Root Logger**: `[node-123] Starting operations`
+- **Child with nodeId**: `[node-123][Serializer] Processing data`
+- **Component only**: `[Decorators] Processing fields`
+- **Nested hierarchy**: `[node-123][Decorators.Encryption] Decrypting label`
+
+### 30.5 Security Guidelines
+
+- **Never log private keys, certificates, or sensitive data**
+- **Log only metadata**: key sizes, capabilities, error conditions
+- **Field values**: Log type and length only, never actual content
+- **Error messages**: Include context but sanitize sensitive information
+
+### 30.6 Integration Points
+
+**AnyValue Serialization:**
+```typescript
+static deserialize(bytes: Uint8Array, keystore?: CommonKeysInterface, logger?: Logger): Result<AnyValue<any>, Error> {
+  const log = logger ? logger.withComponent(Component.Serializer) : Logger.newRoot(Component.Serializer);
+  // ... implementation with detailed logging
+}
+```
+
+**Decorator Operations:**
+```typescript
+decryptWithKeystore(keystore: CommonKeysInterface, logger?: Logger): Result<InstanceType<typeof value>> {
+  const log = logger ? logger.withComponent(Component.Decorators) : Logger.newRoot(Component.Decorators);
+  // ... implementation with detailed logging
+}
+```
+
+**Encryption Operations:**
+```typescript
+export function decryptLabelGroupSync<T>(
+  encryptedGroup: EncryptedLabelGroup,
+  keystore: CommonKeysInterface,
+  logger?: Logger
+): Result<T, Error> {
+  const log = logger ? logger.withComponent(Component.Encryption) : Logger.newRoot(Component.Encryption);
+  // ... implementation with detailed logging
+}
+```
+
+### 30.7 Log Levels
+
+- **Trace**: Very detailed step-by-step operations (encryption/decryption flow)
+- **Debug**: Granular but detailed operations (keystore capabilities, field assignments)
+- **Info**: Rare lifecycle events (start/end of major operations)
+- **Warn**: Non-fatal issues (missing optional data)
+- **Error**: Failures and exceptions
+
+### 30.8 Configuration
+
+**Simplified Configuration (Recommended):**
+```typescript
+const loggingConfig = LoggingConfig.new()
+  .withDefaultLevel(LogLevel.Trace);
+
+applyLoggingConfig(loggingConfig);
+```
+
+**Granular Configuration (When needed):**
+```typescript
+const loggingConfig = LoggingConfig.new()
+  .withDefaultLevel(LogLevel.Info)
+  .withComponentLevel(Component.Encryption, LogLevel.Trace)
+  .withComponentLevel(Component.Decorators, LogLevel.Debug)
+  .withComponentLevel(Component.Serializer, LogLevel.Trace);
+
+applyLoggingConfig(loggingConfig);
+```
+
+**Note**: When using `.withDefaultLevel(LogLevel.Trace)`, all components automatically inherit the trace level, making individual component level settings redundant unless you need different levels for specific components.
+
+## 31. Decorator Standardization and Legacy Removal (Authoritative)
 
 - Repository-wide policy
   - Use TS 5 standard decorators everywhere. Do not use legacy experimental decorators.

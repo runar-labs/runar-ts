@@ -22,6 +22,7 @@ import {
   clearRegistry,
   lookupDecryptorByTypeName,
   lookupEncryptorByTypeName,
+  isEncryptedCompanion,
 } from './registry.js';
 // Import getTypeName conditionally to avoid circular dependencies
 import { CBORUtils } from './cbor_utils.js';
@@ -406,10 +407,12 @@ export class AnyValue<T = unknown> {
     keystore?: CommonKeysInterface,
     logger?: Logger
   ): Result<AnyValue<any>, Error> {
-    const log = logger ? logger.withComponent(Component.Serializer) : Logger.newRoot(Component.Serializer);
-    
+    const log = logger
+      ? logger.withComponent(Component.Serializer)
+      : Logger.newRoot(Component.Serializer);
+
     log.trace(`Starting AnyValue.deserialize with ${bytes.length} bytes`);
-    
+
     if (bytes.length === 0) {
       log.error('Empty bytes provided for deserialization');
       return err(new Error('Empty bytes provided for deserialization'));
@@ -455,7 +458,9 @@ export class AnyValue<T = unknown> {
 
     const dataStart = 3 + typeNameLen;
     if (dataStart >= bytes.length) {
-      log.error(`No data payload after header: dataStart=${dataStart}, bytes.length=${bytes.length}`);
+      log.error(
+        `No data payload after header: dataStart=${dataStart}, bytes.length=${bytes.length}`
+      );
       return err(new Error('No data payload after header'));
     }
 
@@ -465,11 +470,13 @@ export class AnyValue<T = unknown> {
     // Handle encrypted data
     if (isEncrypted && keystore) {
       log.trace('Attempting to decrypt envelope');
-      
+
       // Get keystore capabilities for debugging
       const caps = keystore.getKeystoreCaps();
-      log.debug(`Keystore capabilities: hasProfileKeys=${caps.hasProfileKeys}, hasNetworkKeys=${caps.hasNetworkKeys}`);
-      
+      log.debug(
+        `Keystore capabilities: hasProfileKeys=${caps.hasProfileKeys}, hasNetworkKeys=${caps.hasNetworkKeys}`
+      );
+
       try {
         dataBytes = keystore.decryptEnvelope(dataBytes);
         log.trace(`Decryption successful, got ${dataBytes.length} bytes of plaintext`);
@@ -553,7 +560,9 @@ export class AnyValue<T = unknown> {
       case ValueCategory.Struct:
         log.trace(`Decoding struct data for type: ${typeName}`);
         value = decode(dataBytes) || {};
-        log.trace(`Decoded struct with ${Object.keys(value).length} fields: [${Object.keys(value).join(', ')}]`);
+        log.trace(
+          `Decoded struct with ${Object.keys(value).length} fields: [${Object.keys(value).join(', ')}]`
+        );
         break;
       case ValueCategory.Bytes:
         value = dataBytes;
@@ -576,7 +585,9 @@ export class AnyValue<T = unknown> {
         const decrypted = value.decryptWithKeystore(keystore, log);
         if (decrypted.ok) {
           value = decrypted.value;
-          log.trace(`Successfully decrypted instance, got ${Object.keys(value).length} fields: [${Object.keys(value).join(', ')}]`);
+          log.trace(
+            `Successfully decrypted instance, got ${Object.keys(value).length} fields: [${Object.keys(value).join(', ')}]`
+          );
         } else {
           log.error(`Decryption failed: ${decrypted.error.message}`);
           // If decryption fails, keep the encrypted value
@@ -1008,16 +1019,33 @@ export class AnyValue<T = unknown> {
   }
 
   // Type conversion methods - TS semantic adjustment: single method for lazy decrypt-on-access
-  asType<U = T>(): Result<U, Error> {
-    // If we have lazy data, use the lazy deserialization path
+  // Function overloads for dual-mode semantics
+  asType<U = T>(): Result<U, Error>;
+  asType<U = T>(targetConstructor: new (...args: any[]) => U): Result<U, Error>;
+  asType<U = T>(targetConstructor?: new (...args: any[]) => U): Result<U, Error> {
+    // If we have lazy data, use the lazy deserialization path with constructor info
     if (this.lazyData) {
-      return this.performLazyDecrypt<U>();
+      return this.performLazyDecrypt<U>(targetConstructor);
     }
 
     // Otherwise use the regular value
     if (this.value === null) {
       return err(new Error('No value available for type conversion'));
     }
+
+    // Check if we're requesting an encrypted companion type on plain data
+    // Only error if the current value is NOT of the requested encrypted companion type
+    if (targetConstructor && this.isEncryptedCompanionType(targetConstructor)) {
+      // Check if the current value is already of the requested encrypted companion type
+      if (this.value && this.value.constructor === targetConstructor) {
+        // The value is already of the requested type, so it's fine
+        return ok(this.value as unknown as U);
+      } else {
+        // The value is not of the requested encrypted companion type, so error
+        return err(new Error('InvalidTypeForPlainBody: Cannot request encrypted companion type from plain body'));
+      }
+    }
+
     return ok(this.value as unknown as U);
   }
 
@@ -1026,8 +1054,8 @@ export class AnyValue<T = unknown> {
     return this.asType<U>();
   }
 
-  // Perform lazy decrypt-on-access logic exactly like Rust
-  private performLazyDecrypt<U>(): Result<U> {
+  // Perform lazy decrypt-on-access logic exactly like Rust with dual-mode semantics
+  private performLazyDecrypt<U>(targetConstructor?: new (...args: any[]) => U): Result<U> {
     if (!this.lazyData || !this.lazyData.originalBuffer) {
       return err(new Error('No lazy data available for decryption'));
     }
@@ -1046,12 +1074,36 @@ export class AnyValue<T = unknown> {
         // Try direct decode into requested T first
         try {
           const decoded = decode(decryptedBytes);
-          // If we're requesting a plain type but got an encrypted companion, we need to decrypt it
-          if (this.lazyData.typeName && !decoded.constructor.name.startsWith('Encrypted')) {
-            // Fall through to registry decryptor
-            throw new Error('Need registry decryptor for plain type');
+          
+          // Check if we're requesting an encrypted companion type
+          if (targetConstructor && this.isEncryptedCompanionType(targetConstructor)) {
+            // Requesting Encrypted{T} - return the encrypted companion as-is
+            return ok(decoded as U);
+          } else {
+            // Requesting plain T - need to decrypt the encrypted companion
+            // Check if the decoded object is an encrypted companion
+            if (decoded && typeof decoded === 'object' && decoded.constructor.name.startsWith('Encrypted')) {
+              // We have an encrypted companion, need to decrypt it to get plain T
+              const decryptorResult = lookupDecryptorByTypeName(this.lazyData.typeName || '');
+              if (decryptorResult.ok) {
+                try {
+                  const decrypted = decryptorResult.value(decoded, this.lazyData.keystore!);
+                  if (isErr(decrypted)) {
+                    return err(new Error(`Registry decryptor failed: ${decrypted.error.message}`));
+                  } else {
+                    return ok(decrypted.value as U);
+                  }
+                } catch (decryptorError) {
+                  return err(new Error(`Registry decryptor execution error: ${decryptorError}`));
+                }
+              } else {
+                return err(new Error(`No decryptor registered for type: ${this.lazyData.typeName}`));
+              }
+            } else {
+              // Direct decode succeeded and we got plain data
+              return ok(decoded as U);
+            }
           }
-          return ok(decoded as U);
         } catch (directDecodeError) {
           // If direct decode fails, try registry decryptor for the target type
           const decryptorResult = lookupDecryptorByTypeName(this.lazyData.typeName || '');
@@ -1077,11 +1129,23 @@ export class AnyValue<T = unknown> {
       // Plain data - attempt direct decode
       try {
         const decoded = decode(payload);
+        
+        // If requesting encrypted companion on plain data, return error
+        if (targetConstructor && this.isEncryptedCompanionType(targetConstructor)) {
+          return err(new Error('InvalidTypeForPlainBody: Cannot request encrypted companion type from plain body'));
+        }
+        
         return ok(decoded as U);
       } catch (error) {
         return err(new Error(`Failed to decode plain lazy data: ${error}`));
       }
     }
+  }
+
+  // Helper method to detect if we're requesting an encrypted companion type
+  private isEncryptedCompanionType(targetConstructor: new (...args: any[]) => any): boolean {
+    const result = isEncryptedCompanion(targetConstructor);
+    return result.ok ? result.value : false;
   }
 
   // Lazy deserialization accessors according to design plan - REMOVED, replaced by performLazyDecrypt

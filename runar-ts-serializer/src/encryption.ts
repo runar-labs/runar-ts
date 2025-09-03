@@ -74,27 +74,37 @@ export function decryptLabelGroupSync<T>(
   keystore: CommonKeysInterface,
   logger?: Logger
 ): Result<T, Error> {
-  const log = logger ? logger.withComponent(Component.Encryption) : Logger.newRoot(Component.Encryption);
-  
+  const log = logger
+    ? logger.withComponent(Component.Encryption)
+    : Logger.newRoot(Component.Encryption);
+
   log.trace(`Starting decryptLabelGroupSync for label: ${encryptedGroup.label}`);
-  
+
   try {
     if (!encryptedGroup.envelopeCbor) {
-      log.error(`Empty encrypted group for label ${encryptedGroup.label}: no envelope data available`);
+      log.error(
+        `Empty encrypted group for label ${encryptedGroup.label}: no envelope data available`
+      );
       return err(new Error('Empty encrypted group: no envelope data available'));
     }
 
     // Use original CBOR bytes from native API
     const encryptedBytes = encryptedGroup.envelopeCbor;
-    log.trace(`Attempting decryption for label ${encryptedGroup.label} with ${encryptedBytes.length} bytes`);
+    log.trace(
+      `Attempting decryption for label ${encryptedGroup.label} with ${encryptedBytes.length} bytes`
+    );
 
     // Get keystore capabilities for debugging
     const caps = keystore.getKeystoreCaps();
-    log.debug(`Keystore capabilities for label ${encryptedGroup.label}: hasProfileKeys=${caps.hasProfileKeys}, hasNetworkKeys=${caps.hasNetworkKeys}`);
+    log.debug(
+      `Keystore capabilities for label ${encryptedGroup.label}: hasProfileKeys=${caps.hasProfileKeys}, hasNetworkKeys=${caps.hasNetworkKeys}`
+    );
 
     // Attempt decryption using the provided key manager (synchronous)
     const plaintext = keystore.decryptEnvelope(encryptedBytes);
-    log.trace(`Decryption successful for label ${encryptedGroup.label}, got ${plaintext.length} bytes of plaintext`);
+    log.trace(
+      `Decryption successful for label ${encryptedGroup.label}, got ${plaintext.length} bytes of plaintext`
+    );
 
     // Deserialize the fields struct from plaintext using CBOR
     const fieldsStruct: T = decode(plaintext);

@@ -78,14 +78,10 @@ class AnyValueTestEnvironment {
     const nodeResult = KeystoreFactory.create(this.nodeKeys, 'backend');
 
     if (isErr(mobileResult)) {
-      throw new Error(
-        `Failed to create mobile keystore wrapper: ${mobileResult.error.message}`
-      );
+      throw new Error(`Failed to create mobile keystore wrapper: ${mobileResult.error.message}`);
     }
     if (isErr(nodeResult)) {
-      throw new Error(
-        `Failed to create node keystore wrapper: ${nodeResult.error.message}`
-      );
+      throw new Error(`Failed to create node keystore wrapper: ${nodeResult.error.message}`);
     }
 
     this.mobileWrapper = mobileResult.value as KeysWrapperMobile;
@@ -262,17 +258,13 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
   beforeAll(async () => {
     // Setup comprehensive logging for debugging
     const loggingConfig = LoggingConfig.new()
-      .withDefaultLevel(LogLevel.Trace)
-      .withComponentLevel(Component.Encryption, LogLevel.Trace)
-      .withComponentLevel(Component.Decorators, LogLevel.Trace)
-      .withComponentLevel(Component.Serializer, LogLevel.Trace);
-    
+      .withDefaultLevel(LogLevel.Trace);
+
     applyLoggingConfig(loggingConfig);
-    logger = Logger.newRoot(Component.Node)
-      .setNodeId('test-node-123');
-    
+    logger = Logger.newRoot(Component.Node).setNodeId('test-node-123');
+
     logger.info('Starting AnyValue Struct Encryption End-to-End Tests');
-    
+
     testEnv = new AnyValueTestEnvironment();
     await testEnv.initialize();
   });
@@ -293,7 +285,7 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       );
 
       // Test encryption (matches Rust: original.encrypt_with_keystore(&mobile_ks, resolver.as_ref()))
-      const encryptableOriginal = original as TestProfile & RunarEncryptable<TestProfile, any>;
+      const encryptableOriginal = original as TestProfile & RunarEncryptable<TestProfile, EncryptedTestProfile>;
       const encryptResult = encryptableOriginal.encryptWithKeystore(
         testEnv.getMobileWrapper(),
         testEnv.getResolver()
@@ -313,8 +305,11 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       expect(encrypted.system_only_encrypted).toBeDefined();
 
       // Test decryption with mobile (matches Rust: encrypted.decrypt_with_keystore(&mobile_ks))
-      const encryptedCompanion = encrypted as RunarEncryptable<any, any>;
-      const decryptedMobile = encryptedCompanion.decryptWithKeystore(testEnv.getMobileWrapper(), logger);
+      const encryptedCompanion = encrypted as unknown as RunarEncryptable<TestProfile, EncryptedTestProfile>;
+      const decryptedMobile = encryptedCompanion.decryptWithKeystore(
+        testEnv.getMobileWrapper(),
+        logger
+      );
       expect(isOk(decryptedMobile)).toBe(true);
       if (isErr(decryptedMobile)) {
         throw new Error(`Mobile decryption failed: ${decryptedMobile.error.message}`);
@@ -328,7 +323,10 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       expect(mobileProfile.systemMetadata).toBe(''); // Mobile should NOT have access to system_metadata
 
       // Test decryption with node (matches Rust: encrypted.decrypt_with_keystore(&node_ks))
-      const decryptedNode = encryptedCompanion.decryptWithKeystore(testEnv.getNodeWrapper(), logger);
+      const decryptedNode = encryptedCompanion.decryptWithKeystore(
+        testEnv.getNodeWrapper(),
+        logger
+      );
       expect(isOk(decryptedNode)).toBe(true);
       if (isErr(decryptedNode)) {
         throw new Error(`Node decryption failed: ${decryptedNode.error.message}`);
@@ -407,9 +405,7 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       const mobileProfileResult = deMobile.value.as<TestProfile>();
       expect(isOk(mobileProfileResult)).toBe(true);
       if (isErr(mobileProfileResult)) {
-        throw new Error(
-          `Mobile as<TestProfile> failed: ${mobileProfileResult.error.message}`
-        );
+        throw new Error(`Mobile as<TestProfile> failed: ${mobileProfileResult.error.message}`);
       }
 
       const mobileProfile = mobileProfileResult.value;

@@ -1,0 +1,18 @@
+{
+  "name": "runar-ts-decorator-experiment",
+  "version": "0.1.0",
+  "description": "Experimental package to investigate decorator-generated type exports",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "bun test",
+    "generate-types": "bun run build-script.ts",
+    "build-with-types": "bun run generate-types && tsc"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "bun-types": "latest"
+  }
+}
