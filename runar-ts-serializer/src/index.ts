@@ -477,7 +477,9 @@ export class AnyValue<T = unknown> {
             } else {
               const primitiveResult = AnyValue.newPrimitive(item);
               if (!primitiveResult.ok) {
-                throw new Error(`Failed to create primitive AnyValue: ${(primitiveResult as Err<Error>).error.message}`);
+                throw new Error(
+                  `Failed to create primitive AnyValue: ${(primitiveResult as Err<Error>).error.message}`
+                );
               }
               return primitiveResult.value;
             }
@@ -505,7 +507,9 @@ export class AnyValue<T = unknown> {
               } else {
                 const primitiveResult = AnyValue.newPrimitive(val);
                 if (!primitiveResult.ok) {
-                  throw new Error(`Failed to create primitive AnyValue: ${(primitiveResult as Err<Error>).error.message}`);
+                  throw new Error(
+                    `Failed to create primitive AnyValue: ${(primitiveResult as Err<Error>).error.message}`
+                  );
                 }
                 map.set(key, primitiveResult.value);
               }
@@ -1051,7 +1055,11 @@ export class AnyValue<T = unknown> {
       case ValueCategory.Primitive:
         const primitiveResult = AnyValue.newPrimitive(value);
         if (!primitiveResult.ok) {
-          return err(new Error(`Failed to create primitive AnyValue: ${(primitiveResult as Err<Error>).error.message}`));
+          return err(
+            new Error(
+              `Failed to create primitive AnyValue: ${(primitiveResult as Err<Error>).error.message}`
+            )
+          );
         }
         return ok(primitiveResult.value as AnyValue<T>);
       case ValueCategory.List:
@@ -1063,7 +1071,9 @@ export class AnyValue<T = unknown> {
         if (value instanceof Map) {
           return ok(AnyValue.newMap(value) as AnyValue<T>);
         }
-        return err(new Error(`Expected Map instance for ValueCategory.Map, but got ${typeof value}`));
+        return err(
+          new Error(`Expected Map instance for ValueCategory.Map, but got ${typeof value}`)
+        );
       case ValueCategory.Struct:
         return ok(AnyValue.newStruct(value as any) as AnyValue<T>);
       case ValueCategory.Bytes:
@@ -1078,10 +1088,15 @@ export class AnyValue<T = unknown> {
   }
 
   // Core API method for deserializing AnyValue from wire format bytes
-  static fromBytes<T = unknown>(bytes: Uint8Array, keystore?: CommonKeysInterface): Result<AnyValue<T>, Error> {
+  static fromBytes<T = unknown>(
+    bytes: Uint8Array,
+    keystore?: CommonKeysInterface
+  ): Result<AnyValue<T>, Error> {
     const result = AnyValue.deserialize(bytes, keystore);
     if (!result.ok) {
-      return err(new Error(`Failed to deserialize AnyValue: ${(result as Err<Error>).error.message}`));
+      return err(
+        new Error(`Failed to deserialize AnyValue: ${(result as Err<Error>).error.message}`)
+      );
     }
     return ok(result.value as AnyValue<T>);
   }
@@ -1120,7 +1135,9 @@ export function deserializeEntity<T>(
 ): Result<T, Error> {
   const avResult = AnyValue.fromBytes<T>(bytes, keystore);
   if (!avResult.ok) {
-    return err(new Error(`Failed to deserialize AnyValue: ${(avResult as Err<Error>).error.message}`));
+    return err(
+      new Error(`Failed to deserialize AnyValue: ${(avResult as Err<Error>).error.message}`)
+    );
   }
   const av = avResult.value;
   return av.as<T>();

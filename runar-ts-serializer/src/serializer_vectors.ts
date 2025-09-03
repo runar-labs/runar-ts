@@ -286,15 +286,10 @@ function main(): void {
       [
         'nested_map',
         AnyValue.newMap(
-          new Map([
-            ['level1', AnyValue.newMap(new Map([['level2', createPrimitive('deep')]]))],
-          ])
+          new Map([['level1', AnyValue.newMap(new Map([['level2', createPrimitive('deep')]]))]])
         ),
       ],
-      [
-        'mixed_array',
-        AnyValue.newList(['string', 42, true, 'null', createPrimitive('nested')]),
-      ],
+      ['mixed_array', AnyValue.newList(['string', 42, true, 'null', createPrimitive('nested')])],
     ])
   );
   serializeAndWrite(out, 'complex_map.bin', complexMap);
