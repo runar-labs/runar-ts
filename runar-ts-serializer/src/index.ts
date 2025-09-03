@@ -1014,9 +1014,7 @@ export class AnyValue<T = unknown> {
             try {
               const decrypted = decryptorResult.value(decryptedBytes, this.lazyData.keystore!);
               if (isErr(decrypted)) {
-                return err(
-                  new Error(`Registry decryptor failed: ${decrypted.error.message}`)
-                );
+                return err(new Error(`Registry decryptor failed: ${decrypted.error.message}`));
               } else {
                 return ok(decrypted.value as U);
               }
@@ -1058,9 +1056,7 @@ export class AnyValue<T = unknown> {
         const primitiveResult = AnyValue.newPrimitive(value);
         if (isErr(primitiveResult)) {
           return err(
-            new Error(
-              `Failed to create primitive AnyValue: ${primitiveResult.error.message}`
-            )
+            new Error(`Failed to create primitive AnyValue: ${primitiveResult.error.message}`)
           );
         }
         return ok(primitiveResult.value as AnyValue<T>);
@@ -1096,9 +1092,7 @@ export class AnyValue<T = unknown> {
   ): Result<AnyValue<T>, Error> {
     const result = AnyValue.deserialize(bytes, keystore);
     if (isErr(result)) {
-      return err(
-        new Error(`Failed to deserialize AnyValue: ${result.error.message}`)
-      );
+      return err(new Error(`Failed to deserialize AnyValue: ${result.error.message}`));
     }
     return ok(result.value as AnyValue<T>);
   }
@@ -1137,9 +1131,7 @@ export function deserializeEntity<T>(
 ): Result<T, Error> {
   const avResult = AnyValue.fromBytes<T>(bytes, keystore);
   if (isErr(avResult)) {
-    return err(
-      new Error(`Failed to deserialize AnyValue: ${avResult.error.message}`)
-    );
+    return err(new Error(`Failed to deserialize AnyValue: ${avResult.error.message}`));
   }
   const av = avResult.value;
   return av.as<T>();

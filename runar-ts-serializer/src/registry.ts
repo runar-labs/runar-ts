@@ -311,7 +311,7 @@ export function initWirePrimitives(): Result<void, Error> {
 
     for (const [rustName, wireName] of wireNameRegistrations) {
       const result = registerWireName(rustName, wireName);
-              if (isErr(result)) {
+      if (isErr(result)) {
         return err(
           new Error(
             `Failed to register wire name '${rustName}' -> '${wireName}': ${result.error.message}`
@@ -334,11 +334,9 @@ export function initWirePrimitives(): Result<void, Error> {
 
     for (const [typeName, converter] of jsonRegistrations) {
       const result = registerToJson(typeName, converter);
-              if (isErr(result)) {
+      if (isErr(result)) {
         return err(
-          new Error(
-            `Failed to register JSON converter for '${typeName}': ${result.error.message}`
-          )
+          new Error(`Failed to register JSON converter for '${typeName}': ${result.error.message}`)
         );
       }
     }
