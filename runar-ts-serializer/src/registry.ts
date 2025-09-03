@@ -1,4 +1,4 @@
-import { Result, ok, err, type Err } from 'runar-ts-common/src/error/Result.js';
+import { Result, ok, err, isErr } from 'runar-ts-common/src/error/Result.js';
 import type { CommonKeysInterface } from './wire.js';
 import type { LabelResolver } from './label_resolver.js';
 
@@ -50,7 +50,7 @@ export function registerType(typeName: string, entry: TypeEntry): Result<void, E
   if (!entry.ctor || typeof entry.ctor !== 'function') {
     return err(new Error('Type entry must have a valid constructor'));
   }
-  
+
   typeNameToEntry.set(typeName, entry);
   return ok(undefined);
 }
@@ -59,12 +59,12 @@ export function resolveType(typeName: string): Result<TypeEntry, Error> {
   if (!typeName || typeof typeName !== 'string') {
     return err(new Error('Type name must be a non-empty string'));
   }
-  
+
   const entry = typeNameToEntry.get(typeName);
   if (!entry) {
     return err(new Error(`Type '${typeName}' not found in registry`));
   }
-  
+
   return ok(entry);
 }
 
@@ -88,7 +88,7 @@ export function registerWireName(rustTypeName: string, wireName: string): Result
   if (!wireName || typeof wireName !== 'string') {
     return err(new Error('Wire name must be a non-empty string'));
   }
-  
+
   rustTypeToWireName.set(rustTypeName, wireName);
   wireNameToRust.set(wireName, rustTypeName);
   return ok(undefined);
@@ -98,12 +98,12 @@ export function lookupWireName(rustTypeName: string): Result<string, Error> {
   if (!rustTypeName || typeof rustTypeName !== 'string') {
     return err(new Error('Rust type name must be a non-empty string'));
   }
-  
+
   const wireName = rustTypeToWireName.get(rustTypeName);
   if (!wireName) {
     return err(new Error(`No wire name found for Rust type '${rustTypeName}'`));
   }
-  
+
   return ok(wireName);
 }
 
@@ -111,36 +111,42 @@ export function lookupRustName(wireName: string): Result<string, Error> {
   if (!wireName || typeof wireName !== 'string') {
     return err(new Error('Wire name must be a non-empty string'));
   }
-  
+
   const rustName = wireNameToRust.get(wireName);
   if (!rustName) {
     return err(new Error(`No Rust type found for wire name '${wireName}'`));
   }
-  
+
   return ok(rustName);
 }
 
 // Encrypt/Decrypt registration
-export function registerEncrypt<T = unknown>(rustTypeName: string, encryptFn: EncryptFn<T>): Result<void, Error> {
+export function registerEncrypt<T = unknown>(
+  rustTypeName: string,
+  encryptFn: EncryptFn<T>
+): Result<void, Error> {
   if (!rustTypeName || typeof rustTypeName !== 'string') {
     return err(new Error('Rust type name must be a non-empty string'));
   }
   if (!encryptFn || typeof encryptFn !== 'function') {
     return err(new Error('Encrypt function must be a valid function'));
   }
-  
+
   encryptRegistry.set(rustTypeName, encryptFn as EncryptFn);
   return ok(undefined);
 }
 
-export function registerDecrypt<T = unknown>(rustTypeName: string, decryptFn: DecryptFn<T>): Result<void, Error> {
+export function registerDecrypt<T = unknown>(
+  rustTypeName: string,
+  decryptFn: DecryptFn<T>
+): Result<void, Error> {
   if (!rustTypeName || typeof rustTypeName !== 'string') {
     return err(new Error('Rust type name must be a non-empty string'));
   }
   if (!decryptFn || typeof decryptFn !== 'function') {
     return err(new Error('Decrypt function must be a valid function'));
   }
-  
+
   decryptRegistry.set(rustTypeName, decryptFn as DecryptFn);
   return ok(undefined);
 }
@@ -149,12 +155,12 @@ export function lookupEncryptorByTypeName(rustTypeName: string): Result<EncryptF
   if (!rustTypeName || typeof rustTypeName !== 'string') {
     return err(new Error('Rust type name must be a non-empty string'));
   }
-  
+
   const encryptor = encryptRegistry.get(rustTypeName);
   if (!encryptor) {
     return err(new Error(`No encryptor found for type '${rustTypeName}'`));
   }
-  
+
   return ok(encryptor);
 }
 
@@ -162,12 +168,12 @@ export function lookupDecryptorByTypeName(rustTypeName: string): Result<DecryptF
   if (!rustTypeName || typeof rustTypeName !== 'string') {
     return err(new Error('Rust type name must be a non-empty string'));
   }
-  
+
   const decryptor = decryptRegistry.get(rustTypeName);
   if (!decryptor) {
     return err(new Error(`No decryptor found for type '${rustTypeName}'`));
   }
-  
+
   return ok(decryptor);
 }
 
@@ -182,22 +188,24 @@ export function registerEncryptedCompanion<T = unknown>(
   if (!encryptedCompanionCtor || typeof encryptedCompanionCtor !== 'function') {
     return err(new Error('Encrypted companion constructor must be a valid function'));
   }
-  
+
   plainTypeToEncryptedCompanion.set(plainTypeName, encryptedCompanionCtor);
   encryptedCompanionToPlainType.set(encryptedCompanionCtor.name, encryptedCompanionCtor);
   return ok(undefined);
 }
 
-export function getEncryptedCompanion<T = unknown>(plainTypeName: string): Result<Constructor, Error> {
+export function getEncryptedCompanion<T = unknown>(
+  plainTypeName: string
+): Result<Constructor, Error> {
   if (!plainTypeName || typeof plainTypeName !== 'string') {
     return err(new Error('Plain type name must be a non-empty string'));
   }
-  
+
   const companion = plainTypeToEncryptedCompanion.get(plainTypeName);
   if (!companion) {
     return err(new Error(`No encrypted companion found for plain type '${plainTypeName}'`));
   }
-  
+
   return ok(companion);
 }
 
@@ -205,7 +213,7 @@ export function isEncryptedCompanion(ctor: Constructor): Result<boolean, Error> 
   if (!ctor || typeof ctor !== 'function') {
     return err(new Error('Constructor must be a valid function'));
   }
-  
+
   return ok(encryptedCompanionToPlainType.has(ctor.name));
 }
 
@@ -213,24 +221,27 @@ export function getDecryptor<T>(plainTypeName: string): Result<DecryptFn, Error>
   if (!plainTypeName || typeof plainTypeName !== 'string') {
     return err(new Error('Plain type name must be a non-empty string'));
   }
-  
+
   const decryptor = decryptRegistry.get(plainTypeName);
   if (!decryptor) {
     return err(new Error(`No decryptor found for plain type '${plainTypeName}'`));
   }
-  
+
   return ok(decryptor);
 }
 
 // JSON converter registration
-export function registerToJson<T = unknown>(rustTypeName: string, toJsonFn: ToJsonFn<T>): Result<void, Error> {
+export function registerToJson<T = unknown>(
+  rustTypeName: string,
+  toJsonFn: ToJsonFn<T>
+): Result<void, Error> {
   if (!rustTypeName || typeof rustTypeName !== 'string') {
     return err(new Error('Rust type name must be a non-empty string'));
   }
   if (!toJsonFn || typeof toJsonFn !== 'function') {
     return err(new Error('JSON converter function must be a valid function'));
   }
-  
+
   jsonRegistryByRustName.set(rustTypeName, toJsonFn as ToJsonFn);
 
   // If a wire name exists for this type, also bind under wire name
@@ -238,7 +249,7 @@ export function registerToJson<T = unknown>(rustTypeName: string, toJsonFn: ToJs
   if (wireNameResult.ok) {
     wireNameToJson.set(wireNameResult.value, toJsonFn as ToJsonFn);
   }
-  
+
   return ok(undefined);
 }
 
@@ -246,12 +257,12 @@ export function getJsonConverterByWireName(wireName: string): Result<ToJsonFn, E
   if (!wireName || typeof wireName !== 'string') {
     return err(new Error('Wire name must be a non-empty string'));
   }
-  
+
   const converter = wireNameToJson.get(wireName);
   if (!converter) {
     return err(new Error(`No JSON converter found for wire name '${wireName}'`));
   }
-  
+
   return ok(converter);
 }
 
@@ -259,12 +270,12 @@ export function getJsonConverterByRustName(rustTypeName: string): Result<ToJsonF
   if (!rustTypeName || typeof rustTypeName !== 'string') {
     return err(new Error('Rust type name must be a non-empty string'));
   }
-  
+
   const converter = jsonRegistryByRustName.get(rustTypeName);
   if (!converter) {
     return err(new Error(`No JSON converter found for Rust type '${rustTypeName}'`));
   }
-  
+
   return ok(converter);
 }
 
@@ -300,8 +311,12 @@ export function initWirePrimitives(): Result<void, Error> {
 
     for (const [rustName, wireName] of wireNameRegistrations) {
       const result = registerWireName(rustName, wireName);
-      if (!result.ok) {
-        return err(new Error(`Failed to register wire name '${rustName}' -> '${wireName}': ${(result as Err<Error>).error.message}`));
+              if (isErr(result)) {
+        return err(
+          new Error(
+            `Failed to register wire name '${rustName}' -> '${wireName}': ${result.error.message}`
+          )
+        );
       }
     }
 
@@ -319,8 +334,12 @@ export function initWirePrimitives(): Result<void, Error> {
 
     for (const [typeName, converter] of jsonRegistrations) {
       const result = registerToJson(typeName, converter);
-      if (!result.ok) {
-        return err(new Error(`Failed to register JSON converter for '${typeName}': ${(result as Err<Error>).error.message}`));
+              if (isErr(result)) {
+        return err(
+          new Error(
+            `Failed to register JSON converter for '${typeName}': ${result.error.message}`
+          )
+        );
       }
     }
 

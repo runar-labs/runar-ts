@@ -5,6 +5,7 @@ import {
   registerEncryptedCompanion,
   registerToJson,
 } from 'runar-ts-serializer/src/registry.js';
+import { isErr } from 'runar-ts-common/src/error/Result.js';
 import {
   encryptLabelGroupSync,
   decryptLabelGroupSync,
@@ -104,8 +105,8 @@ export function Plain(options?: PlainOptions) {
     
     // Register wire name with serializer registry
     const wireNameResult = registerWireName(String(className), typeName);
-    if (!wireNameResult.ok) {
-      throw new Error(`Failed to register wire name: ${(wireNameResult as Err<Error>).error.message}`);
+    if (isErr(wireNameResult)) {
+      throw new Error(`Failed to register wire name: ${wireNameResult.error.message}`);
     }
   };
 }
@@ -304,8 +305,8 @@ export function Encrypt<T extends Constructor>(value: T, context: ClassDecorator
         return err(new Error(`Failed to decrypt ${typeName}: ${error}`));
       }
     });
-    if (!decryptResult.ok) {
-      throw new Error(`Failed to register decryptor: ${(decryptResult as Err<Error>).error.message}`);
+    if (isErr(decryptResult)) {
+      throw new Error(`Failed to register decryptor: ${decryptResult.error.message}`);
     }
 
     // Register encryptor with the serializer registry
@@ -324,8 +325,8 @@ export function Encrypt<T extends Constructor>(value: T, context: ClassDecorator
         return err(new Error(`Failed to encrypt ${typeName}: ${error}`));
       }
     });
-    if (!encryptResult.ok) {
-      throw new Error(`Failed to register encryptor: ${(encryptResult as Err<Error>).error.message}`);
+    if (isErr(encryptResult)) {
+      throw new Error(`Failed to register encryptor: ${encryptResult.error.message}`);
     }
 
     // Register wire name for the type
@@ -424,8 +425,8 @@ export function ensureClassRegistered<T extends Constructor>(cls: T): void {
 
   // Register wire name
   const wireNameResult = registerWireName(cls.name, classMeta.wireName);
-  if (!wireNameResult.ok) {
-    throw new Error(`Failed to register wire name: ${(wireNameResult as Err<Error>).error.message}`);
+      if (isErr(wireNameResult)) {
+    throw new Error(`Failed to register wire name: ${wireNameResult.error.message}`);
   }
 
   // Register encryptor/decryptor handlers
@@ -436,8 +437,8 @@ export function ensureClassRegistered<T extends Constructor>(cls: T): void {
       }
       return err(new Error(`Value does not have encryptWithKeystore method`));
     });
-    if (!encryptResult.ok) {
-      throw new Error(`Failed to register encryptor: ${(encryptResult as Err<Error>).error.message}`);
+    if (isErr(encryptResult)) {
+      throw new Error(`Failed to register encryptor: ${encryptResult.error.message}`);
     }
 
     const decryptResult = registerDecrypt(classMeta.encryptedCtor.name, (value: InstanceType<typeof classMeta.encryptedCtor>, keystore: CommonKeysInterface) => {
@@ -446,14 +447,14 @@ export function ensureClassRegistered<T extends Constructor>(cls: T): void {
       }
       return err(new Error(`Value does not have decryptWithKeystore method`));
     });
-    if (!decryptResult.ok) {
-      throw new Error(`Failed to register decryptor: ${(decryptResult as Err<Error>).error.message}`);
+    if (isErr(decryptResult)) {
+      throw new Error(`Failed to register decryptor: ${decryptResult.error.message}`);
     }
 
     // Register encrypted companion
     const companionResult = registerEncryptedCompanion(cls.name, classMeta.encryptedCtor);
-    if (!companionResult.ok) {
-      throw new Error(`Failed to register encrypted companion: ${(companionResult as Err<Error>).error.message}`);
+    if (isErr(companionResult)) {
+      throw new Error(`Failed to register encrypted companion: ${companionResult.error.message}`);
     }
   }
 
@@ -464,8 +465,8 @@ export function ensureClassRegistered<T extends Constructor>(cls: T): void {
     }
     return JSON.stringify(value);
   });
-  if (!jsonResult.ok) {
-    throw new Error(`Failed to register JSON converter: ${(jsonResult as Err<Error>).error.message}`);
+  if (isErr(jsonResult)) {
+    throw new Error(`Failed to register JSON converter: ${jsonResult.error.message}`);
   }
 
   classMeta.registered = true;

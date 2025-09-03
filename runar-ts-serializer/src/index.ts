@@ -1,5 +1,5 @@
 import { encode, decode } from 'cbor-x';
-import { Result, ok, err, type Err } from 'runar-ts-common/src/error/Result.js';
+import { Result, ok, err, isErr } from 'runar-ts-common/src/error/Result.js';
 import {
   ValueCategory,
   DeserializationContext,
@@ -359,10 +359,10 @@ export class AnyValue<T = unknown> {
           if (encryptorResult.ok) {
             // Use registry encryptor
             const encryptedResult = encryptorResult.value(value, keystore, resolver);
-            if (encryptedResult.ok) {
-              return ok(encryptedResult.value);
+            if (isErr(encryptedResult)) {
+              return err(encryptedResult.error);
             } else {
-              return err((encryptedResult as Err<Error>).error);
+              return ok(encryptedResult.value);
             }
           }
         }
@@ -476,9 +476,9 @@ export class AnyValue<T = unknown> {
               return AnyValue.newList(item);
             } else {
               const primitiveResult = AnyValue.newPrimitive(item);
-              if (!primitiveResult.ok) {
+              if (isErr(primitiveResult)) {
                 throw new Error(
-                  `Failed to create primitive AnyValue: ${(primitiveResult as Err<Error>).error.message}`
+                  `Failed to create primitive AnyValue: ${primitiveResult.error.message}`
                 );
               }
               return primitiveResult.value;
@@ -506,9 +506,9 @@ export class AnyValue<T = unknown> {
                 map.set(key, AnyValue.newList(val));
               } else {
                 const primitiveResult = AnyValue.newPrimitive(val);
-                if (!primitiveResult.ok) {
+                if (isErr(primitiveResult)) {
                   throw new Error(
-                    `Failed to create primitive AnyValue: ${(primitiveResult as Err<Error>).error.message}`
+                    `Failed to create primitive AnyValue: ${primitiveResult.error.message}`
                   );
                 }
                 map.set(key, primitiveResult.value);
@@ -1013,10 +1013,12 @@ export class AnyValue<T = unknown> {
           if (decryptorResult.ok) {
             try {
               const decrypted = decryptorResult.value(decryptedBytes, this.lazyData.keystore!);
-              if (decrypted.ok) {
-                return ok(decrypted.value as U);
+              if (isErr(decrypted)) {
+                return err(
+                  new Error(`Registry decryptor failed: ${decrypted.error.message}`)
+                );
               } else {
-                return err(new Error(`Registry decryptor failed: ${(decrypted as Err<Error>).error.message}`));
+                return ok(decrypted.value as U);
               }
             } catch (decryptorError) {
               return err(new Error(`Registry decryptor execution error: ${decryptorError}`));
@@ -1054,10 +1056,10 @@ export class AnyValue<T = unknown> {
     switch (category) {
       case ValueCategory.Primitive:
         const primitiveResult = AnyValue.newPrimitive(value);
-        if (!primitiveResult.ok) {
+        if (isErr(primitiveResult)) {
           return err(
             new Error(
-              `Failed to create primitive AnyValue: ${(primitiveResult as Err<Error>).error.message}`
+              `Failed to create primitive AnyValue: ${primitiveResult.error.message}`
             )
           );
         }
@@ -1093,9 +1095,9 @@ export class AnyValue<T = unknown> {
     keystore?: CommonKeysInterface
   ): Result<AnyValue<T>, Error> {
     const result = AnyValue.deserialize(bytes, keystore);
-    if (!result.ok) {
+    if (isErr(result)) {
       return err(
-        new Error(`Failed to deserialize AnyValue: ${(result as Err<Error>).error.message}`)
+        new Error(`Failed to deserialize AnyValue: ${result.error.message}`)
       );
     }
     return ok(result.value as AnyValue<T>);
@@ -1115,8 +1117,8 @@ export { ValueCategory, readHeader, writeHeader, bodyOffset } from './wire.js';
 export function serializeEntity(entity: any): Uint8Array | Promise<Uint8Array> {
   // Serialize the entity directly
   const avResult = AnyValue.from(entity);
-  if (!avResult.ok) {
-    throw new Error(`Failed to create AnyValue: ${(avResult as Err<Error>).error.message}`);
+  if (isErr(avResult)) {
+    throw new Error(`Failed to create AnyValue: ${avResult.error.message}`);
   }
   const av = avResult.value;
   const result = av.serialize();
@@ -1134,9 +1136,9 @@ export function deserializeEntity<T>(
   keystore?: CommonKeysInterface
 ): Result<T, Error> {
   const avResult = AnyValue.fromBytes<T>(bytes, keystore);
-  if (!avResult.ok) {
+  if (isErr(avResult)) {
     return err(
-      new Error(`Failed to deserialize AnyValue: ${(avResult as Err<Error>).error.message}`)
+      new Error(`Failed to deserialize AnyValue: ${avResult.error.message}`)
     );
   }
   const av = avResult.value;
