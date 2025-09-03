@@ -90,7 +90,7 @@ class AnyValueTestEnvironment {
   }
 
   async initialize(): Promise<void> {
-    console.log('🔄 Initializing Test Environment with Real Keys');
+    // Initializing Test Environment with Real Keys
 
     // Setup mobile keys
     this.mobileKeys.setPersistenceDir('/tmp/runar-anyvalue-test-mobile');
@@ -166,9 +166,7 @@ class AnyValueTestEnvironment {
     }
     this.resolver = resolverResult.value;
 
-    console.log('   ✅ Network created with public key length:', this.networkPublicKey.length);
-    console.log('   ✅ Profile keys generated: personal, work');
-    console.log('   ✅ Test Environment initialized successfully');
+    // Network created with public key, profile keys generated, Test Environment initialized successfully
   }
 
   getMobileWrapper(): KeysWrapperMobile {
@@ -204,7 +202,9 @@ class AnyValueTestEnvironment {
     };
   }
 
-  createDeserializationContext(keystore: KeysWrapperNode | KeysWrapperMobile): DeserializationContext {
+  createDeserializationContext(
+    keystore: KeysWrapperNode | KeysWrapperMobile
+  ): DeserializationContext {
     return {
       keystore,
       resolver: this.resolver,
@@ -216,7 +216,7 @@ class AnyValueTestEnvironment {
       await this.mobileKeys.wipePersistence();
       await this.nodeKeys.wipePersistence();
     } catch (error) {
-      console.log('Cleanup warning:', error.message);
+      // Cleanup warning: ${error.message}
     }
   }
 }
@@ -249,31 +249,32 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       // Serialize with encryption context
       const serializeResult = AnyValue.newStruct(userData).serialize(context);
       expect(serializeResult.ok).toBe(true);
-      if (!serializeResult.ok) return; //TODO this shuold faile the test with a proper message.. not just return.
+      if (!serializeResult.ok) {
+        throw new Error(`Serialization failed: ${(serializeResult as any).error.message}`);
+      }
       expect(serializeResult.value.length).toBeGreaterThan(0);
 
       // Deserialize with keystore
-      const deserContext = testEnv.createDeserializationContext(testEnv.getMobileWrapper());//TODO this is never used
+      // Note: deserContext is not used in this test as we pass keystore directly to deserialize
       const deserializeResult = AnyValue.deserialize(
         serializeResult.value,
         testEnv.getMobileWrapper()
       );
       expect(deserializeResult.ok).toBe(true);
-      if (!deserializeResult.ok) return;//TODO this shuold faile the test with a proper message.. not just return.
+      if (!deserializeResult.ok) {
+        throw new Error(`Deserialization failed: ${(deserializeResult as any).error.message}`);
+      }
 
       // Verify the decrypted data
       const decrypted = deserializeResult.value;
-      console.log('🔍 Decrypted AnyValue:', decrypted);
-      console.log('🔍 Decrypted category:', (decrypted as any).category);
-      console.log('🔍 Decrypted isEncrypted:', (decrypted as any).isEncrypted);
 
       const asProfileResult = decrypted.as<TestProfile>();
-      console.log('🔍 as<TestProfile> result:', asProfileResult);
       expect(asProfileResult.ok).toBe(true);
-      if (!asProfileResult.ok) return;//TODO this shuold faile the test with a proper message.. not just return.
+      if (!asProfileResult.ok) {
+        throw new Error(`as<TestProfile> failed: ${(asProfileResult as any).error.message}`);
+      }
 
       const decryptedProfile = asProfileResult.value;
-      console.log('🔍 Decrypted profile:', decryptedProfile);
       expect(decryptedProfile.id).toBe(userData.id);
       expect(decryptedProfile.name).toBe(userData.name);
       expect(decryptedProfile.privateData).toBe(userData.privateData);
@@ -296,7 +297,9 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       // Serialize with encryption context
       const serializeResult = AnyValue.newStruct(systemData).serialize(context);
       expect(serializeResult.ok).toBe(true);
-      if (!serializeResult.ok) return;
+      if (!serializeResult.ok) {
+        throw new Error(`Serialization failed: ${(serializeResult as any).error.message}`);
+      }
       expect(serializeResult.value.length).toBeGreaterThan(0);
 
       // Deserialize with keystore
@@ -306,13 +309,17 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
         testEnv.getMobileWrapper()
       );
       expect(deserializeResult.ok).toBe(true);
-      if (!deserializeResult.ok) return;
+      if (!deserializeResult.ok) {
+        throw new Error(`Deserialization failed: ${(deserializeResult as any).error.message}`);
+      }
 
       // Verify the decrypted data
       const decrypted = deserializeResult.value;
       const asProfileResult = decrypted.as<TestProfile>();
       expect(asProfileResult.ok).toBe(true);
-      if (!asProfileResult.ok) return;
+      if (!asProfileResult.ok) {
+        throw new Error(`as<TestProfile> failed: ${(asProfileResult as any).error.message}`);
+      }
 
       const decryptedProfile = asProfileResult.value;
       expect(decryptedProfile.id).toBe(systemData.id);
@@ -337,7 +344,9 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       // Serialize with encryption context
       const serializeResult = AnyValue.newStruct(mixedData).serialize(context);
       expect(serializeResult.ok).toBe(true);
-      if (!serializeResult.ok) return;
+      if (!serializeResult.ok) {
+        throw new Error(`Serialization failed: ${(serializeResult as any).error.message}`);
+      }
       expect(serializeResult.value.length).toBeGreaterThan(0);
 
       // Deserialize with keystore
@@ -347,13 +356,17 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
         testEnv.getMobileWrapper()
       );
       expect(deserializeResult.ok).toBe(true);
-      if (!deserializeResult.ok) return;
+      if (!deserializeResult.ok) {
+        throw new Error(`Deserialization failed: ${(deserializeResult as any).error.message}`);
+      }
 
       // Verify the decrypted data
       const decrypted = deserializeResult.value;
       const asProfileResult = decrypted.as<TestProfile>();
       expect(asProfileResult.ok).toBe(true);
-      if (!asProfileResult.ok) return;
+      if (!asProfileResult.ok) {
+        throw new Error(`as<TestProfile> failed: ${(asProfileResult as any).error.message}`);
+      }
 
       const decryptedProfile = asProfileResult.value;
       expect(decryptedProfile.id).toBe(mixedData.id);
@@ -379,8 +392,8 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       expect(mobileCaps.hasProfileKeys).toBe(true);
       expect(mobileCaps.hasNetworkKeys).toBe(false);
 
-                  // Test node keystore capabilities
-            const nodeCaps = testEnv.getNodeWrapper().getKeystoreCaps();
+      // Test node keystore capabilities
+      const nodeCaps = testEnv.getNodeWrapper().getKeystoreCaps();
       expect(nodeCaps.hasProfileKeys).toBe(false);
       expect(nodeCaps.hasNetworkKeys).toBe(true);
 
@@ -410,8 +423,10 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
       const encryptTime = Date.now() - startTime;
 
       expect(serializeResult.ok).toBe(true);
-      if (!serializeResult.ok) return;
-      console.log(`📈 Encryption time for large data: ${encryptTime}ms`);
+      if (!serializeResult.ok) {
+        throw new Error(`Serialization failed: ${(serializeResult as any).error.message}`);
+      }
+      // Encryption time for large data: ${encryptTime}ms
 
       // Test decryption
       const deserContext = testEnv.createDeserializationContext(testEnv.getMobileWrapper());
@@ -420,13 +435,17 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
         testEnv.getMobileWrapper()
       );
       expect(deserializeResult.ok).toBe(true);
-      if (!deserializeResult.ok) return;
+      if (!deserializeResult.ok) {
+        throw new Error(`Deserialization failed: ${(deserializeResult as any).error.message}`);
+      }
 
       // Verify data integrity
       const decrypted = deserializeResult.value;
       const asProfileResult = decrypted.as<TestProfile>();
       expect(asProfileResult.ok).toBe(true);
-      if (!asProfileResult.ok) return;
+      if (!asProfileResult.ok) {
+        throw new Error(`as<TestProfile> failed: ${(asProfileResult as any).error.message}`);
+      }
 
       const decryptedProfile = asProfileResult.value;
       expect(decryptedProfile.name.length).toBe(1000);

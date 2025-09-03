@@ -11,7 +11,7 @@ import {
 } from 'runar-ts-serializer/src/encryption.js';
 import type { CommonKeysInterface } from 'runar-ts-serializer/src/wire.js';
 import type { LabelResolver } from 'runar-ts-serializer/src/label_resolver.js';
-import { Result, ok, err } from 'runar-ts-common/src/error/Result.js';
+import { Result, ok, err, type Err } from 'runar-ts-common/src/error/Result.js';
 import type { EncryptedLabelGroup } from 'runar-ts-serializer/src/index.js';
 import type { LabelKeyInfo } from 'runar-ts-serializer/src/label_resolver.js';
 import { encode, decode } from 'cbor-x';
@@ -129,7 +129,7 @@ export function EncryptField(options: EncryptFieldOptions) {
 }
 
 // Design Section 18.4: @Encrypt decorator with runtime code generation (TS 5 standard)
-export function Encrypt<T extends Function>(value: T, context: ClassDecoratorContext): void {
+export function Encrypt<T extends Constructor>(value: T, context: ClassDecoratorContext): void {
     const className = context.name || 'AnonymousClass';
     const typeName = String(className);
     const encryptedClassName = `Encrypted${String(className)}`;
@@ -139,19 +139,19 @@ export function Encrypt<T extends Function>(value: T, context: ClassDecoratorCon
       [key: string]: any;
 
       constructor() {
-        const fieldEncryptions = (value as any).fieldEncryptions || [];
+        const fieldEncryptions = (value as Function & { fieldEncryptions?: FieldEncryption[] }).fieldEncryptions || [];
         const labels = [...new Set(fieldEncryptions.map((e: FieldEncryption) => e.label))];
 
         for (const label of labels) {
           const encryptedFieldName = `${label}_encrypted`;
-          this[encryptedFieldName] = undefined;
+          (this as Record<string, unknown>)[encryptedFieldName] = undefined;
         }
       }
 
-      decryptWithKeystore(keystore: CommonKeysInterface): Result<any> {
-        const fieldEncryptions = (value as any).fieldEncryptions || [];
+      decryptWithKeystore(keystore: CommonKeysInterface): Result<InstanceType<typeof value>> {
+        const fieldEncryptions = (value as Function & { fieldEncryptions?: FieldEncryption[] }).fieldEncryptions || [];
         const labels = [...new Set(fieldEncryptions.map((e: FieldEncryption) => e.label))];
-        const plainInstance = new (value as any)();
+        const plainInstance = new (value as Constructor)();
 
         for (const label of labels) {
           const encryptedFieldName = `${label}_encrypted`;
@@ -161,7 +161,7 @@ export function Encrypt<T extends Function>(value: T, context: ClassDecoratorCon
             try {
               const decryptedResult = decryptLabelGroupSync(encryptedGroup, keystore);
               if (decryptedResult.ok) {
-                const decryptedFields = decryptedResult.value as any;
+                const decryptedFields = decryptedResult.value as Record<string, unknown>;
                 if (decryptedFields && typeof decryptedFields === 'object') {
                   for (const fieldName in decryptedFields) {
                     plainInstance[fieldName] = decryptedFields[fieldName];
@@ -170,7 +170,7 @@ export function Encrypt<T extends Function>(value: T, context: ClassDecoratorCon
               } else {
                 return err(
                   new Error(
-                    `Failed to decrypt label group '${label}': ${(decryptedResult as any).error}`
+                    `Failed to decrypt label group '${label}': ${(decryptedResult as Err<Error>).error.message}`
                   )
                 );
               }
@@ -200,18 +200,24 @@ export function Encrypt<T extends Function>(value: T, context: ClassDecoratorCon
     Object.defineProperty(EncryptedClass, 'name', { value: encryptedClassName });
 
     // Add static properties to the original class
-    (value as any).encryptedClassName = encryptedClassName;
-    (value as any).fieldEncryptions = (value as any).fieldEncryptions || [];
-    (value as any).EncryptedClass = EncryptedClass;
+    const valueWithProps = value as Function & { 
+      encryptedClassName?: string; 
+      fieldEncryptions?: FieldEncryption[]; 
+      EncryptedClass?: Constructor;
+    };
+    valueWithProps.encryptedClassName = encryptedClassName;
+    valueWithProps.fieldEncryptions = valueWithProps.fieldEncryptions || [];
+    valueWithProps.EncryptedClass = EncryptedClass;
 
     // Add encryptWithKeystore method to the original class prototype
-    (value as any).prototype.encryptWithKeystore = function(keystore: CommonKeysInterface, resolver: LabelResolver): Result<any> {
+    const prototype = (value as Function).prototype as Record<string, unknown>;
+    prototype.encryptWithKeystore = function(keystore: CommonKeysInterface, resolver: LabelResolver): Result<InstanceType<typeof EncryptedClass>> {
       // Ensure runtime metadata and helpers are registered
-      ensureClassRegistered((this as any).constructor);
+      ensureClassRegistered((this as { constructor: Constructor }).constructor);
 
       const encryptedInstance = new EncryptedClass();
 
-      const fieldEncryptions = ((this as any).constructor as any).fieldEncryptions || [];
+      const fieldEncryptions = ((this as { constructor: Function & { fieldEncryptions?: FieldEncryption[] } }).constructor).fieldEncryptions || [];
       const labelsSet = new Set<string>(fieldEncryptions.map((e: FieldEncryption) => e.label));
       const labels: string[] = Array.from(labelsSet);
 
@@ -227,17 +233,17 @@ export function Encrypt<T extends Function>(value: T, context: ClassDecoratorCon
         const labelFieldsInstance: Record<string, unknown> = {};
         for (const field of fieldsForLabel) {
           const fieldName = field.propertyKey.toString();
-          labelFieldsInstance[fieldName] = (this as any)[fieldName];
+          labelFieldsInstance[fieldName] = (this as Record<string, unknown>)[fieldName];
         }
 
         const encRes = encryptLabelGroupSync(label, labelFieldsInstance, keystore, resolver);
         if (!encRes.ok) {
           return err(
-            new Error(`Failed to encrypt label group '${label}': ${(encRes as any).error}`)
+            new Error(`Failed to encrypt label group '${label}': ${(encRes as Err<Error>).error.message}`)
           );
         }
         const encryptedFieldName = `${label}_encrypted`;
-        (encryptedInstance as any)[encryptedFieldName] = encRes.value;
+        (encryptedInstance as Record<string, unknown>)[encryptedFieldName] = encRes.value;
       }
 
       // Copy plaintext (non-encrypted) fields
@@ -247,7 +253,7 @@ export function Encrypt<T extends Function>(value: T, context: ClassDecoratorCon
       );
       for (const field of allFields) {
         if (!encryptedFieldNames.has(field) && field !== 'constructor') {
-          (encryptedInstance as any)[field] = (this as any)[field];
+          (encryptedInstance as Record<string, unknown>)[field] = (this as Record<string, unknown>)[field];
         }
       }
 
@@ -255,7 +261,7 @@ export function Encrypt<T extends Function>(value: T, context: ClassDecoratorCon
     };
 
     // Add decryptWithKeystore method to the original class prototype
-    (value as any).prototype.decryptWithKeystore = function(keystore: CommonKeysInterface): Result<any> {
+    prototype.decryptWithKeystore = function(keystore: CommonKeysInterface): Result<InstanceType<typeof value>> {
       return err(
         new Error('decryptWithKeystore can only be called on Encrypted{T} instances')
       );
@@ -274,13 +280,10 @@ export function Encrypt<T extends Function>(value: T, context: ClassDecoratorCon
 
     // CRITICAL: Register decryptor with the serializer registry
     // This is what was missing and causing the as<TestProfile>() to fail
-    registerDecrypt(typeName, (encryptedBytes: Uint8Array, keystore: CommonKeysInterface): Result<typeof value, Error> => {
+    registerDecrypt(typeName, (encryptedBytes: Uint8Array, keystore: CommonKeysInterface): Result<InstanceType<typeof value>, Error> => {
       try {
-        console.log(`🔍 Decryptor called for ${typeName}`);
-        
         // Decode the encrypted companion from CBOR bytes
-        const encrypted = decode(encryptedBytes) as any;
-        console.log(`🔍 Decoded encrypted companion:`, Object.keys(encrypted));
+        const encrypted = decode(encryptedBytes) as Record<string, unknown>;
         
         // Create a proper instance of the encrypted companion class
         const encryptedInstance = new EncryptedClass();
@@ -290,26 +293,22 @@ export function Encrypt<T extends Function>(value: T, context: ClassDecoratorCon
           encryptedInstance[key] = val;
         }
         
-        console.log(`🔍 Encrypted instance fields:`, Object.keys(encryptedInstance));
-        
         // Call the decryptWithKeystore method to get the plain struct
         const result = encryptedInstance.decryptWithKeystore(keystore);
-        console.log(`🔍 Decrypt result:`, result.ok ? 'SUCCESS' : 'FAILED', result.ok ? Object.keys(result.value) : (result as any).error);
         
         return result;
       } catch (error) {
-        console.log(`🔍 Decryptor error:`, error);
         return err(new Error(`Failed to decrypt ${typeName}: ${error}`));
       }
     });
 
     // Register encryptor with the serializer registry
-    registerEncrypt(typeName, (plainInstance: any, keystore: CommonKeysInterface, resolver: LabelResolver): Result<Uint8Array, Error> => {
+    registerEncrypt(typeName, (plainInstance: InstanceType<typeof value>, keystore: CommonKeysInterface, resolver: LabelResolver): Result<Uint8Array, Error> => {
       try {
         // Call the encryptWithKeystore method to get the encrypted companion
         const encResult = plainInstance.encryptWithKeystore(keystore, resolver);
         if (!encResult.ok) {
-          return err(new Error(`Failed to encrypt ${typeName}: ${(encResult as any).error.message}`));
+          return err(new Error(`Failed to encrypt ${typeName}: ${(encResult as Err<Error>).error.message}`));
         }
         
         // Encode the encrypted companion to CBOR bytes
@@ -392,7 +391,7 @@ export function ensureClassRegistered<T extends Constructor>(cls: T): void {
     return;
   }
 
-  const fieldEncryptions = (cls as any).fieldEncryptions || [];
+  const fieldEncryptions = (cls as Function & { fieldEncryptions?: FieldEncryption[] }).fieldEncryptions || [];
   const labels = [...new Set(fieldEncryptions.map((e: FieldEncryption) => e.label))] as string[];
 
   const sortedLabels = labels.sort((a: string, b: string) => {
@@ -416,14 +415,14 @@ export function ensureClassRegistered<T extends Constructor>(cls: T): void {
 
   // Register encryptor/decryptor handlers
   if (classMeta.encryptedCtor) {
-    registerEncrypt(cls.name, (value: any, keystore: CommonKeysInterface, resolver: LabelResolver) => {
+    registerEncrypt(cls.name, (value: InstanceType<T>, keystore: CommonKeysInterface, resolver: LabelResolver) => {
       if (value && typeof value.encryptWithKeystore === 'function') {
         return value.encryptWithKeystore(keystore, resolver);
       }
       return err(new Error(`Value does not have encryptWithKeystore method`));
     });
 
-    registerDecrypt(classMeta.encryptedCtor.name, (value: any, keystore: CommonKeysInterface) => {
+    registerDecrypt(classMeta.encryptedCtor.name, (value: InstanceType<typeof classMeta.encryptedCtor>, keystore: CommonKeysInterface) => {
       if (value && typeof value.decryptWithKeystore === 'function') {
         return value.decryptWithKeystore(keystore);
       }
@@ -435,7 +434,7 @@ export function ensureClassRegistered<T extends Constructor>(cls: T): void {
   }
 
   // Register JSON converter
-  registerToJson(cls.name, (value: any) => {
+  registerToJson(cls.name, (value: InstanceType<T>) => {
     if (value && typeof value === 'object') {
       return JSON.stringify(value);
     }

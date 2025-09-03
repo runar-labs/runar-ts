@@ -1,5 +1,5 @@
 import { encode, decode } from 'cbor-x';
-import { Result, ok, err } from 'runar-ts-common/src/error/Result.js';
+import { Result, ok, err, type Err } from 'runar-ts-common/src/error/Result.js';
 import {
   ValueCategory,
   DeserializationContext,
@@ -341,7 +341,7 @@ export class AnyValue<T = unknown> {
       value &&
       typeof value === 'object' &&
       'encryptWithKeystore' in value &&
-      value.encryptWithKeystore !== (value as any).__isPlainNoOp;
+      value.encryptWithKeystore !== (value as { __isPlainNoOp?: boolean }).__isPlainNoOp;
 
     const serializeFn: SerializeFn = (value, keystore, resolver) => {
       try {
@@ -362,7 +362,7 @@ export class AnyValue<T = unknown> {
             if (encryptedResult.ok) {
               return ok(encryptedResult.value);
             } else {
-              return err((encryptedResult as any).error);
+              return err((encryptedResult as Err<Error>).error);
             }
           }
         }
@@ -530,8 +530,8 @@ export class AnyValue<T = unknown> {
         const decrypted = value.decryptWithKeystore(keystore);
         value = decrypted;
       } catch (e) {
-        // If decryption fails, keep the encrypted value but log the error
-        console.warn(`Failed to decrypt instance: ${e}`);
+        // If decryption fails, keep the encrypted value
+        // Error will be handled by the caller
       }
     }
 
@@ -989,16 +989,13 @@ export class AnyValue<T = unknown> {
         // Try direct decode into requested T first
         try {
           const decoded = decode(decryptedBytes);
-          console.log(`🔍 Direct decode succeeded for ${this.lazyData.typeName}:`, Object.keys(decoded));
           // If we're requesting a plain type but got an encrypted companion, we need to decrypt it
           if (this.lazyData.typeName && !decoded.constructor.name.startsWith('Encrypted')) {
-            console.log(`🔍 Requesting plain type ${this.lazyData.typeName}, but got encrypted companion, need to decrypt`);
             // Fall through to registry decryptor
             throw new Error('Need registry decryptor for plain type');
           }
           return ok(decoded as U);
         } catch (directDecodeError) {
-          console.log(`🔍 Direct decode failed for ${this.lazyData.typeName}:`, directDecodeError instanceof Error ? directDecodeError.message : String(directDecodeError));
           // If direct decode fails, try registry decryptor for the target type
           const decryptor = lookupDecryptorByTypeName(this.lazyData.typeName || '');
           if (decryptor) {
