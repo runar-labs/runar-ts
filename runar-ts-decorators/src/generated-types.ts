@@ -10,4 +10,3 @@ export interface EncryptedTestProfile {
   search_encrypted: EncryptedLabelGroup;
   system_only_encrypted: EncryptedLabelGroup;
 }
-

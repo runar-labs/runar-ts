@@ -1142,9 +1142,9 @@ const encryptableOriginal = original as TestProfile &
 const encrypted: EncryptedTestProfile = {
   id: '123', // plain field
   system_encrypted: encryptedLabelGroup, // contains all fields with @runar('system')
-  user_encrypted: encryptedLabelGroup,   // contains all fields with @runar('user')
+  user_encrypted: encryptedLabelGroup, // contains all fields with @runar('user')
   search_encrypted: encryptedLabelGroup, // contains all fields with @runar('search')
-  system_only_encrypted: encryptedLabelGroup // contains all fields with @runar('system_only')
+  system_only_encrypted: encryptedLabelGroup, // contains all fields with @runar('system_only')
 };
 ```
 
