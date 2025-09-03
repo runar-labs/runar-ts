@@ -140,11 +140,11 @@ export class AnyValue<T = unknown> {
           for (const element of value) {
             // Check if element type has an encryptor in registry
             const elementTypeName = AnyValue.getTypeName(element);
-            const encryptor = lookupEncryptorByTypeName(elementTypeName);
+            const encryptorResult = lookupEncryptorByTypeName(elementTypeName);
 
-            if (encryptor) {
+            if (encryptorResult.ok) {
               // Encrypt element using registry
-              const encryptedResult = encryptor(element, keystore, resolver);
+              const encryptedResult = encryptorResult.value(element, keystore, resolver);
               if (encryptedResult.ok) {
                 encryptedElements.push(encryptedResult.value);
               } else {
@@ -218,11 +218,11 @@ export class AnyValue<T = unknown> {
             for (const [key, val] of value) {
               // Check if value type has an encryptor in registry
               const valueTypeName = AnyValue.getTypeName(val);
-              const encryptor = lookupEncryptorByTypeName(valueTypeName);
+              const encryptorResult = lookupEncryptorByTypeName(valueTypeName);
 
-              if (encryptor) {
+              if (encryptorResult.ok) {
                 // Encrypt value using registry
-                const encryptedResult = encryptor(val, keystore, resolver);
+                const encryptedResult = encryptorResult.value(val, keystore, resolver);
                 if (encryptedResult.ok) {
                   encryptedMap.set(key, encryptedResult.value);
                 } else {
@@ -355,10 +355,10 @@ export class AnyValue<T = unknown> {
           return ok(encode(encryptedResult.value));
         } else if (keystore && resolver) {
           // Check if there's a registry encryptor for this type
-          const encryptor = lookupEncryptorByTypeName(typeName);
-          if (encryptor) {
+          const encryptorResult = lookupEncryptorByTypeName(typeName);
+          if (encryptorResult.ok) {
             // Use registry encryptor
-            const encryptedResult = encryptor(value, keystore, resolver);
+            const encryptedResult = encryptorResult.value(value, keystore, resolver);
             if (encryptedResult.ok) {
               return ok(encryptedResult.value);
             } else {
@@ -1009,14 +1009,14 @@ export class AnyValue<T = unknown> {
           return ok(decoded as U);
         } catch (directDecodeError) {
           // If direct decode fails, try registry decryptor for the target type
-          const decryptor = lookupDecryptorByTypeName(this.lazyData.typeName || '');
-          if (decryptor) {
+          const decryptorResult = lookupDecryptorByTypeName(this.lazyData.typeName || '');
+          if (decryptorResult.ok) {
             try {
-              const decrypted = decryptor(decryptedBytes, this.lazyData.keystore!);
+              const decrypted = decryptorResult.value(decryptedBytes, this.lazyData.keystore!);
               if (decrypted.ok) {
                 return ok(decrypted.value as U);
               } else {
-                return err(new Error(`Registry decryptor failed: ${(decrypted as any).error}`));
+                return err(new Error(`Registry decryptor failed: ${(decrypted as Err<Error>).error.message}`));
               }
             } catch (decryptorError) {
               return err(new Error(`Registry decryptor execution error: ${decryptorError}`));

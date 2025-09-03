@@ -103,7 +103,10 @@ export function Plain(options?: PlainOptions) {
     classMetaRegistry.set(value, classMeta);
     
     // Register wire name with serializer registry
-    registerWireName(String(className), typeName);
+    const wireNameResult = registerWireName(String(className), typeName);
+    if (!wireNameResult.ok) {
+      throw new Error(`Failed to register wire name: ${(wireNameResult as Err<Error>).error.message}`);
+    }
   };
 }
 
@@ -280,7 +283,7 @@ export function Encrypt<T extends Constructor>(value: T, context: ClassDecorator
 
     // CRITICAL: Register decryptor with the serializer registry
     // This is what was missing and causing the as<TestProfile>() to fail
-    registerDecrypt(typeName, (encryptedBytes: Uint8Array, keystore: CommonKeysInterface): Result<InstanceType<typeof value>, Error> => {
+    const decryptResult = registerDecrypt(typeName, (encryptedBytes: Uint8Array, keystore: CommonKeysInterface): Result<InstanceType<typeof value>, Error> => {
       try {
         // Decode the encrypted companion from CBOR bytes
         const encrypted = decode(encryptedBytes) as Record<string, unknown>;
@@ -301,9 +304,12 @@ export function Encrypt<T extends Constructor>(value: T, context: ClassDecorator
         return err(new Error(`Failed to decrypt ${typeName}: ${error}`));
       }
     });
+    if (!decryptResult.ok) {
+      throw new Error(`Failed to register decryptor: ${(decryptResult as Err<Error>).error.message}`);
+    }
 
     // Register encryptor with the serializer registry
-    registerEncrypt(typeName, (plainInstance: InstanceType<typeof value>, keystore: CommonKeysInterface, resolver: LabelResolver): Result<Uint8Array, Error> => {
+    const encryptResult = registerEncrypt(typeName, (plainInstance: InstanceType<typeof value>, keystore: CommonKeysInterface, resolver: LabelResolver): Result<Uint8Array, Error> => {
       try {
         // Call the encryptWithKeystore method to get the encrypted companion
         const encResult = plainInstance.encryptWithKeystore(keystore, resolver);
@@ -318,9 +324,15 @@ export function Encrypt<T extends Constructor>(value: T, context: ClassDecorator
         return err(new Error(`Failed to encrypt ${typeName}: ${error}`));
       }
     });
+    if (!encryptResult.ok) {
+      throw new Error(`Failed to register encryptor: ${(encryptResult as Err<Error>).error.message}`);
+    }
 
     // Register wire name for the type
-    registerWireName(typeName, typeName);
+    const wireNameResult2 = registerWireName(typeName, typeName);
+    if (!wireNameResult2.ok) {
+      throw new Error(`Failed to register wire name: ${(wireNameResult2 as Err<Error>).error.message}`);
+    }
 
     // Auto-register the class immediately when decorator is applied
     ensureClassRegistered(value as unknown as Constructor);
@@ -411,35 +423,50 @@ export function ensureClassRegistered<T extends Constructor>(cls: T): void {
   classMeta.orderedLabels = sortedLabels;
 
   // Register wire name
-  registerWireName(cls.name, classMeta.wireName);
+  const wireNameResult = registerWireName(cls.name, classMeta.wireName);
+  if (!wireNameResult.ok) {
+    throw new Error(`Failed to register wire name: ${(wireNameResult as Err<Error>).error.message}`);
+  }
 
   // Register encryptor/decryptor handlers
   if (classMeta.encryptedCtor) {
-    registerEncrypt(cls.name, (value: InstanceType<T>, keystore: CommonKeysInterface, resolver: LabelResolver) => {
+    const encryptResult = registerEncrypt(cls.name, (value: InstanceType<T>, keystore: CommonKeysInterface, resolver: LabelResolver) => {
       if (value && typeof value.encryptWithKeystore === 'function') {
         return value.encryptWithKeystore(keystore, resolver);
       }
       return err(new Error(`Value does not have encryptWithKeystore method`));
     });
+    if (!encryptResult.ok) {
+      throw new Error(`Failed to register encryptor: ${(encryptResult as Err<Error>).error.message}`);
+    }
 
-    registerDecrypt(classMeta.encryptedCtor.name, (value: InstanceType<typeof classMeta.encryptedCtor>, keystore: CommonKeysInterface) => {
+    const decryptResult = registerDecrypt(classMeta.encryptedCtor.name, (value: InstanceType<typeof classMeta.encryptedCtor>, keystore: CommonKeysInterface) => {
       if (value && typeof value.decryptWithKeystore === 'function') {
         return value.decryptWithKeystore(keystore);
       }
       return err(new Error(`Value does not have decryptWithKeystore method`));
     });
+    if (!decryptResult.ok) {
+      throw new Error(`Failed to register decryptor: ${(decryptResult as Err<Error>).error.message}`);
+    }
 
     // Register encrypted companion
-    registerEncryptedCompanion(cls.name, classMeta.encryptedCtor);
+    const companionResult = registerEncryptedCompanion(cls.name, classMeta.encryptedCtor);
+    if (!companionResult.ok) {
+      throw new Error(`Failed to register encrypted companion: ${(companionResult as Err<Error>).error.message}`);
+    }
   }
 
   // Register JSON converter
-  registerToJson(cls.name, (value: InstanceType<T>) => {
+  const jsonResult = registerToJson(cls.name, (value: InstanceType<T>) => {
     if (value && typeof value === 'object') {
       return JSON.stringify(value);
     }
     return JSON.stringify(value);
   });
+  if (!jsonResult.ok) {
+    throw new Error(`Failed to register JSON converter: ${(jsonResult as Err<Error>).error.message}`);
+  }
 
   classMeta.registered = true;
 }
