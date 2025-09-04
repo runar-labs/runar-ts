@@ -567,6 +567,8 @@ export class AnyValue<T = unknown> {
       return value.getTypeName() || 'struct';
     }
 
+    if (value === null) return 'null';
+    if (value === undefined) return 'null'; // Treat undefined as null for serialization
     if (typeof value === 'string') return 'string';
     if (typeof value === 'boolean') return 'bool';
     if (typeof value === 'number') {
@@ -599,6 +601,7 @@ export class AnyValue<T = unknown> {
 
   private static isPrimitive(typeName: string): boolean {
     const primitives = [
+      'null',
       'string',
       'bool',
       'i8',
