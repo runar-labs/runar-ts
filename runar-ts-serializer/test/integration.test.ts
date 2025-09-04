@@ -91,7 +91,7 @@ class RealTestKeystore {
   getKeystoreState(): number {
     return this.keys.getKeystoreState();
   }
-  getKeystoreCaps(): any {
+  getKeystoreCaps(): { hasProfileKeys: boolean; hasNetworkKeys: boolean } {
     return this.keys.getKeystoreCaps();
   }
 }
