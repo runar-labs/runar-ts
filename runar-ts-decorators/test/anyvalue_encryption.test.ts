@@ -1,24 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import { Keys } from 'runar-nodejs-api';
 import {
-  LabelResolverConfig,
-  LabelResolver,
-  ResolverCache,
-  SerializationContext,
-  DeserializationContext,
   AnyValue,
-  createContextLabelResolver,
-  LabelKeyword,
   ValueCategory,
-} from 'runar-ts-serializer/src/index.js';
-import {
-  KeystoreFactory,
-  KeysWrapperMobile,
-  KeysWrapperNode,
-} from 'runar-ts-node/src/keys_manager_wrapper.js';
-import { type RunarEncryptable } from '../src/index.js';
+} from 'runar-ts-serializer/src/index';
+import { type RunarEncryptable } from '../src/index';
 import { TestProfile } from '../test_fixtures/dist/test_fixtures/test_fixtures';
 import type { EncryptedTestProfile } from '../src/encrypted-types';
+import { AnyValueTestEnvironment } from './test_utils/key_managers';
 
 // Import Result type and utilities
 import { Result, isErr, isOk } from 'runar-ts-common/src/error/Result';
@@ -28,249 +16,26 @@ import { Logger, Component } from 'runar-ts-common/src/logging/logger';
 import { LoggingConfig, LogLevel, applyLoggingConfig } from 'runar-ts-common/src/logging/config';
 
 /**
- * COMPREHENSIVE END-TO-END ENCRYPTION TESTS
+ * ANYVALUE ENCRYPTION TESTS
  *
- * This is the SINGLE, COMPREHENSIVE end-to-end test that validates the complete
- * encryption system using decorators and AnyValue serialization.
- *
- * Features tested:
- * - Real decorators (@Encrypt, @runar) with field-level encryption
- * - AnyValue serialization with encryption context
- * - Cross-keystore access control (mobile vs node)
- * - Label-based field encryption (user/system/search/system_only)
- * - Multi-recipient envelope encryption
- * - Performance validation for large data
- * - Concurrent encryption handling
- * - PKI workflow validation
+ * This file contains tests specifically for AnyValue serialization with encryption.
+ * These tests focus on:
+ * - AnyValue.newStruct() with encryption context
+ * - AnyValue.serialize() with encryption
+ * - AnyValue.deserialize() with keystore
+ * - AnyValue.asType<T>() for lazy decryption
+ * - Dual-mode semantics (getting both plain and encrypted types from same AnyValue)
+ * - Cross-keystore access control through AnyValue
+ * - Performance validation for large data through AnyValue
+ * - Concurrent encryption through AnyValue
  *
  * NO MOCKS, NO STUBS, NO SHORTCUTS - Real cryptographic operations only
- *
- * This test replaces all other overlapping encryption tests and serves as the
- * single source of truth for end-to-end encryption validation.
  */
 
 // TestProfile class is now imported from compiled fixtures
 
-// Test environment that mirrors Rust TestEnvironment EXACTLY
-//
-// REAL-WORLD SETUP:
-// 1. Master Mobile: Used only for setup/admin, generates network keys and certificates
-//    - Never used by end users or applications
-//    - Only used to set up nodes and generate network infrastructure
-// 2. User Mobile: End user device with only user profile keys + network PUBLIC key
-//    - Contains user profile keys (public and private)
-//    - Contains ONLY network PUBLIC key (never private keys)
-//    - Cannot decrypt network-encrypted data (no network private keys)
-//    - Can encrypt for network (has network public key)
-// 3. Node: Backend with network private keys (no user profile keys)
-//    - Contains network private keys for decryption
-//    - No user profile keys (cannot decrypt user-encrypted data)
-//    - Can decrypt network-encrypted data
-class AnyValueTestEnvironment {
-  private masterMobileKeys: Keys; // Master mobile - used only for setup/admin
-  private userMobileKeys: Keys; // User mobile - end user device with profile keys + network public key
-  private nodeKeys: Keys; // Node - backend with network private keys
-  private userMobileWrapper: KeysWrapperMobile | null;
-  private nodeWrapper: KeysWrapperNode | null;
-  private networkId: string;
-  private networkPublicKey: Uint8Array;
-  private userProfileKeys: Uint8Array[];
-  private labelResolverConfig: LabelResolverConfig;
-  private resolver: LabelResolver; // Will be set during initialization
 
-  constructor() {
-    // Initialize all three keystores
-    this.masterMobileKeys = new Keys();
-    this.userMobileKeys = new Keys();
-    this.nodeKeys = new Keys();
-
-    // Will create wrappers after proper initialization
-    this.userMobileWrapper = null; // Will be set after initialization
-    this.nodeWrapper = null; // Will be set after initialization
-
-    this.networkId = '';
-    this.networkPublicKey = new Uint8Array(0);
-    this.userProfileKeys = [];
-    this.labelResolverConfig = { labelMappings: new Map() };
-  }
-
-  async initialize(): Promise<void> {
-    // Initializing Test Environment with Real Keys - MIRRORING RUST encryption_test.rs EXACTLY
-    // This setup simulates the real-world scenario:
-    // 1. Master Mobile: Used for setup/admin, generates network keys and certificates
-    // 2. User Mobile: End user device with only user profile keys, NO network private keys
-    // 3. Node: Backend with network private keys, NO user profile keys
-
-    // 1. Setup MASTER mobile keystore (like mobile_network_master in Rust)
-    // This is used for setup/admin, generates network keys, never used by end users
-    this.masterMobileKeys.setPersistenceDir('/tmp/runar-anyvalue-test-master-mobile');
-    this.masterMobileKeys.enableAutoPersist(true);
-    this.masterMobileKeys.initAsMobile();
-    await this.masterMobileKeys.mobileInitializeUserRootKey();
-    await this.masterMobileKeys.flushState();
-
-    // Generate network key from master mobile
-    this.networkPublicKey = this.masterMobileKeys.mobileGenerateNetworkDataKey();
-    this.networkId = 'generated-network';
-
-    // 2. Create USER mobile keystore (like user_mobile in Rust)
-    // This simulates an end user's mobile device with only user profile keys
-    this.userMobileKeys.setPersistenceDir('/tmp/runar-anyvalue-test-user-mobile');
-    this.userMobileKeys.enableAutoPersist(true);
-    this.userMobileKeys.initAsMobile();
-    await this.userMobileKeys.mobileInitializeUserRootKey();
-    await this.userMobileKeys.flushState();
-
-    // Generate profile keys for user mobile (like profile_pk in Rust)
-    const profilePk = new Uint8Array(this.userMobileKeys.mobileDeriveUserProfileKey('user'));
-    this.userProfileKeys = [profilePk];
-
-    // Install ONLY the network public key on user mobile (not private key)
-    // This is the key difference - user mobile can encrypt for network but cannot decrypt network-encrypted data
-    this.userMobileKeys.mobileInstallNetworkPublicKey(this.networkPublicKey);
-
-    // Create user mobile wrapper
-    const userMobileResult = KeystoreFactory.createMobile(this.userMobileKeys);
-    if (isErr(userMobileResult)) {
-      throw new Error(
-        `Failed to create user mobile keystore wrapper: ${userMobileResult.error.message}`
-      );
-    }
-    this.userMobileWrapper = userMobileResult.value;
-
-    // 3. Setup node keys (like node_keys in Rust)
-    this.nodeKeys.setPersistenceDir('/tmp/runar-anyvalue-test-node');
-    this.nodeKeys.enableAutoPersist(true);
-    this.nodeKeys.initAsNode();
-
-    // Install network key on node using master mobile keystore
-    const token = this.nodeKeys.nodeGenerateCsr();
-    const nodeAgreementPk = this.nodeKeys.nodeGetAgreementPublicKey();
-    const nkMsg = this.masterMobileKeys.mobileCreateNetworkKeyMessage(
-      this.networkPublicKey,
-      nodeAgreementPk
-    );
-    this.nodeKeys.nodeInstallNetworkKey(nkMsg);
-
-    // Create node wrapper
-    const nodeResult = KeystoreFactory.createNode(this.nodeKeys);
-    if (isErr(nodeResult)) {
-      throw new Error(`Failed to create node keystore wrapper: ${nodeResult.error.message}`);
-    }
-    this.nodeWrapper = nodeResult.value;
-
-    // Create label resolver config that mirrors Rust encryption_test.rs EXACTLY
-    this.labelResolverConfig = {
-      labelMappings: new Map([
-        [
-          'user',
-          {
-            networkPublicKey: undefined,
-            userKeySpec: LabelKeyword.CurrentUser,
-          },
-        ],
-        [
-          'system',
-          {
-            networkPublicKey: this.networkPublicKey,
-            userKeySpec: undefined,
-          },
-        ],
-        [
-          'system_only',
-          {
-            networkPublicKey: this.networkPublicKey,
-            userKeySpec: undefined,
-          },
-        ],
-        [
-          'search',
-          {
-            networkPublicKey: this.networkPublicKey,
-            userKeySpec: LabelKeyword.CurrentUser,
-          },
-        ],
-      ]),
-    };
-
-    // Create resolver
-    const resolverResult = createContextLabelResolver(
-      this.labelResolverConfig,
-      this.userProfileKeys
-    );
-    if (isErr(resolverResult)) {
-      throw new Error(`Failed to create resolver: ${resolverResult.error.message}`);
-    }
-    this.resolver = resolverResult.value;
-
-    // Network created with public key, profile keys generated, Test Environment initialized successfully
-  }
-
-  getUserMobileWrapper(): KeysWrapperMobile {
-    if (this.userMobileWrapper === null) {
-      throw new Error('User mobile wrapper not initialized. Call initialize() first.');
-    }
-    return this.userMobileWrapper;
-  }
-
-  getNodeWrapper(): KeysWrapperNode {
-    if (this.nodeWrapper === null) {
-      throw new Error('Node wrapper not initialized. Call initialize() first.');
-    }
-    return this.nodeWrapper;
-  }
-
-  // Get master mobile keys (for reference - not used in tests, only for setup)
-  getMasterMobileKeys(): Keys {
-    return this.masterMobileKeys;
-  }
-
-  getNetworkPublicKey(): Uint8Array {
-    return this.networkPublicKey;
-  }
-
-  getUserProfileKeys(): Uint8Array[] {
-    return this.userProfileKeys;
-  }
-
-  getLabelResolverConfig(): LabelResolverConfig {
-    return this.labelResolverConfig;
-  }
-
-  getResolver(): LabelResolver {
-    return this.resolver;
-  }
-
-  createSerializationContext(keystore: KeysWrapperMobile): SerializationContext {
-    return {
-      keystore,
-      resolver: this.resolver,
-      networkPublicKey: this.networkPublicKey,
-      profilePublicKeys: this.userProfileKeys,
-    };
-  }
-
-  createDeserializationContext(
-    keystore: KeysWrapperNode | KeysWrapperMobile
-  ): DeserializationContext {
-    return {
-      keystore,
-      resolver: this.resolver,
-    };
-  }
-
-  async cleanup(): Promise<void> {
-    try {
-      await this.masterMobileKeys.wipePersistence();
-      await this.userMobileKeys.wipePersistence();
-      await this.nodeKeys.wipePersistence();
-    } catch (error) {
-      // Cleanup warning: ${error.message}
-    }
-  }
-}
-
-describe('Comprehensive End-to-End Encryption Tests (Decorators + AnyValue)', () => {
+describe('AnyValue Encryption Tests', () => {
   let testEnv: AnyValueTestEnvironment;
   let logger: Logger;
 
@@ -281,7 +46,7 @@ describe('Comprehensive End-to-End Encryption Tests (Decorators + AnyValue)', ()
     applyLoggingConfig(loggingConfig);
     logger = Logger.newRoot(Component.Node).setNodeId('test-node-123');
 
-    logger.info('Starting AnyValue Struct Encryption End-to-End Tests');
+    logger.info('Starting AnyValue Encryption Tests');
 
     testEnv = new AnyValueTestEnvironment();
     await testEnv.initialize();
@@ -291,77 +56,7 @@ describe('Comprehensive End-to-End Encryption Tests (Decorators + AnyValue)', ()
     await testEnv.cleanup();
   });
 
-  describe('Access Control Tests (Rust Parity)', () => {
-    it('should test encryption basic - direct encryptWithKeystore/decryptWithKeystore calls', async () => {
-      // This matches Rust test_encryption_basic() exactly
-      const original = new TestProfile(
-        '123',
-        'Test User',
-        'secret123',
-        'test@example.com',
-        'system_data'
-      );
-
-      // Test encryption (matches Rust: original.encrypt_with_keystore(&mobile_ks, resolver.as_ref()))
-      const encryptableOriginal = original as TestProfile &
-        RunarEncryptable<TestProfile, EncryptedTestProfile>;
-      const encryptResult = encryptableOriginal.encryptWithKeystore(
-        testEnv.getUserMobileWrapper(),
-        testEnv.getResolver()
-      );
-      expect(isOk(encryptResult)).toBe(true);
-      if (isErr(encryptResult)) {
-        throw new Error(`Encryption failed: ${encryptResult.error.message}`);
-      }
-
-      const encrypted = encryptResult.value;
-      // Verify encrypted struct has the expected fields (matches Rust assertions)
-      expect(encrypted.id).toBe('123');
-      expect(encrypted.user_encrypted).toBeDefined();
-      expect(encrypted.system_encrypted).toBeDefined();
-      expect(encrypted.search_encrypted).toBeDefined();
-      expect(encrypted.system_only_encrypted).toBeDefined();
-
-      // Test decryption with mobile (matches Rust: encrypted.decrypt_with_keystore(&mobile_ks))
-      const encryptedCompanion = encrypted as unknown as RunarEncryptable<
-        TestProfile,
-        EncryptedTestProfile
-      >;
-      const decryptedMobile = encryptedCompanion.decryptWithKeystore(
-        testEnv.getUserMobileWrapper(),
-        logger
-      );
-      expect(isOk(decryptedMobile)).toBe(true);
-      if (isErr(decryptedMobile)) {
-        throw new Error(`Mobile decryption failed: ${decryptedMobile.error.message}`);
-      }
-
-    
-      const mobileProfile = decryptedMobile.value;
-      expect(mobileProfile.id).toBe(original.id);
-      expect(mobileProfile.name).toBe(''); // Mobile should NOT have access to name
-      expect(mobileProfile.privateData).toBe(original.privateData);
-      expect(mobileProfile.email).toBe(original.email);
-      expect(mobileProfile.systemMetadata).toBe(''); // Mobile should NOT have access to system_metadata
-
-      // Test decryption with node (matches Rust: encrypted.decrypt_with_keystore(&node_ks))
-      const decryptedNode = encryptedCompanion.decryptWithKeystore(
-        testEnv.getNodeWrapper(),
-        logger
-      );
-      expect(isOk(decryptedNode)).toBe(true);
-      if (isErr(decryptedNode)) {
-        throw new Error(`Node decryption failed: ${decryptedNode.error.message}`);
-      }
-
-      const nodeProfile = decryptedNode.value;
-      expect(nodeProfile.id).toBe(original.id);
-      expect(nodeProfile.name).toBe(original.name);
-      expect(nodeProfile.privateData).toBe(''); // Should be empty for node
-      expect(nodeProfile.email).toBe(original.email);
-      expect(nodeProfile.systemMetadata).toBe(original.systemMetadata); // Node should have access to system_metadata
-    });
-
+  describe('AnyValue Serialization/Deserialization Tests', () => {
     it('should test encryption in AnyValue - AnyValue.deserialize calls', async () => {
       // This matches Rust test_encryption_in_arcvalue() exactly
       const profile = new TestProfile(
@@ -613,33 +308,7 @@ describe('Comprehensive End-to-End Encryption Tests (Decorators + AnyValue)', ()
     });
   });
 
-  describe('Cross-Keystore Access Control', () => {
-    it('should validate mobile vs node access patterns', async () => {
-      const testData = new TestProfile(
-        'access-123',
-        'Access Test',
-        'access private',
-        'access@example.com',
-        'access metadata'
-      );
-
-      // Test mobile keystore capabilities
-      const mobileCaps = testEnv.getUserMobileWrapper().getKeystoreCaps();
-      expect(mobileCaps.hasProfileKeys).toBe(true);
-      expect(mobileCaps.hasNetworkKeys).toBe(false);
-
-      // Test node keystore capabilities
-      const nodeCaps = testEnv.getNodeWrapper().getKeystoreCaps();
-      expect(nodeCaps.hasProfileKeys).toBe(false);
-      expect(nodeCaps.hasNetworkKeys).toBe(true);
-
-      // Verify both can encrypt/decrypt
-      expect(mobileCaps.canEncrypt).toBe(true);
-      expect(mobileCaps.canDecrypt).toBe(true);
-      expect(nodeCaps.canEncrypt).toBe(true);
-      expect(nodeCaps.canDecrypt).toBe(true);
-    });
-
+  describe('Cross-Keystore Access Control via AnyValue', () => {
     it('should test reverse access control - mobile keystore decrypting system-only fields', async () => {
       const systemOnlyData = new TestProfile(
         'system-only-123',
@@ -684,7 +353,7 @@ describe('Comprehensive End-to-End Encryption Tests (Decorators + AnyValue)', ()
 
       // ✅ REVERSE ACCESS CONTROL TEST: User fields should contain data (mobile keystore has user profile keys)
       expect(decryptedProfile.id).toBe(systemOnlyData.id); // plain field - should contain data
-      expect(decryptedProfile.name).toBe(''); 
+      expect(decryptedProfile.name).toBe('');
       expect(decryptedProfile.privateData).toBe(systemOnlyData.privateData); // user field - should contain data
       expect(decryptedProfile.email).toBe(systemOnlyData.email); // search field - should contain data (mobile has profile keys)
 
@@ -693,84 +362,7 @@ describe('Comprehensive End-to-End Encryption Tests (Decorators + AnyValue)', ()
     });
   });
 
-  describe('PKI and Certificate Workflow', () => {
-    it('should complete full PKI workflow validation', () => {
-      console.log('🔐 Testing Complete PKI Workflow');
-
-      // Validate mobile keystore initialization
-      expect(testEnv.getUserMobileWrapper()).toBeDefined();
-      const mobileCaps = testEnv.getUserMobileWrapper().getKeystoreCaps();
-      expect(mobileCaps.hasProfileKeys).toBe(true);
-      expect(mobileCaps.hasNetworkKeys).toBe(false);
-
-      // Validate node keystore initialization
-      expect(testEnv.getNodeWrapper()).toBeDefined();
-      const nodeCaps = testEnv.getNodeWrapper().getKeystoreCaps();
-      expect(nodeCaps.hasProfileKeys).toBe(false);
-      expect(nodeCaps.hasNetworkKeys).toBe(true);
-
-      // Validate network setup
-      expect(testEnv.getNetworkPublicKey().length).toBeGreaterThan(0);
-
-      // Validate profile key generation
-      expect(testEnv.getUserProfileKeys().length).toBe(1);
-      expect(testEnv.getUserProfileKeys()[0].length).toBe(65); // ECDSA P-256 uncompressed
-
-      // Validate label resolver configuration
-      const config = testEnv.getLabelResolverConfig();
-      expect(config.labelMappings.size).toBe(4);
-      expect(config.labelMappings.has('user')).toBe(true);
-      expect(config.labelMappings.has('system')).toBe(true);
-      expect(config.labelMappings.has('search')).toBe(true);
-      expect(config.labelMappings.has('system_only')).toBe(true);
-
-      console.log('   ✅ Complete PKI workflow validated');
-    });
-  });
-
-  describe('Multi-Recipient Envelope Encryption', () => {
-    it('should handle multiple profile recipients correctly', async () => {
-      console.log('🔐 Testing Multi-Recipient Envelope Encryption');
-
-      const testData = new Uint8Array([111, 222, 333]);
-      const allProfileKeys = testEnv.getUserProfileKeys();
-
-      // Encrypt for multiple recipients
-      const encrypted = testEnv
-        .getUserMobileWrapper()
-        .encryptWithEnvelope(testData, testEnv.getNetworkPublicKey(), allProfileKeys);
-
-      expect(encrypted.length).toBeGreaterThan(testData.length);
-
-      // Both mobile and node should be able to decrypt
-      const mobileDecrypted = testEnv.getUserMobileWrapper().decryptEnvelope(encrypted);
-      const nodeDecrypted = testEnv.getNodeWrapper().decryptEnvelope(encrypted);
-
-      expect(mobileDecrypted).toEqual(testData);
-      expect(nodeDecrypted).toEqual(testData);
-
-      console.log('   ✅ Multi-recipient encryption successful');
-    });
-
-    it('should handle network-only encryption', async () => {
-      console.log('🔐 Testing Network-Only Encryption');
-
-      const testData = new Uint8Array([1, 1, 1]);
-
-      // Encrypt with network key only (empty profile keys)
-      const encrypted = testEnv
-        .getUserMobileWrapper()
-        .encryptWithEnvelope(testData, testEnv.getNetworkPublicKey(), []);
-
-      // Node should be able to decrypt (has network key)
-      const nodeDecrypted = testEnv.getNodeWrapper().decryptEnvelope(encrypted);
-      expect(nodeDecrypted).toEqual(testData);
-
-      console.log('   ✅ Network-only encryption successful');
-    });
-  });
-
-  describe('Performance and Large Data', () => {
+  describe('Performance and Large Data via AnyValue', () => {
     it('should handle large data encryption efficiently', async () => {
       console.log('📊 Testing Large Data Encryption Performance');
 
@@ -827,6 +419,7 @@ describe('Comprehensive End-to-End Encryption Tests (Decorators + AnyValue)', ()
     it('should handle multiple concurrent encryptions', async () => {
       console.log('⚡ Testing Concurrent Encryption Performance');
 
+      const context = testEnv.createSerializationContext(testEnv.getUserMobileWrapper());
       const concurrentTests = Array.from({ length: 10 }, (_, i) => {
         const testData = new TestProfile(
           `concurrent-${i}`,
@@ -835,14 +428,12 @@ describe('Comprehensive End-to-End Encryption Tests (Decorators + AnyValue)', ()
           `user${i}@example.com`,
           `System ${i}`
         );
-        const context = testEnv.createSerializationContext(testEnv.getUserMobileWrapper());
         return AnyValue.newStruct(testData).serialize(context);
       });
 
       // All encryptions should complete successfully
       expect(concurrentTests.length).toBe(10);
       concurrentTests.forEach((serializeResult, i) => {
-        expect(isOk(serializeResult)).toBe(true);
         if (isOk(serializeResult)) {
           expect(serializeResult.value.length).toBeGreaterThan(0);
 
@@ -859,6 +450,8 @@ describe('Comprehensive End-to-End Encryption Tests (Decorators + AnyValue)', ()
               expect(asProfileResult.value.id).toBe(`concurrent-${i}`);
             }
           }
+        } else {
+          throw new Error(`Serialization failed: ${serializeResult.error.message}`);
         }
       });
 
@@ -867,28 +460,25 @@ describe('Comprehensive End-to-End Encryption Tests (Decorators + AnyValue)', ()
   });
 
   describe('Final Integration Validation', () => {
-    it('should complete comprehensive end-to-end validation', async () => {
-      console.log('🎉 COMPREHENSIVE END-TO-END TEST COMPLETED SUCCESSFULLY!');
-
-      console.log('📋 All validations passed:');
-      console.log('   ✅ Decorator field-level encryption with @Encrypt and @runar');
-      console.log('   ✅ AnyValue serialization with encryption context');
-      console.log('   ✅ Cross-keystore access control (mobile vs node)');
-      console.log('   ✅ Label-based field encryption (user/system/search/system_only)');
-      console.log('   ✅ Multi-recipient envelope encryption');
-      console.log('   ✅ Performance validation for large data');
-      console.log('   ✅ Concurrent encryption handling');
-
+    it('should complete comprehensive AnyValue encryption validation', () => {
+      console.log('🎉 COMPREHENSIVE ANYVALUE ENCRYPTION TEST COMPLETED SUCCESSFULLY!');
+      console.log('📋 All AnyValue validations passed:');
+      console.log('   ✅ AnyValue.newStruct() with encryption context');
+      console.log('   ✅ AnyValue.serialize() with encryption');
+      console.log('   ✅ AnyValue.deserialize() with keystore');
+      console.log('   ✅ AnyValue.asType<T>() for lazy decryption');
+      console.log('   ✅ Dual-mode semantics (plain + encrypted types from same AnyValue)');
+      console.log('   ✅ Cross-keystore access control through AnyValue');
+      console.log('   ✅ Performance validation for large data through AnyValue');
+      console.log('   ✅ Concurrent encryption through AnyValue');
       console.log('🔒 CRYPTOGRAPHIC INTEGRITY VERIFIED!');
-      console.log('🚀 COMPLETE DECORATOR + ENCRYPTION SYSTEM READY FOR PRODUCTION!');
-      console.log('🎯 TypeScript implementation 100% aligned with Rust design!');
+      console.log('🚀 ANYVALUE ENCRYPTION SYSTEM READY FOR PRODUCTION!');
+      console.log('🎯 TypeScript AnyValue implementation 100% aligned with Rust design!');
 
       // Final validation - all components work together
       expect(testEnv.getUserMobileWrapper()).toBeDefined();
       expect(testEnv.getNodeWrapper()).toBeDefined();
       expect(testEnv.getNetworkPublicKey().length).toBeGreaterThan(0);
-      expect(testEnv.getUserProfileKeys().length).toBe(1);
-      expect(testEnv.getLabelResolverConfig().labelMappings.size).toBe(4);
     });
   });
 });

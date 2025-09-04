@@ -7,6 +7,8 @@ alwaysApply: true
 
  Use bun as our TS toolchain.. no npm and not node.. always use bun
 
+DON NOT ADD .js in the import lines
+
 - No fallbacks without explicit approval
   - Code must be predictable. Do not introduce implicit fallbacks or hidden heuristics.
   - Any fallback behavior must be explicitly pre‑approved, documented, validated, . Otherwise, fail fast with a precise `Result` error.
