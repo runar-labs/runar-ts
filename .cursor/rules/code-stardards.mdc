@@ -20,6 +20,10 @@ alwaysApply: false
 Use proper types, never use "as any" .. or "any" anywhere.
 Always use the proper typing
 
+
+Use proper types, never use "as unknown" .. or "unknown" anywhere.
+Always use the proper typing . only use unknown wwhen is legitimate and all attempts to find a proper type are exausted
+
 NO DEPRECATIONS>> NO BACKWARDS COMPATIBILITY -  this is a new codebase. when changing somethign apply the change everyeheere needed. ABSOLUTELY NO  BACKWARDS COMPATIBILITY  or legacy code left behind. keeop the condebase clean. always
 
 *Logging*
