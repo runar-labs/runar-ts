@@ -1,6 +1,6 @@
 import { Result, ok, err } from 'runar-ts-common/src/error/Result.js';
 import { LabelResolver } from './label_resolver.js';
-import type { CommonKeysInterface } from './wire.js';
+import type { CommonKeysInterface } from './keystore/device_caps.js';
 import { encode, decode } from 'cbor-x';
 import { Logger, Component } from 'runar-ts-common/src/logging/logger.js';
 

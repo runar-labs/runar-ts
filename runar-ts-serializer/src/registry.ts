@@ -1,5 +1,5 @@
 import { Result, ok, err, isErr } from 'runar-ts-common/src/error/Result.js';
-import type { CommonKeysInterface } from './wire.js';
+import type { CommonKeysInterface } from './keystore/device_caps.js';
 import type { LabelResolver } from './label_resolver.js';
 
 export type Constructor<T = unknown> = new (...args: unknown[]) => T;
