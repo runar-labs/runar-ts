@@ -114,7 +114,7 @@ function generateTypeDefinitions(classes: ClassInfo[]): string {
 
   for (const classInfo of classes) {
     const encryptedClassName = `Encrypted${classInfo.name}`;
-    
+
     // Generate the encrypted interface that extends RunarEncryptable
     output += `export interface ${encryptedClassName} extends RunarEncryptable<${classInfo.name}, ${encryptedClassName}> {\n`;
 

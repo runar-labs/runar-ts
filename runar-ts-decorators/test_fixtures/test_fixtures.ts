@@ -32,4 +32,3 @@ export class TestProfile {
     this.systemMetadata = systemMetadata;
   }
 }
-
