@@ -1,0 +1,113 @@
+# Test Quality Standards
+
+## CRITICAL: Test Quality and Maintenance Rules
+
+### 🚨 **MANDATORY TEST VALIDATION**
+
+**BEFORE ANY TEST COMMIT:**
+1. **RUN ALL TESTS** - `bun test` must pass with 0 failures
+2. **CHECK LINTER ERRORS** - `read_lints` must show 0 errors for test files
+3. **VERIFY NO MOCKS** - All tests must use real functionality, no mocks/stubs/shortcuts
+4. **VALIDATE IMPORTS** - All imports must reference existing files with correct paths
+
+### ❌ **FORBIDDEN TEST PATTERNS**
+
+**NEVER CREATE TESTS THAT:**
+- Use `any` or `unknown` types (use proper types)
+- Import non-existent files (`.js` files that don't exist)
+- Use wrong test frameworks (`node:test` instead of `bun:test`)
+- Have undefined variables or missing imports
+- Use mock classes or fake implementations
+- Test functionality already covered by other tests
+- Use outdated/wrong API calls
+- Have misleading file names that don't match content
+
+### ✅ **REQUIRED TEST PATTERNS**
+
+**ALL TESTS MUST:**
+- Use `bun:test` framework with `expect()` assertions
+- Handle `Result<T, Error>` types properly (check `.ok` before accessing `.value`)
+- Use real keystores, real encryption, real serialization
+- Have meaningful, descriptive test names
+- Test specific, non-overlapping functionality
+- Import from correct, existing file paths
+- Use proper TypeScript types throughout
+
+### 🔍 **TEST OVERLAP PREVENTION**
+
+**BEFORE CREATING NEW TESTS:**
+1. **SEARCH EXISTING TESTS** - Use `grep` to find similar functionality
+2. **CHECK TEST COVERAGE** - Ensure new test adds unique value
+3. **VALIDATE SCOPE** - Test should focus on one specific feature
+4. **AVOID REDUNDANCY** - Don't duplicate existing test scenarios
+
+### 🧹 **TEST MAINTENANCE RULES**
+
+**REGULAR AUDIT REQUIREMENTS:**
+- **Monthly**: Run full test suite and fix any failures
+- **Before Releases**: Audit all test files for quality issues
+- **After API Changes**: Update all affected tests immediately
+- **When Adding Features**: Ensure new tests don't overlap existing ones
+
+### 📋 **TEST CREATION CHECKLIST**
+
+**BEFORE COMMITTING ANY TEST:**
+- [ ] Test runs successfully with `bun test`
+- [ ] No linter errors (`read_lints` shows 0 errors)
+- [ ] Uses `bun:test` framework (not `node:test`)
+- [ ] All imports reference existing files
+- [ ] No `any` or `unknown` types used
+- [ ] No mocks or fake implementations
+- [ ] Tests real functionality only
+- [ ] Handles `Result<T, Error>` types correctly
+- [ ] File name matches test content
+- [ ] No overlap with existing tests
+- [ ] Meaningful test descriptions
+
+### 🚫 **IMMEDIATE DELETION TRIGGERS**
+
+**DELETE TESTS IMMEDIATELY IF:**
+- They fail to run (import errors, undefined variables)
+- They use wrong test framework
+- They have 5+ linter errors
+- They duplicate existing functionality
+- They use mocks when real functionality exists
+- They have misleading names
+
+### 📊 **TEST QUALITY METRICS**
+
+**MAINTAIN THESE STANDARDS:**
+- **100% Pass Rate** - All tests must pass
+- **0 Linter Errors** - No compilation or linting issues
+- **0 Mocks** - Real functionality only
+- **0 Overlaps** - Each test has unique purpose
+- **0 Wrong Imports** - All imports must be valid
+
+### 🔧 **COMMON FIXES**
+
+**WHEN TESTS FAIL:**
+1. **Import Errors**: Check file paths, ensure files exist
+2. **Undefined Variables**: Add missing imports or variable declarations
+3. **Wrong API**: Update to use correct method signatures
+4. **Result Handling**: Add proper `.ok` checks before accessing `.value`
+5. **Test Framework**: Convert `node:test` to `bun:test`
+6. **Type Issues**: Replace `any`/`unknown` with proper types
+
+### 📝 **TEST DOCUMENTATION**
+
+**EACH TEST FILE MUST HAVE:**
+- Clear header comment explaining purpose
+- No overlap with other tests
+- Real functionality testing only
+- Proper error handling
+- Meaningful assertions
+
+### 🎯 **ENFORCEMENT**
+
+**VIOLATIONS RESULT IN:**
+- Immediate test deletion
+- Required re-write with proper standards
+- Blocking of commits until tests pass
+- Mandatory test quality review
+
+**REMEMBER: Better to have fewer, high-quality tests than many broken, overlapping tests.**
