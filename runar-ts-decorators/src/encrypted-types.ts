@@ -12,4 +12,3 @@ export interface EncryptedTestProfile extends RunarEncryptable<TestProfile, Encr
   search_encrypted: EncryptedLabelGroup;
   system_only_encrypted: EncryptedLabelGroup;
 }
-

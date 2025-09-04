@@ -1,8 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import {
-  AnyValue,
-  ValueCategory,
-} from 'runar-ts-serializer/src/index';
+import { AnyValue, ValueCategory } from 'runar-ts-serializer/src/index';
 import { type RunarEncryptable } from '../src/index';
 import { TestProfile } from '../test_fixtures/dist/test_fixtures/test_fixtures';
 import type { EncryptedTestProfile } from '../src/encrypted-types';
@@ -33,7 +30,6 @@ import { LoggingConfig, LogLevel, applyLoggingConfig } from 'runar-ts-common/src
  */
 
 // TestProfile class is now imported from compiled fixtures
-
 
 describe('AnyValue Encryption Tests', () => {
   let testEnv: AnyValueTestEnvironment;
