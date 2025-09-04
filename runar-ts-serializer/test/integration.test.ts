@@ -110,7 +110,7 @@ describe('Integration Tests', () => {
     if (!result.ok) {
       throw new Error(`Failed to create keystore wrapper: ${result.error.message}`);
     }
-    wrapper = result.value as KeysWrapperMobile;
+    wrapper = result.value;
 
     labelResolverConfig = {
       labelMappings: new Map([
@@ -231,7 +231,7 @@ describe('Integration Tests', () => {
       const deserialized = AnyValue.deserialize(serialized.value);
       expect(deserialized.ok).toBe(true);
       expect(deserialized.value.getCategory()).toBe(1); // ValueCategory.Primitive
-      const result = deserialized.value.as<string>();
+      const result = deserialized.value.asType<string>();
       expect(result.ok).toBe(true);
       expect(result.value).toBe('test string');
     });
@@ -257,7 +257,7 @@ describe('Integration Tests', () => {
       expect(deserialized.value.getCategory()).toBe(4); // ValueCategory.Struct
 
       // Test lazy deserialization
-      const result = deserialized.value.as<typeof testData>();
+      const result = deserialized.value.asType<typeof testData>();
       expect(result.ok).toBe(true);
       expect(result.value).toEqual(testData);
     });

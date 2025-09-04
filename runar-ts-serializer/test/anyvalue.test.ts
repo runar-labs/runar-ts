@@ -8,7 +8,7 @@ describe('AnyValue', () => {
     expect(bytesRes.ok).toBe(true);
     if (bytesRes.ok) {
       const back = AnyValue.fromBytes(bytesRes.value);
-      const objRes = back.as<{ a: number; b: string }>();
+      const objRes = back.asType<{ a: number; b: string }>();
       expect(objRes.ok).toBe(true);
       if (objRes.ok) {
         expect(objRes.value.a).toBe(1);

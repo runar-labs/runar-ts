@@ -71,9 +71,9 @@ export class EndToEndEncryptionTestContext {
     this.mobileKeys = new Keys();
     this.nodeKeys = new Keys();
 
-    // Use the new keystore factory to create role-specific wrappers
-    const mobileResult = KeystoreFactory.create(this.mobileKeys, 'frontend');
-    const nodeResult = KeystoreFactory.create(this.nodeKeys, 'backend');
+    // Use the specific factory methods to create role-specific wrappers
+    const mobileResult = KeystoreFactory.createMobile(this.mobileKeys);
+    const nodeResult = KeystoreFactory.createNode(this.nodeKeys);
 
     if (!mobileResult.ok) {
       throw new Error(`Failed to create mobile keystore wrapper: ${mobileResult.error.message}`);
@@ -82,8 +82,8 @@ export class EndToEndEncryptionTestContext {
       throw new Error(`Failed to create node keystore wrapper: ${nodeResult.error.message}`);
     }
 
-    this.mobileWrapper = mobileResult.value as KeysWrapperMobile;
-    this.nodeWrapper = nodeResult.value as KeysWrapperNode;
+    this.mobileWrapper = mobileResult.value;
+    this.nodeWrapper = nodeResult.value;
 
     this.userPublicKey = new Uint8Array(0);
     this.nodePublicKey = new Uint8Array(0);
@@ -583,7 +583,7 @@ describe('End-to-End Encryption Tests', () => {
       });
       expect(deserializeResult.ok).toBe(true);
 
-      const sharedProfile = deserializeResult.value!.as<UserProfile>();
+      const sharedProfile = deserializeResult.value!.asType<UserProfile>();
       expect(sharedProfile.ok).toBe(true);
       expect(sharedProfile.value.id).toBe(userProfile.id);
       expect(sharedProfile.value.name).toBe(userProfile.name);
@@ -631,7 +631,7 @@ describe('End-to-End Encryption Tests', () => {
       });
       expect(decryptedMessage.ok).toBe(true);
 
-      const receivedMessage = decryptedMessage.value!.as<NetworkMessage>();
+      const receivedMessage = decryptedMessage.value!.asType<NetworkMessage>();
       expect(receivedMessage.ok).toBe(true);
       expect(receivedMessage.value.from).toBe(networkMessage.from);
       expect(receivedMessage.value.payload.id).toBe(networkMessage.payload.id);

@@ -351,7 +351,7 @@ describe('Cross-Language Compatibility Tests', () => {
       expect(deserialized.value.getCategory()).toBe(ValueCategory.Primitive);
 
       // Use the correct method to access the value
-      const result = deserialized.value.as<typeof testData>();
+      const result = deserialized.value.asType<typeof testData>();
       expect(result.ok).toBe(true);
       expect(result.value).toBe(testData);
     });
@@ -370,7 +370,7 @@ describe('Cross-Language Compatibility Tests', () => {
       expect(deserialized.value.getCategory()).toBe(ValueCategory.Struct);
 
       // Test lazy deserialization
-      const result = deserialized.value.as<typeof testData>();
+      const result = deserialized.value.asType<typeof testData>();
       expect(result.ok).toBe(true);
       expect(result.value).toEqual(testData);
     });
@@ -389,7 +389,7 @@ describe('Cross-Language Compatibility Tests', () => {
       expect(deserialized.value.getCategory()).toBe(ValueCategory.List);
 
       // Use the correct method to access the value
-      const result = deserialized.value.as<typeof testData>();
+      const result = deserialized.value.asType<typeof testData>();
       expect(result.ok).toBe(true);
       expect(result.value).toEqual(testData);
     });
@@ -411,7 +411,7 @@ describe('Cross-Language Compatibility Tests', () => {
       expect(deserialized.value.getCategory()).toBe(ValueCategory.Map);
 
       // Note: CBOR converts Maps to plain objects, so we test the object form
-      const result = deserialized.value.as<Record<string, string>>();
+      const result = deserialized.value.asType<Record<string, string>>();
       expect(result.ok).toBe(true);
       expect(result.value).toEqual({ key1: 'value1', key2: 'value2' });
     });
@@ -430,7 +430,7 @@ describe('Cross-Language Compatibility Tests', () => {
       expect(deserialized.value.getCategory()).toBe(ValueCategory.Bytes);
 
       // Use the correct method to access the value
-      const result = deserialized.value.as<Buffer>();
+      const result = deserialized.value.asType<Buffer>();
       expect(result.ok).toBe(true);
       expect(result.value).toEqual(testData);
     });
@@ -449,7 +449,7 @@ describe('Cross-Language Compatibility Tests', () => {
       expect(deserialized.value.getCategory()).toBe(ValueCategory.Json);
 
       // Use the correct method to access the value
-      const result = deserialized.value.as<typeof testData>();
+      const result = deserialized.value.asType<typeof testData>();
       expect(result.ok).toBe(true);
       expect(result.value).toEqual(testData);
     });
@@ -470,7 +470,7 @@ describe('Cross-Language Compatibility Tests', () => {
       expect(deserialized.value.getCategory()).toBe(ValueCategory.List);
 
       // Test lazy deserialization of encrypted list
-      const result = deserialized.value.as<typeof testList>();
+      const result = deserialized.value.asType<typeof testList>();
       expect(result.ok).toBe(true);
       expect(result.value).toEqual(testList);
     });
@@ -508,7 +508,7 @@ describe('Cross-Language Compatibility Tests', () => {
       expect(deserialized.ok).toBe(true);
 
       // Test lazy deserialization (should use registry decryptors)
-      const result = deserialized.value.as<typeof testData>();
+      const result = deserialized.value.asType<typeof testData>();
       expect(result.ok).toBe(true);
       expect(result.value).toEqual(testData);
     });

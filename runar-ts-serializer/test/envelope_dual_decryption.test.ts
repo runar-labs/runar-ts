@@ -20,15 +20,15 @@ class EnvelopeTestEnvironment {
     this.nodeKeys = new Keys();
 
     // Create keystore wrappers
-    const mobileResult = KeystoreFactory.create(this.mobileKeys, 'frontend');
-    const nodeResult = KeystoreFactory.create(this.nodeKeys, 'backend');
+    const mobileResult = KeystoreFactory.createMobile(this.mobileKeys);
+    const nodeResult = KeystoreFactory.createNode(this.nodeKeys);
 
     if (!mobileResult.ok || !nodeResult.ok) {
       throw new Error('Failed to create keystore wrappers');
     }
 
-    this.mobileWrapper = mobileResult.value as KeysWrapperMobile;
-    this.nodeWrapper = nodeResult.value as KeysWrapperNode;
+    this.mobileWrapper = mobileResult.value;
+    this.nodeWrapper = nodeResult.value;
 
     this.networkPublicKey = new Uint8Array(0);
     this.profileKeys = [];

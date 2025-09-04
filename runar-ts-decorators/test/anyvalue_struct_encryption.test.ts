@@ -75,9 +75,9 @@ class AnyValueTestEnvironment {
     this.mobileKeys = new Keys();
     this.nodeKeys = new Keys();
 
-    // Use the new keystore factory to create role-specific wrappers
-    const mobileResult = KeystoreFactory.create(this.mobileKeys, 'frontend');
-    const nodeResult = KeystoreFactory.create(this.nodeKeys, 'backend');
+    // Use the specific factory methods to create role-specific wrappers
+    const mobileResult = KeystoreFactory.createMobile(this.mobileKeys);
+    const nodeResult = KeystoreFactory.createNode(this.nodeKeys);
 
     if (isErr(mobileResult)) {
       throw new Error(`Failed to create mobile keystore wrapper: ${mobileResult.error.message}`);
@@ -86,8 +86,8 @@ class AnyValueTestEnvironment {
       throw new Error(`Failed to create node keystore wrapper: ${nodeResult.error.message}`);
     }
 
-    this.mobileWrapper = mobileResult.value as KeysWrapperMobile;
-    this.nodeWrapper = nodeResult.value as KeysWrapperNode;
+    this.mobileWrapper = mobileResult.value;
+    this.nodeWrapper = nodeResult.value;
 
     this.networkId = '';
     this.networkPublicKey = new Uint8Array(0);
@@ -132,13 +132,13 @@ class AnyValueTestEnvironment {
     userMobileKeys.mobileInstallNetworkPublicKey(this.networkPublicKey);
 
     // Update mobile wrapper to use user mobile keys (not master)
-    const userMobileResult = KeystoreFactory.create(userMobileKeys, 'frontend');
+    const userMobileResult = KeystoreFactory.createMobile(userMobileKeys);
     if (isErr(userMobileResult)) {
       throw new Error(
         `Failed to create user mobile keystore wrapper: ${userMobileResult.error.message}`
       );
     }
-    this.mobileWrapper = userMobileResult.value as KeysWrapperMobile;
+    this.mobileWrapper = userMobileResult.value;
 
     // Setup node keys (like node_keys in Rust)
     this.nodeKeys.setPersistenceDir('/tmp/runar-anyvalue-test-node');
@@ -387,10 +387,10 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
         throw new Error(`Node deserialization failed: ${deNode.error.message}`);
       }
 
-      const nodeProfileResult = deNode.value.as<TestProfile>();
+      const nodeProfileResult = deNode.value.asType<TestProfile>();
       expect(isOk(nodeProfileResult)).toBe(true);
       if (isErr(nodeProfileResult)) {
-        throw new Error(`Node as<TestProfile> failed: ${nodeProfileResult.error.message}`);
+        throw new Error(`Node asType<TestProfile> failed: ${nodeProfileResult.error.message}`);
       }
 
       const nodeProfile = nodeProfileResult.value;
@@ -407,10 +407,10 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
         throw new Error(`Mobile deserialization failed: ${deMobile.error.message}`);
       }
 
-      const mobileProfileResult = deMobile.value.as<TestProfile>();
+      const mobileProfileResult = deMobile.value.asType<TestProfile>();
       expect(isOk(mobileProfileResult)).toBe(true);
       if (isErr(mobileProfileResult)) {
-        throw new Error(`Mobile as<TestProfile> failed: ${mobileProfileResult.error.message}`);
+        throw new Error(`Mobile asType<TestProfile> failed: ${mobileProfileResult.error.message}`);
       }
 
       const mobileProfile = mobileProfileResult.value;
@@ -492,10 +492,10 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
 
       // Verify the decrypted data
       const decrypted = deserializeResult.value;
-      const asProfileResult = decrypted.as<TestProfile>();
+      const asProfileResult = decrypted.asType<TestProfile>();
       expect(isOk(asProfileResult)).toBe(true);
       if (isErr(asProfileResult)) {
-        throw new Error(`as<TestProfile> failed: ${asProfileResult.error.message}`);
+        throw new Error(`asType<TestProfile> failed: ${asProfileResult.error.message}`);
       }
 
       const decryptedProfile = asProfileResult.value;
@@ -568,10 +568,10 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
 
       // Verify the decrypted data with reverse access control
       const decrypted = deserializeResult.value;
-      const asProfileResult = decrypted.as<TestProfile>();
+      const asProfileResult = decrypted.asType<TestProfile>();
       expect(isOk(asProfileResult)).toBe(true);
       if (isErr(asProfileResult)) {
-        throw new Error(`as<TestProfile> failed: ${asProfileResult.error.message}`);
+        throw new Error(`asType<TestProfile> failed: ${asProfileResult.error.message}`);
       }
 
       const decryptedProfile = asProfileResult.value;
@@ -625,10 +625,10 @@ describe('AnyValue Struct Encryption End-to-End Tests', () => {
 
       // Verify data integrity
       const decrypted = deserializeResult.value;
-      const asProfileResult = decrypted.as<TestProfile>();
+      const asProfileResult = decrypted.asType<TestProfile>();
       expect(isOk(asProfileResult)).toBe(true);
       if (isErr(asProfileResult)) {
-        throw new Error(`as<TestProfile> failed: ${asProfileResult.error.message}`);
+        throw new Error(`asType<TestProfile> failed: ${asProfileResult.error.message}`);
       }
 
       const decryptedProfile = asProfileResult.value;

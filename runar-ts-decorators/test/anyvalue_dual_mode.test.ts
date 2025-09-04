@@ -65,7 +65,7 @@ describe('AnyValue Dual-Mode Semantics', () => {
   it('should demonstrate proper Result<T, Error> generic typing', () => {
     // Create real test data
     const plainProfile = new TestProfile('123', 'John Doe', 'john@example.com');
-    
+
     const anyValue = AnyValue.from(plainProfile);
     expect(isOk(anyValue)).toBe(true);
     if (isErr(anyValue)) return;

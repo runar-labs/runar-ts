@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { AnyValue, SerializationContext } from '../src/index.js';
+import { AnyValue, SerializationContext, LabelResolver, LabelResolverConfig, LabelKeyword } from '../src/index.js';
 import { KeysManagerWrapper } from '../../runar-ts-node/src/keys_manager_wrapper.js';
 import { Keys } from 'runar-nodejs-api';
 import { encode, decode } from 'cbor-x';
@@ -124,11 +124,24 @@ describe('Real Encryption with nodejs-api', () => {
     // Create wrapper
     const keysWrapper = new KeysManagerWrapper(keys);
 
+    // Create a real label resolver for the test
+    const labelResolverConfig: LabelResolverConfig = {
+      labelMappings: new Map([
+        ['test', {
+          networkPublicKey: undefined,
+          userKeySpec: LabelKeyword.CurrentUser
+        }]
+      ])
+    };
+    
+    const resolver = new LabelResolver(labelResolverConfig);
+
     // Create serialization context
     const context: SerializationContext = {
       keystore: keysWrapper,
-      resolver: {} as any, // Mock resolver for test
-      // No network or profile keys for local encryption test
+      resolver: resolver,
+      networkPublicKey: new Uint8Array(0), // Empty for local test
+      profilePublicKeys: [] // Empty for local test
     };
 
     // Test data
