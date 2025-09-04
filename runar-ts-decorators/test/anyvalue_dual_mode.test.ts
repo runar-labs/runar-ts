@@ -1,16 +1,16 @@
 import { describe, it, expect, beforeAll } from 'bun:test';
-import { AnyValue, SerializationContext, ValueCategory } from '../src/index.js';
+import { AnyValue, SerializationContext, ValueCategory } from 'runar-ts-serializer/src/index.js';
 import { Result, isOk, isErr } from 'runar-ts-common/src/error/Result.js';
 import { Logger, Component } from 'runar-ts-common/src/logging/logger.js';
 import { LoggingConfig, LogLevel, applyLoggingConfig } from 'runar-ts-common/src/logging/config.js';
-import { registerEncryptedCompanion } from '../src/registry.js';
+import { registerEncryptedCompanion } from 'runar-ts-serializer/src/registry.js';
 
 // Mock encrypted companion class for testing
 class EncryptedTestProfile {
   constructor(
-    public id: string,
-    public user_encrypted?: any,
-    public system_encrypted?: any
+    public id: string = '',
+    public user_encrypted?: unknown,
+    public system_encrypted?: unknown
   ) {}
 }
 
@@ -36,7 +36,8 @@ describe('AnyValue Dual-Mode Semantics', () => {
     // Register encrypted companion type for testing
     const result = registerEncryptedCompanion('TestProfile', EncryptedTestProfile);
     if (isErr(result)) {
-      throw new Error(`Failed to register encrypted companion: ${result.error.message}`);
+      const error = result.error instanceof Error ? result.error.message : String(result.error);
+      throw new Error(`Failed to register encrypted companion: ${error}`);
     }
   });
 
@@ -52,16 +53,18 @@ describe('AnyValue Dual-Mode Semantics', () => {
     const plainResult = anyValue.value.asType<TestProfile>();
     expect(isOk(plainResult)).toBe(true);
     if (isOk(plainResult)) {
-      expect(plainResult.value.id).toBe('123');
-      expect(plainResult.value.name).toBe('John Doe');
-      expect(plainResult.value.email).toBe('john@example.com');
+      const profile = plainResult.value as TestProfile;
+      expect(profile.id).toBe('123');
+      expect(profile.name).toBe('John Doe');
+      expect(profile.email).toBe('john@example.com');
     }
 
     // Test requesting encrypted companion type on plain data should fail
     const encryptedResult = anyValue.value.asType<EncryptedTestProfile>(EncryptedTestProfile);
     expect(isErr(encryptedResult)).toBe(true);
     if (isErr(encryptedResult)) {
-      expect(encryptedResult.error.message).toContain('InvalidTypeForPlainBody');
+      const error = encryptedResult.error instanceof Error ? encryptedResult.error.message : String(encryptedResult.error);
+      expect(error).toContain('InvalidTypeForPlainBody');
     }
   });
 
@@ -82,9 +85,10 @@ describe('AnyValue Dual-Mode Semantics', () => {
     const encryptedResult = anyValue.value.asType<EncryptedTestProfile>(EncryptedTestProfile);
     expect(isOk(encryptedResult)).toBe(true);
     if (isOk(encryptedResult)) {
-      expect(encryptedResult.value.id).toBe('123');
-      expect(encryptedResult.value.user_encrypted).toBeDefined();
-      expect(encryptedResult.value.system_encrypted).toBeDefined();
+      const encrypted = encryptedResult.value as EncryptedTestProfile;
+      expect(encrypted.id).toBe('123');
+      expect(encrypted.user_encrypted).toBeDefined();
+      expect(encrypted.system_encrypted).toBeDefined();
     }
 
     // Test requesting plain type - this should work since we're just casting the same object
@@ -92,10 +96,11 @@ describe('AnyValue Dual-Mode Semantics', () => {
     expect(isOk(plainResult)).toBe(true);
     if (isOk(plainResult)) {
       // The object will have the same structure but different type
-      expect(plainResult.value.id).toBe('123');
+      const profile = plainResult.value as TestProfile;
+      expect(profile.id).toBe('123');
     }
 
-    console.log('Dual-mode semantics work with both plain and encrypted companion types');
+    // Dual-mode semantics work with both plain and encrypted companion types
   });
 
   it('should handle lazy deserialization with dual-mode semantics', () => {
@@ -108,6 +113,6 @@ describe('AnyValue Dual-Mode Semantics', () => {
     // The deserialize should fail with invalid data, but the API should be available
     expect(isErr(anyValue)).toBe(true);
 
-    console.log('Dual-mode semantics API is available and functional');
+    // Dual-mode semantics API is available and functional
   });
 });
