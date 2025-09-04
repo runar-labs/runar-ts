@@ -16,15 +16,15 @@ import {
   KeysWrapperMobile,
   KeysWrapperNode,
 } from 'runar-ts-node/src/keys_manager_wrapper.js';
-import { Encrypt, runar, type RunarEncryptable } from '../src/index.js';
-import { EncryptedTestProfile } from '../src/generated-types.js';
+import { type RunarEncryptable } from '../src/index.js';
+import { TestProfile } from '../test_fixtures/dist/test_fixtures/test_fixtures';
 
 // Import Result type and utilities
-import { Result, isErr, isOk } from 'runar-ts-common/src/error/Result.js';
+import { Result, isErr, isOk } from 'runar-ts-common/src/error/Result';
 
 // Import logging
-import { Logger, Component } from 'runar-ts-common/src/logging/logger.js';
-import { LoggingConfig, LogLevel, applyLoggingConfig } from 'runar-ts-common/src/logging/config.js';
+import { Logger, Component } from 'runar-ts-common/src/logging/logger';
+import { LoggingConfig, LogLevel, applyLoggingConfig } from 'runar-ts-common/src/logging/config';
 
 /**
  * COMPREHENSIVE END-TO-END ENCRYPTION TESTS
@@ -48,38 +48,7 @@ import { LoggingConfig, LogLevel, applyLoggingConfig } from 'runar-ts-common/src
  * single source of truth for end-to-end encryption validation.
  */
 
-// Test data structure for encryption testing - using proper TS 5 decorators with string labels
-// This matches the Rust TestProfile struct exactly
-@Encrypt
-class TestProfile {
-  public id: string; // plain field (no decorator)
-
-  @runar('system')
-  public name: string;
-
-  @runar('user')
-  public privateData: string;
-
-  @runar('search')
-  public email: string;
-
-  @runar('system_only')
-  public systemMetadata: string;
-
-  constructor(
-    id: string,
-    name: string,
-    privateData: string,
-    email: string,
-    systemMetadata: string
-  ) {
-    this.id = id;
-    this.name = name;
-    this.privateData = privateData;
-    this.email = email;
-    this.systemMetadata = systemMetadata;
-  }
-}
+// TestProfile class is now imported from compiled fixtures
 
 // Test environment that mirrors Rust TestEnvironment
 class AnyValueTestEnvironment {
@@ -309,7 +278,7 @@ describe('Comprehensive End-to-End Encryption Tests (Decorators + AnyValue)', ()
 
       // Test encryption (matches Rust: original.encrypt_with_keystore(&mobile_ks, resolver.as_ref()))
       const encryptableOriginal = original as TestProfile &
-        RunarEncryptable<TestProfile, EncryptedTestProfile>;
+        RunarEncryptable<TestProfile, any>;
       const encryptResult = encryptableOriginal.encryptWithKeystore(
         testEnv.getMobileWrapper(),
         testEnv.getResolver()
@@ -331,7 +300,7 @@ describe('Comprehensive End-to-End Encryption Tests (Decorators + AnyValue)', ()
       // Test decryption with mobile (matches Rust: encrypted.decrypt_with_keystore(&mobile_ks))
       const encryptedCompanion = encrypted as unknown as RunarEncryptable<
         TestProfile,
-        EncryptedTestProfile
+        any
       >;
       const decryptedMobile = encryptedCompanion.decryptWithKeystore(
         testEnv.getMobileWrapper(),
@@ -463,7 +432,7 @@ describe('Comprehensive End-to-End Encryption Tests (Decorators + AnyValue)', ()
       // Test decryptWithKeystore on the encrypted companion (matches Rust: encrypted.decrypt_with_keystore(&node_ks))
       const encryptedCompanion = encryptedProfile as RunarEncryptable<
         TestProfile,
-        EncryptedTestProfile
+        any
       >;
       const finalNodeProfile = encryptedCompanion.decryptWithKeystore(
         testEnv.getNodeWrapper(),

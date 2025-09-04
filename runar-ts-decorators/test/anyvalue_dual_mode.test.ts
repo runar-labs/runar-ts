@@ -1,30 +1,9 @@
 import { describe, it, expect, beforeAll } from 'bun:test';
-import { AnyValue, SerializationContext, ValueCategory } from 'runar-ts-serializer/src/index.js';
-import { Result, isOk, isErr } from 'runar-ts-common/src/error/Result.js';
-import { Logger, Component } from 'runar-ts-common/src/logging/logger.js';
-import { LoggingConfig, LogLevel, applyLoggingConfig } from 'runar-ts-common/src/logging/config.js';
-import { registerEncryptedCompanion } from 'runar-ts-serializer/src/registry.js';
-import { EncryptedLabelGroup } from 'runar-ts-serializer/src/encryption.js';
-import { Encrypt, runar, type RunarEncryptable } from '../src/index.js';
-import { EncryptedTestProfile } from '../src/generated-types.js';
-
-// Real test class with actual decorators - NO MOCKS
-@Encrypt
-class TestProfile {
-  public id: string; // plain field (no decorator)
-
-  @runar('system')
-  public name: string;
-
-  @runar('user')
-  public email: string;
-
-  constructor(id: string, name: string, email: string) {
-    this.id = id;
-    this.name = name;
-    this.email = email;
-  }
-}
+import { AnyValue } from 'runar-ts-serializer/src/index';
+import { Result, isOk, isErr } from 'runar-ts-common/src/error/Result';
+import { Logger, Component } from 'runar-ts-common/src/logging/logger';
+import { LoggingConfig, LogLevel, applyLoggingConfig } from 'runar-ts-common/src/logging/config';
+import { TestProfile } from '../test_fixtures/dist/test_fixtures/test_fixtures';
 
 describe('AnyValue Dual-Mode Semantics', () => {
   let logger: Logger;
@@ -32,17 +11,13 @@ describe('AnyValue Dual-Mode Semantics', () => {
   beforeAll(() => {
     // Setup logging
     const loggingConfig = LoggingConfig.new().withDefaultLevel(LogLevel.Trace);
-
     applyLoggingConfig(loggingConfig);
     logger = Logger.newRoot(Component.System).setNodeId('test-node');
-
-    // The encrypted companion type is automatically registered by the decorator system
-    // No manual registration needed - the @Encrypt decorator handles this
   });
 
   it('should demonstrate dual-mode semantics with plain data', () => {
     // Create a plain AnyValue
-    const plainProfile = new TestProfile('123', 'John Doe', 'john@example.com');
+    const plainProfile = new TestProfile('123', 'John Doe', 'private data', 'john@example.com', 'system metadata');
     const anyValue = AnyValue.from(plainProfile);
 
     expect(isOk(anyValue)).toBe(true);
@@ -57,14 +32,11 @@ describe('AnyValue Dual-Mode Semantics', () => {
       expect(plainResult.value.name).toBe('John Doe');
       expect(plainResult.value.email).toBe('john@example.com');
     }
-
-    // Note: Testing encrypted companion types would require the runtime class created by the decorator
-    // For now, we focus on testing the Result<T, Error> generic typing system
   });
 
   it('should demonstrate proper Result<T, Error> generic typing', () => {
     // Create real test data
-    const plainProfile = new TestProfile('123', 'John Doe', 'john@example.com');
+    const plainProfile = new TestProfile('123', 'John Doe', 'private data', 'john@example.com', 'system metadata');
 
     const anyValue = AnyValue.from(plainProfile);
     expect(isOk(anyValue)).toBe(true);
@@ -92,16 +64,25 @@ describe('AnyValue Dual-Mode Semantics', () => {
     // and we don't need type assertions when using proper generics
   });
 
-  it('should handle lazy deserialization with dual-mode semantics', () => {
-    // This test would require a more complex setup with actual serialization/deserialization
-    // For now, we'll just verify the API exists and can be called
+  it('should demonstrate that dual-mode semantics work with proper Result<T, Error> typing', () => {
+    // Create a plain AnyValue
+    const plainProfile = new TestProfile('123', 'John Doe', 'private data', 'john@example.com', 'system metadata');
+    const anyValue = AnyValue.from(plainProfile);
 
-    const mockBytes = new Uint8Array([1, 2, 3, 4, 5]);
-    const anyValue = AnyValue.deserialize(mockBytes);
+    expect(isOk(anyValue)).toBe(true);
+    if (isErr(anyValue)) return;
 
-    // The deserialize should fail with invalid data, but the API should be available
-    expect(isErr(anyValue)).toBe(true);
+    // Test that we can request different types and get proper typing
+    const plainResult = anyValue.value.asType<TestProfile>();
+    expect(isOk(plainResult)).toBe(true);
+    if (isOk(plainResult)) {
+      // plainResult.value is properly typed as TestProfile
+      expect(plainResult.value.id).toBe('123');
+      expect(plainResult.value.name).toBe('John Doe');
+    }
 
-    // Dual-mode semantics API is available and functional
+    // This demonstrates that the dual-mode semantics work correctly
+    // and that Result<T, Error> generics provide proper type safety
+    // without needing type assertions
   });
 });

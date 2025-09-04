@@ -558,12 +558,20 @@ export class AnyValue<T = unknown> {
         }
         break;
       case ValueCategory.Struct:
-        log.trace(`Decoding struct data for type: ${typeName}`);
-        value = decode(dataBytes) || {};
-        log.trace(
-          `Decoded struct with ${Object.keys(value).length} fields: [${Object.keys(value).join(', ')}]`
+        log.trace(`Creating lazy struct for type: ${typeName}`);
+        // Create lazy holder for struct - decrypt on access via asType<T>()
+        // According to design doc 16.2: ALL complex types (Struct, List, Map, Json) should be lazy
+        const lazyData = new LazyDataWithOffset(
+          typeName,
+          bytes,
+          isEncrypted,
+          dataStart,
+          bytes.length,
+          keystore
         );
-        break;
+        const anyValue = new AnyValue(ValueCategory.Struct, null, null, typeName);
+        anyValue.lazyData = lazyData;
+        return ok(anyValue);
       case ValueCategory.Bytes:
         value = dataBytes;
         break;
@@ -576,59 +584,9 @@ export class AnyValue<T = unknown> {
         );
     }
 
-    // Handle encrypted instances from decorators
-    if (value && typeof value === 'object' && 'decryptWithKeystore' in value && keystore) {
-      log.trace(`Found encrypted instance with decryptWithKeystore method, attempting decryption`);
+    // Note: Struct deserialization is now lazy and handled in performLazyDecrypt
 
-      try {
-        // This is an encrypted instance from decorators - decrypt it
-        const decrypted = value.decryptWithKeystore(keystore, log);
-        if (decrypted.ok) {
-          value = decrypted.value;
-          log.trace(
-            `Successfully decrypted instance, got ${Object.keys(value).length} fields: [${Object.keys(value).join(', ')}]`
-          );
-        } else {
-          log.error(`Decryption failed: ${decrypted.error.message}`);
-          // If decryption fails, keep the encrypted value
-          // Error will be handled by the caller
-        }
-      } catch (e) {
-        const errorMsg = e instanceof Error ? e.message : String(e);
-        log.error(`Decryption threw exception: ${errorMsg}`);
-        // If decryption fails, keep the encrypted value
-        // Error will be handled by the caller
-      }
-    } else if (value && typeof value === 'object' && 'decryptWithKeystore' in value && !keystore) {
-      log.warn(`Found encrypted instance but no keystore provided for decryption`);
-    }
-
-    // For complex types (Struct, List, Map, Json), create lazy holders if encrypted
-    // According to the design plan, this should only happen for specific cases
-    if (
-      isEncrypted &&
-      keystore &&
-      (category === ValueCategory.Struct ||
-        category === ValueCategory.List ||
-        category === ValueCategory.Map ||
-        category === ValueCategory.Json)
-    ) {
-      // Create lazy data holder according to design plan
-      const lazyData = new LazyDataWithOffset(
-        typeName,
-        bytes, // Use Uint8Array directly
-        true,
-        dataStart,
-        bytes.length,
-        keystore
-      );
-
-      // Create AnyValue with lazy data
-      const lazyAv = new AnyValue(category, null, null, typeName);
-      lazyAv.lazyData = lazyData;
-
-      return ok(lazyAv);
-    }
+    // Note: Struct deserialization is now lazy and handled in performLazyDecrypt
 
     // Create a basic serialize function for deserialized values
     const serializeFn: SerializeFn = (val, keystore, resolver) => {
@@ -1085,17 +1043,16 @@ export class AnyValue<T = unknown> {
             return ok(decoded as U);
           } else {
             // Requesting plain T - need to decrypt the encrypted companion
-            // Check if the decoded object is an encrypted companion
-            if (
-              decoded &&
-              typeof decoded === 'object' &&
-              decoded.constructor.name.startsWith('Encrypted')
-            ) {
+            // Check if the decoded object is an encrypted companion by looking for encrypted field patterns
+            const hasEncryptedFields = decoded && typeof decoded === 'object' && 
+              Object.keys(decoded).some(key => key.endsWith('_encrypted'));
+            
+            if (hasEncryptedFields) {
               // We have an encrypted companion, need to decrypt it to get plain T
               const decryptorResult = lookupDecryptorByTypeName(this.lazyData.typeName || '');
               if (decryptorResult.ok) {
                 try {
-                  const decrypted = decryptorResult.value(decoded, this.lazyData.keystore!);
+                  const decrypted = decryptorResult.value(decryptedBytes, this.lazyData.keystore!);
                   if (isErr(decrypted)) {
                     return err(new Error(`Registry decryptor failed: ${decrypted.error.message}`));
                   } else {
