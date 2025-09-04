@@ -1,6 +1,6 @@
 ---
 globs: *.ts,*.js
-alwaysApply: false
+alwaysApply: true
 ---
 
  NO FALLBACKS, NO MOCKS, NO STUBS, NO shortcuts, no simplifications, no worikarounds. Always stick to the design and if u find an issue with the design STOP and ask for guidenance.

@@ -1016,8 +1016,20 @@ export class AnyValue<T = unknown> {
     return this.asType<U>();
   }
 
+  // Method to get encrypted companion type (for interface types like EncryptedTestProfile)
+  asEncryptedCompanion(): Result<any> {
+    if (!this.lazyData) {
+      return err(new Error('No lazy data available for encrypted companion conversion'));
+    }
+
+    return this.performLazyDecrypt<any>(undefined, true);
+  }
+
   // Perform lazy decrypt-on-access logic exactly like Rust with dual-mode semantics
-  private performLazyDecrypt<U>(targetConstructor?: new (...args: any[]) => U): Result<U> {
+  private performLazyDecrypt<U>(
+    targetConstructor?: new (...args: any[]) => U,
+    forceEncryptedCompanion?: boolean
+  ): Result<U> {
     if (!this.lazyData || !this.lazyData.originalBuffer) {
       return err(new Error('No lazy data available for decryption'));
     }
@@ -1038,15 +1050,20 @@ export class AnyValue<T = unknown> {
           const decoded = decode(decryptedBytes);
 
           // Check if we're requesting an encrypted companion type
-          if (targetConstructor && this.isEncryptedCompanionType(targetConstructor)) {
+          if (
+            forceEncryptedCompanion ||
+            (targetConstructor && this.isEncryptedCompanionType(targetConstructor))
+          ) {
             // Requesting Encrypted{T} - return the encrypted companion as-is
             return ok(decoded as U);
           } else {
             // Requesting plain T - need to decrypt the encrypted companion
             // Check if the decoded object is an encrypted companion by looking for encrypted field patterns
-            const hasEncryptedFields = decoded && typeof decoded === 'object' && 
+            const hasEncryptedFields =
+              decoded &&
+              typeof decoded === 'object' &&
               Object.keys(decoded).some(key => key.endsWith('_encrypted'));
-            
+
             if (hasEncryptedFields) {
               // We have an encrypted companion, need to decrypt it to get plain T
               const decryptorResult = lookupDecryptorByTypeName(this.lazyData.typeName || '');

@@ -5,11 +5,12 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "clean": "rimraf dist",
+    "build": "cd generator && bun run generate-types.ts && cd .. && tsc -p tsconfig.json && cd test_fixtures && tsc",
+    "clean": "rimraf dist && rimraf test_fixtures/dist",
     "test": "bun test",
-    "generate-types": "bun run generate-types.ts",
-    "build-with-types": "bun run generate-types && tsc -p tsconfig.json"
+    "generate-types": "cd generator && bun run generate-types.ts",
+    "build-with-types": "bun run generate-types && tsc -p tsconfig.json",
+    "build-fixtures": "cd test_fixtures && tsc"
   },
   "dependencies": {},
   "devDependencies": {
