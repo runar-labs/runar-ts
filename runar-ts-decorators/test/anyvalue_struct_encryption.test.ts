@@ -28,10 +28,10 @@ import { LoggingConfig, LogLevel, applyLoggingConfig } from 'runar-ts-common/src
 
 /**
  * COMPREHENSIVE END-TO-END ENCRYPTION TESTS
- * 
+ *
  * This is the SINGLE, COMPREHENSIVE end-to-end test that validates the complete
  * encryption system using decorators and AnyValue serialization.
- * 
+ *
  * Features tested:
  * - Real decorators (@Encrypt, @runar) with field-level encryption
  * - AnyValue serialization with encryption context
@@ -41,9 +41,9 @@ import { LoggingConfig, LogLevel, applyLoggingConfig } from 'runar-ts-common/src
  * - Performance validation for large data
  * - Concurrent encryption handling
  * - PKI workflow validation
- * 
+ *
  * NO MOCKS, NO STUBS, NO SHORTCUTS - Real cryptographic operations only
- * 
+ *
  * This test replaces all other overlapping encryption tests and serves as the
  * single source of truth for end-to-end encryption validation.
  */
@@ -461,7 +461,10 @@ describe('Comprehensive End-to-End Encryption Tests (Decorators + AnyValue)', ()
       expect(encryptedProfile.user_encrypted).toBeDefined();
 
       // Test decryptWithKeystore on the encrypted companion (matches Rust: encrypted.decrypt_with_keystore(&node_ks))
-      const encryptedCompanion = encryptedProfile as RunarEncryptable<TestProfile, EncryptedTestProfile>;
+      const encryptedCompanion = encryptedProfile as RunarEncryptable<
+        TestProfile,
+        EncryptedTestProfile
+      >;
       const finalNodeProfile = encryptedCompanion.decryptWithKeystore(
         testEnv.getNodeWrapper(),
         logger
