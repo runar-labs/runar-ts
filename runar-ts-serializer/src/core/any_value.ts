@@ -2,7 +2,11 @@ import { encode, decode } from 'cbor-x';
 import { Result, ok, err, isErr } from 'runar-ts-common/src/error/Result.js';
 import { Logger, Component } from 'runar-ts-common/src/logging/logger.js';
 import { ValueCategory } from '../wire/value_category.js';
-import { DeserializationContext, SerializationContext, LazyDataWithOffset } from '../context/serialization_context.js';
+import {
+  DeserializationContext,
+  SerializationContext,
+  LazyDataWithOffset,
+} from '../context/serialization_context.js';
 import { CommonKeysInterface } from '../keystore/device_caps.js';
 import {
   resolveType,

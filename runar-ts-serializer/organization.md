@@ -1,17 +1,20 @@
 # Runar TypeScript Serializer - Organization Strategy
 
 ## 🎯 **Objective**
+
 Reorganize the `runar-ts-serializer` package from its current chaotic state into a clean, maintainable structure with proper separation of concerns.
 
 ## 📊 **Current State Analysis**
 
 ### ✅ **Baseline Test Status**
+
 - **runar-ts-serializer tests**: ✅ **35 PASS, 0 FAIL** (All passing)
 - **runar-ts-decorators tests**: ✅ **12 PASS, 0 FAIL** (All passing - dist-test removed)
 
 ### 🚨 **Critical Issues Identified**
 
 #### **1. Root Directory Pollution**
+
 ```
 ❌ MISPLACED FILES IN ROOT:
 - debug_cbor.cjs          # Debug script - should be in tools/
@@ -23,6 +26,7 @@ Reorganize the `runar-ts-serializer` package from its current chaotic state into
 ```
 
 #### **2. Massive index.ts File (1,236 lines)**
+
 ```
 ❌ index.ts CONTAINS EVERYTHING:
 - AnyValue class (900+ lines) - should be in any_value.ts
@@ -33,6 +37,7 @@ Reorganize the `runar-ts-serializer` package from its current chaotic state into
 ```
 
 #### **3. Mixed Responsibilities in wire.ts**
+
 ```
 ❌ wire.ts CONTAINS MULTIPLE CONCERNS:
 - DeviceKeystoreCaps interface - should be in keystore_types.ts
@@ -45,6 +50,7 @@ Reorganize the `runar-ts-serializer` package from its current chaotic state into
 ```
 
 #### **4. Inconsistent File Organization**
+
 ```
 ❌ MIXED PATTERNS:
 - Some files are well-organized (encryption.ts, label_resolver.ts)
@@ -55,6 +61,7 @@ Reorganize the `runar-ts-serializer` package from its current chaotic state into
 ## 🏗️ **Proposed New Organization**
 
 ### **📁 New Directory Structure**
+
 ```
 runar-ts-serializer/
 ├── src/
@@ -118,12 +125,15 @@ runar-ts-serializer/
 ## 🔄 **Migration Strategy**
 
 ### **Phase 1: Create New Structure**
+
 1. **Create new directories** without moving files yet
 2. **Create placeholder files** with proper imports
 3. **Verify structure** is correct
 
 ### **Phase 2: Move Content (File by File)**
+
 For each file move:
+
 1. **Copy content** to new location
 2. **Update imports** in the new file
 3. **Update imports** in files that reference it
@@ -132,6 +142,7 @@ For each file move:
 6. **Remove from old location** only after verification
 
 ### **Phase 3: Clean Up**
+
 1. **Remove old files** after all references updated
 2. **Update package.json** scripts if needed
 3. **Update documentation**
@@ -140,6 +151,7 @@ For each file move:
 ## 📋 **Detailed File Migration Plan**
 
 ### **🎯 Priority 1: Extract AnyValue from index.ts**
+
 ```
 FROM: src/index.ts (lines 90-1196)
 TO:   src/core/any_value.ts
@@ -157,6 +169,7 @@ VERIFICATION:
 ```
 
 ### **🎯 Priority 2: Extract Types from wire.ts**
+
 ```
 FROM: src/wire.ts
 TO:   Multiple files:
@@ -185,6 +198,7 @@ src/wire/wire_format.ts:
 ```
 
 ### **🎯 Priority 3: Move Root Files**
+
 ```
 FROM: Root directory
 TO:   Appropriate locations:
@@ -198,6 +212,7 @@ test_decorator_simple.ts → test/tools/test_decorator_simple.ts
 ```
 
 ### **🎯 Priority 4: Extract Utilities from index.ts**
+
 ```
 FROM: src/index.ts (remaining content)
 TO:   Multiple files:
@@ -217,6 +232,7 @@ src/core/serialization.ts:
 ```
 
 ### **🎯 Priority 5: Clean Up index.ts**
+
 ```
 FROM: src/index.ts (1,236 lines)
 TO:   src/index.ts (50-100 lines)
@@ -231,12 +247,14 @@ NEW CONTENT:
 ## 🧪 **Testing Strategy**
 
 ### **After Each File Move:**
+
 1. **Run serializer tests**: `bun test` (should remain 35 pass, 0 fail)
 2. **Run decorator tests**: `bun test` (should remain 12 pass, 0 fail)
 3. **Check imports**: Verify all imports are correct
 4. **Compare content**: Ensure no content was lost
 
 ### **Test Commands:**
+
 ```bash
 # Test serializer package (runs TypeScript tests directly)
 cd runar-ts-serializer && bun test
@@ -250,6 +268,7 @@ bun test test/wire/wire_format.test.ts
 ```
 
 ### **Correct Test Strategy:**
+
 - **Tests run directly on TypeScript** (`bun test test/*.ts`) - no compilation needed
 - **Only decorated classes need compilation** (like `test_fixtures/`) because decorators require compilation
 - **Regular test files** stay as `.ts` and run directly with `bun test`
@@ -258,6 +277,7 @@ bun test test/wire/wire_format.test.ts
 ## 📝 **Content Verification Checklist**
 
 ### **For Each File Move:**
+
 - [ ] **Content copied** to new location
 - [ ] **Imports updated** in new file
 - [ ] **Imports updated** in referencing files
@@ -267,6 +287,7 @@ bun test test/wire/wire_format.test.ts
 - [ ] **Old file removed** after verification
 
 ### **Content Comparison Method:**
+
 ```bash
 # Compare files to ensure no content loss
 diff -u old_file.ts new_file.ts
@@ -281,8 +302,9 @@ grep -n "function_name\|interface_name\|class_name" new_file.ts
 ## 🚫 **What NOT to Change**
 
 ### **Keep As-Is (Working Well):**
+
 - `src/encryption.ts` - Well organized
-- `src/label_resolver.ts` - Well organized  
+- `src/label_resolver.ts` - Well organized
 - `src/resolver_cache.ts` - Well organized
 - `src/registry.ts` - Well organized
 - `src/cbor_utils.ts` - Well organized
@@ -291,6 +313,7 @@ grep -n "function_name\|interface_name\|class_name" new_file.ts
 - `tsconfig.json` - No changes needed
 
 ### **Only Move, Don't Refactor:**
+
 - **No code changes** - only move and update imports
 - **No logic changes** - preserve exact functionality
 - **No API changes** - maintain public interface
@@ -299,6 +322,7 @@ grep -n "function_name\|interface_name\|class_name" new_file.ts
 ## 🎯 **Success Criteria**
 
 ### **After Reorganization:**
+
 1. **All tests pass** (35 serializer + 12 decorator)
 2. **Clean index.ts** (< 100 lines, only exports)
 3. **Logical file organization** (related code together)
@@ -308,6 +332,7 @@ grep -n "function_name\|interface_name\|class_name" new_file.ts
 7. **Correct test strategy** (TypeScript tests run directly, only decorated classes compiled)
 
 ### **File Size Targets:**
+
 - `src/index.ts`: < 100 lines (currently 1,236)
 - `src/core/any_value.ts`: ~900 lines (extracted from index.ts)
 - `src/wire/wire_format.ts`: ~50 lines (extracted from wire.ts)
@@ -316,6 +341,7 @@ grep -n "function_name\|interface_name\|class_name" new_file.ts
 ## 📚 **Documentation Updates**
 
 ### **After Reorganization:**
+
 1. **Update README.md** with new structure
 2. **Update import examples** in documentation
 3. **Create migration guide** for users
@@ -324,6 +350,7 @@ grep -n "function_name\|interface_name\|class_name" new_file.ts
 ## 🔄 **Rollback Plan**
 
 ### **If Issues Arise:**
+
 1. **Stop immediately** if tests fail
 2. **Revert changes** using git
 3. **Analyze issue** before proceeding
@@ -335,6 +362,7 @@ grep -n "function_name\|interface_name\|class_name" new_file.ts
 ## 🚀 **Ready to Proceed**
 
 This organization strategy provides:
+
 - **Clear roadmap** for reorganization
 - **Risk mitigation** through incremental changes
 - **Quality assurance** through testing at each step

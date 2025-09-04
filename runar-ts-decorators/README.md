@@ -26,6 +26,7 @@ bun run build
 ```
 
 This command does the following:
+
 1. **Generates Types**: Runs the type generator to create `src/encrypted-types.ts`
 2. **Compiles Main Package**: Compiles the main decorator code to `dist/`
 3. **Compiles Test Fixtures**: Compiles test fixtures (which use decorators) to `test_fixtures/dist/`
@@ -74,17 +75,20 @@ runar-ts-decorators/
 The build script (`cd generator && bun run generate-types.ts && cd .. && tsc -p tsconfig.json && cd test_fixtures && tsc`) performs these steps:
 
 #### 1. Type Generation (`cd generator && bun run generate-types.ts`)
+
 - **Analyzes** `test_fixtures/test_fixtures.ts` for `@Encrypt` decorated classes
 - **Extracts** field encryption metadata from `@runar('label')` decorators
 - **Generates** `src/encrypted-types.ts` with encrypted companion interfaces
 - **Creates** interfaces that extend `RunarEncryptable` for runtime methods
 
 #### 2. Main Package Compilation (`tsc -p tsconfig.json`)
+
 - **Compiles** `src/` directory to `dist/`
 - **Generates** TypeScript declarations (`index.d.ts`)
 - **Uses** TypeScript 5 decorator syntax (no legacy decorators)
 
 #### 3. Test Fixtures Compilation (`cd test_fixtures && tsc`)
+
 - **Compiles** `test_fixtures/test_fixtures.ts` to `test_fixtures/dist/`
 - **Processes** TypeScript 5 decorators on `TestProfile` class
 - **Generates** declaration files for type imports
@@ -98,11 +102,11 @@ import { Encrypt, runar } from 'runar-ts-decorators';
 
 @Encrypt
 class UserProfile {
-  id: string;                                    // Plain field
-  @runar('user') name: string;                   // User-encrypted field
-  @runar('system') email: string;                // System-encrypted field
-  @runar('search') phone: string;                // Search-encrypted field
-  @runar('system_only') metadata: string;        // System-only encrypted field
+  id: string; // Plain field
+  @runar('user') name: string; // User-encrypted field
+  @runar('system') email: string; // System-encrypted field
+  @runar('search') phone: string; // Search-encrypted field
+  @runar('system_only') metadata: string; // System-only encrypted field
 
   constructor(id: string, name: string, email: string, phone: string, metadata: string) {
     this.id = id;
@@ -148,6 +152,7 @@ const decrypted = encrypted.value.decryptWithKeystore(keystore, logger);
 ## Test Structure
 
 ### `encryption.test.ts` - Direct Encryption Tests
+
 - **Direct** `encryptWithKeystore`/`decryptWithKeystore` calls
 - **Keystore capability** validation
 - **PKI workflow** validation
@@ -155,6 +160,7 @@ const decrypted = encrypted.value.decryptWithKeystore(keystore, logger);
 - **Network-only** encryption
 
 ### `anyvalue_encryption.test.ts` - AnyValue Integration Tests
+
 - **AnyValue serialization** with encryption context
 - **AnyValue deserialization** with keystore
 - **Dual-mode semantics** (plain + encrypted types from same data)
@@ -164,16 +170,17 @@ const decrypted = encrypted.value.decryptWithKeystore(keystore, logger);
 
 ## Access Control Labels
 
-| Label | Description | Access Pattern |
-|-------|-------------|----------------|
-| `user` | User profile data | Mobile devices with user keys |
-| `system` | System data | Both mobile (user keys) and node (network keys) |
-| `search` | Searchable data | Mobile devices with user keys |
-| `system_only` | System-only data | Node devices with network keys only |
+| Label         | Description       | Access Pattern                                  |
+| ------------- | ----------------- | ----------------------------------------------- |
+| `user`        | User profile data | Mobile devices with user keys                   |
+| `system`      | System data       | Both mobile (user keys) and node (network keys) |
+| `search`      | Searchable data   | Mobile devices with user keys                   |
+| `system_only` | System-only data  | Node devices with network keys only             |
 
 ## Development Workflow
 
 ### 1. Making Changes
+
 ```bash
 # Edit source files
 vim src/index.ts
@@ -186,6 +193,7 @@ vim test/encryption.test.ts
 ```
 
 ### 2. Building
+
 ```bash
 # Full build (generates types + compiles everything)
 bun run build
@@ -201,6 +209,7 @@ cd test_fixtures && tsc
 ```
 
 ### 3. Testing
+
 ```bash
 # Run all tests
 bun test
@@ -217,15 +226,19 @@ bun test --verbose
 ### Common Issues
 
 #### "Cannot find module" errors
+
 - **Solution**: Run `bun run build` first to compile fixtures and generate types
 
 #### "context.addInitializer is not a function"
+
 - **Solution**: Tests must run on compiled JavaScript, not TypeScript source files
 
 #### Import path errors
+
 - **Solution**: Don't add `.js` extensions to imports in TypeScript files
 
 #### Type generation errors
+
 - **Solution**: Ensure `@Encrypt` decorator is applied to classes with `@runar` fields
 
 ### Build Requirements
@@ -237,6 +250,7 @@ bun test --verbose
 ## Integration with Runar Ecosystem
 
 This package integrates with:
+
 - **runar-ts-serializer**: For AnyValue serialization
 - **runar-ts-node**: For keystore management
 - **runar-ts-common**: For Result types and logging
