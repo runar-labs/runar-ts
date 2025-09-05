@@ -1,10 +1,10 @@
-import { Result } from 'runar-ts-common/src/error/Result.js';
-import { CommonKeysInterface } from '../keystore/device_caps.js';
+import { Result } from 'runar-ts-common/src/error/Result';
+import { CommonKeysInterface } from '../keystore/device_caps';
 
 export class SerializationContext {
   constructor(
     public keystore: CommonKeysInterface,
-    public resolver: import('../label_resolver.js').LabelResolver,
+    public resolver: import('../label_resolver').LabelResolver,
     public networkPublicKey: Uint8Array,
     public profilePublicKeys: Uint8Array[]
   ) {}
@@ -13,7 +13,7 @@ export class SerializationContext {
 export class DeserializationContext {
   constructor(
     public keystore?: CommonKeysInterface,
-    public resolver?: import('../label_resolver.js').LabelResolver,
+    public resolver?: import('../label_resolver').LabelResolver,
     public decryptEnvelope?: (eed: Uint8Array) => Result<Uint8Array>
   ) {}
 }

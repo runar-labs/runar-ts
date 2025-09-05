@@ -1,8 +1,8 @@
-import { Result, ok, err } from 'runar-ts-common/src/error/Result.js';
-import { LabelResolver } from './label_resolver.js';
-import type { CommonKeysInterface } from './keystore/device_caps.js';
+import { Result, ok, err } from 'runar-ts-common/src/error/Result';
+import { LabelResolver } from './label_resolver';
+import type { CommonKeysInterface } from './keystore/device_caps';
 import { encode, decode } from 'cbor-x';
-import { Logger, Component } from 'runar-ts-common/src/logging/logger.js';
+import { Logger, Component } from 'runar-ts-common/src/logging/logger';
 
 // ---------------------------------------------------------------------------
 // Envelope Encryption Types

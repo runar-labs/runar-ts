@@ -5,7 +5,7 @@
  * to ensure cross-language serialization compatibility.
  */
 
-import { AnyValue } from './index.js';
+import { AnyValue } from './index';
 import { encode } from 'cbor-x';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -13,11 +13,7 @@ import { fileURLToPath } from 'url';
 
 // Helper function to handle newPrimitive Result return type
 function createPrimitive<T>(value: T): AnyValue<T> {
-  const result = AnyValue.newPrimitive(value);
-  if (!result.ok) {
-    throw new Error(`Failed to create primitive AnyValue: ${result.error.message}`);
-  }
-  return result.value;
+  return AnyValue.newPrimitive(value);
 }
 
 const __filename = fileURLToPath(import.meta.url);

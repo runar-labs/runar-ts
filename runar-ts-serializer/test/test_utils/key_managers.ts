@@ -6,12 +6,12 @@ import {
   DeserializationContext,
   createContextLabelResolver,
   LabelKeyword,
-} from 'runar-ts-serializer/src/index.js';
+} from '../../src/index';
 import {
   KeystoreFactory,
   KeysWrapperMobile,
   KeysWrapperNode,
-} from 'runar-ts-node/src/keys_manager_wrapper.js';
+} from '../../../runar-ts-node/src/keys_manager_wrapper';
 
 // Import Result type and utilities
 import { Result, isErr } from 'runar-ts-common/src/error/Result';

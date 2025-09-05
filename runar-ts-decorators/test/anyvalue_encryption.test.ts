@@ -3,7 +3,7 @@ import { AnyValue, ValueCategory } from 'runar-ts-serializer/src/index';
 import { type RunarEncryptable } from '../src/index';
 import { TestProfile } from '../test_fixtures/dist/test_fixtures/test_fixtures';
 import type { EncryptedTestProfile } from '../src/encrypted-types';
-import { AnyValueTestEnvironment } from './test_utils/key_managers';
+import { AnyValueTestEnvironment } from '../../runar-ts-serializer/test/test_utils/key_managers';
 
 // Import Result type and utilities
 import { Result, isErr, isOk } from 'runar-ts-common/src/error/Result';

@@ -1,4 +1,4 @@
-import { Result, ok, err } from 'runar-ts-common/src/error/Result.js';
+import { Result, ok, err } from 'runar-ts-common/src/error/Result';
 
 // ---------------------------------------------------------------------------
 // Core Type Definitions

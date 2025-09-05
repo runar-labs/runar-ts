@@ -1,7 +1,7 @@
-import type { CommonKeysInterface } from 'runar-ts-serializer/src/wire.js';
-import type { LabelResolver } from 'runar-ts-serializer/src/label_resolver.js';
-import { Result } from 'runar-ts-common/src/error/Result.js';
-import { Logger } from 'runar-ts-common/src/logging/logger.js';
+import type { CommonKeysInterface } from 'runar-ts-serializer/src/wire';
+import type { LabelResolver } from 'runar-ts-serializer/src/label_resolver';
+import { Result } from 'runar-ts-common/src/error/Result';
+import { Logger } from 'runar-ts-common/src/logging/logger';
 type ClassDecoratorContext = {
   name: string | symbol | undefined;
   kind: 'class';

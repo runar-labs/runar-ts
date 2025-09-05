@@ -4,19 +4,19 @@ import {
   registerWireName,
   registerEncryptedCompanion,
   registerToJson,
-} from 'runar-ts-serializer/src/registry.js';
-import { isErr, isOk } from 'runar-ts-common/src/error/Result.js';
+} from 'runar-ts-serializer/src/registry';
+import { isErr, isOk } from 'runar-ts-common/src/error/Result';
 import {
   encryptLabelGroupSync,
   decryptLabelGroupSync,
-} from 'runar-ts-serializer/src/encryption.js';
-import type { CommonKeysInterface } from 'runar-ts-serializer/src/wire.js';
-import type { LabelResolver } from 'runar-ts-serializer/src/label_resolver.js';
-import { Result, ok, err, type Err } from 'runar-ts-common/src/error/Result.js';
-import type { EncryptedLabelGroup } from 'runar-ts-serializer/src/index.js';
-import type { LabelKeyInfo } from 'runar-ts-serializer/src/label_resolver.js';
+} from 'runar-ts-serializer/src/encryption';
+import type { CommonKeysInterface } from 'runar-ts-serializer/src/keystore/device_caps';
+import type { LabelResolver } from 'runar-ts-serializer/src/label_resolver';
+import { Result, ok, err, type Err } from 'runar-ts-common/src/error/Result';
+import type { EncryptedLabelGroup } from 'runar-ts-serializer/src/index';
+import type { LabelKeyInfo } from 'runar-ts-serializer/src/label_resolver';
 import { encode, decode } from 'cbor-x';
-import { Logger, Component } from 'runar-ts-common/src/logging/logger.js';
+import { Logger, Component } from 'runar-ts-common/src/logging/logger';
 
 // TS 5 standard decorator types
 type ClassDecoratorContext = { name: string | symbol | undefined; kind: 'class' };

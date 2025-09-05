@@ -1,5 +1,5 @@
-import { Result, ok, err } from 'runar-ts-common/src/error/Result.js';
-import { LabelResolver, LabelResolverConfig } from './label_resolver.js';
+import { Result, ok, err } from 'runar-ts-common/src/error/Result';
+import { LabelResolver, LabelResolverConfig } from './label_resolver';
 import { createHash } from 'crypto';
 
 // ---------------------------------------------------------------------------

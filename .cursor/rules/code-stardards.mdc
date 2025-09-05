@@ -1,5 +1,4 @@
 ---
-globs: *.ts,*.js
 alwaysApply: true
 ---
 
@@ -19,7 +18,11 @@ DON NOT ADD .js in the import lines
   - Never use empty catch blocks; never swallow errors.
 
 
-Use proper types, never use "as any" .. or "any" anywhere.
+Proper use of Result<> monad.. when handlign result DO NOT do if (result.ok) ALWAYS use if(isOk(result)) and isErr(result)
+
+
+
+NEVER USE any - Use proper types, never use "as any" .. or "any" anywhere.
 Always use the proper typing
 
 

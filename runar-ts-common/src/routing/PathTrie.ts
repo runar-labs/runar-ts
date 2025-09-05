@@ -1,4 +1,4 @@
-import { TopicPath } from './TopicPath.js';
+import { TopicPath } from './TopicPath';
 import { Result, ok, err } from '../error';
 
 export type PathTrieMatch<T> = { content: T; params: Map<string, string> };

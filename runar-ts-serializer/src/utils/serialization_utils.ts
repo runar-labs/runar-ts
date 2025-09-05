@@ -1,6 +1,6 @@
-import { Result, err, isErr } from 'runar-ts-common/src/error/Result.js';
-import { AnyValue } from '../core/any_value.js';
-import { CommonKeysInterface } from '../keystore/device_caps.js';
+import { Result, err, isErr } from 'runar-ts-common/src/error/Result';
+import { AnyValue } from '../core/any_value';
+import { CommonKeysInterface } from '../keystore/device_caps';
 
 // Export function to serialize entities
 export function serializeEntity(entity: any): Uint8Array | Promise<Uint8Array> {

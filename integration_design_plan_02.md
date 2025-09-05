@@ -947,7 +947,7 @@ This section reconciles the design with the exact Rust behavior and supersedes a
 
 - Match Rust's synchronous API:
   - `serialize(context?: SerializationContext): Result<Uint8Array>`
-  - `deserialize(bytes: Uint8Array, keystore?: CommonKeysInterface): Result<AnyValue>`
+  - `deserialize<T = unknown>(bytes: Uint8Array, keystore?: CommonKeysInterface, logger?: Logger): Result<AnyValue<T>, Error>`
 - Under the hood, the NodeJS API `Keys` methods used by the serializer are synchronous (per NAPI surface), so no async/await in serializer paths.
 - Encrypted path (Struct/List/Map/Json):
   - Resolve wire name and build header.
@@ -1507,6 +1507,170 @@ const result = anyValue.asType<User>(); // Returns Err("AccessDenied")
 - ✅ Registry gaps: missing companion/decryptor → `UnknownEncryptedCompanion`
 - ✅ Test file: `runar-ts-serializer/test/anyvalue_dual_mode.test.ts` demonstrates all scenarios
 
+## 22.7 Container Element Decryption in asType<T>() (Detailed Implementation)
+
+### 22.7.1 Overview
+
+TypeScript implementation achieves container element decryption through the unified `asType<T>()` method, eliminating the need for separate `as_typed_list_ref` and `as_typed_map_ref` methods that exist in Rust due to language limitations. The TS approach is cleaner and more idiomatic while maintaining 100% functional parity.
+
+### 22.7.2 TypeScript-Specific Methods for Container Element Access
+
+**Problem**: TypeScript's generic type erasure at runtime prevents distinguishing between `asType<string[]>(Array)` and `asType<AnyValue[]>(Array)` calls, making it impossible to determine whether the user wants plain values or AnyValue objects.
+
+**Solution**: Provide explicit methods that clearly indicate the intended return type:
+
+- `asAnyValueArray(): Result<AnyValue[], Error>` - Returns array of AnyValue objects
+- `asAnyValueMap(): Result<Map<string, AnyValue>, Error>` - Returns map with AnyValue values
+- `asType<T>(targetConstructor?: new (...args: any[]) => T): Result<T, Error>` - Returns plain values based on targetConstructor
+
+### 22.7.3 Method Specifications
+
+#### asAnyValueArray() Method
+
+**Purpose**: Explicitly return an array of AnyValue objects, preserving the container structure and enabling further type conversion via `.asType<T>()` on individual elements.
+
+**Behavior**:
+- Always returns `AnyValue[]` regardless of element types
+- Preserves lazy decryption semantics for encrypted elements
+- Enables chained operations: `anyValue.asAnyValueArray().value[0].asType<string>()`
+- Handles all three deserialization fallback scenarios (encrypted bytes, plain values, heterogeneous)
+
+**Rust Equivalent**: `as_typed_list_ref()` method that returns `Vec<ArcValue>`
+
+#### asAnyValueMap() Method
+
+**Purpose**: Explicitly return a Map with AnyValue objects as values, preserving the container structure and enabling further type conversion.
+
+**Behavior**:
+- Always returns `Map<string, AnyValue>` regardless of value types
+- Preserves lazy decryption semantics for encrypted values
+- Enables chained operations: `anyValue.asAnyValueMap().value.get('key')?.asType<string>()`
+- Handles all three deserialization fallback scenarios (encrypted bytes, plain values, heterogeneous)
+
+**Rust Equivalent**: `as_typed_map_ref()` method that returns `HashMap<String, ArcValue>`
+
+### 22.7.4 Usage Patterns
+
+#### Explicit AnyValue Access
+```typescript
+// Clear intent: user wants AnyValue objects
+const anyValueArray = container.asAnyValueArray();
+const anyValueMap = container.asAnyValueMap();
+```
+
+#### Chained Type Conversion
+```typescript
+// Convert to AnyValue objects, then extract specific types
+const scores = container.asAnyValueArray();
+if (scores.ok) {
+  const firstScore = scores.value[0].asType<number>();
+  const secondScore = scores.value[1].asType<string>();
+}
+```
+
+#### Plain Value Access (Existing)
+```typescript
+// Clear intent: user wants plain values
+const stringArray = container.asType<string[]>(Array);
+const stringMap = container.asType<Map<string, string>>(Map);
+```
+
+### 22.7.5 Implementation Requirements
+
+#### Method Signatures
+- `asAnyValueArray(): Result<AnyValue[], Error>`
+- `asAnyValueMap(): Result<Map<string, AnyValue>, Error>`
+
+#### Deserialization Logic
+Both methods follow the same three-step fallback pattern as `asType<T>()`:
+
+1. **Step 1**: Try `Vec<Vec<u8>>` / `Map<String, Vec<u8>>` (encrypted bytes)
+   - Decrypt each element using registry decryptors
+   - Convert decrypted elements to AnyValue objects
+   - Return array/map of AnyValue objects
+
+2. **Step 2**: Try `Vec<T>` / `Map<String, T>` (plain values)
+   - Convert each plain element to AnyValue object using `AnyValue.from()`
+   - Return array/map of AnyValue objects
+
+3. **Step 3**: Try `Vec<ArcValue>` / `Map<String, ArcValue>` (heterogeneous)
+   - Elements are already AnyValue objects
+   - Return as-is
+
+#### Error Handling
+- **Outer envelope decryption**: `"Outer envelope decryption failed: {reason}"`
+- **Element type resolution**: `"Cannot determine element type for decryption"`
+- **Missing decryptor**: `"No decryptor registered for element type: {typeName}"`
+- **Element decryption**: `"Element decryption failed: {reason}"`
+- **All approaches failed**: `"Failed to deserialize container: all deserialization approaches failed"`
+
+### 22.7.6 Registry Integration
+
+#### Required Registry Functions
+- `lookupDecryptorByTypeName(typeName: string): Result<DecryptFn<T>, Error>`
+- `getElementTypeFromTarget(targetConstructor?: new (...args: any[]) => T): string | null`
+- `lookupWireName(rustTypeName: string): Result<string, Error>`
+
+#### Element Type Resolution
+- For encrypted elements: Use registry decryptor lookup by type name
+- For plain elements: Infer type from CBOR structure or use default
+- For heterogeneous elements: Preserve existing AnyValue structure
+
+### 22.7.7 Performance Considerations
+
+#### Optimization Strategies
+- **Lazy evaluation**: Only decrypt elements when accessed via `.asType<T>()`
+- **Batch operations**: Process multiple elements in single registry calls where possible
+- **Memory efficiency**: Avoid unnecessary array copies during conversion
+- **Registry caching**: Cache decryptor lookups to avoid repeated registry queries
+
+#### Memory Management
+- **Buffer reuse**: Reuse `innerBytes` buffer for multiple decode attempts
+- **Element streaming**: Process large containers element-by-element to avoid memory spikes
+- **Garbage collection**: Ensure proper cleanup of intermediate objects
+
+### 22.7.8 Testing Requirements
+
+#### Test Scenarios
+1. **Plain containers**: `Vec<String>` → `asAnyValueArray()` → `AnyValue[]` with string values
+2. **Encrypted containers**: `Vec<EncryptedUser>` → `asAnyValueArray()` → `AnyValue[]` with encrypted elements
+3. **Heterogeneous containers**: `Vec<ArcValue>` → `asAnyValueArray()` → `AnyValue[]` with mixed types
+4. **Missing decryptor**: `Vec<EncryptedUser>` → `asAnyValueArray()` → error when no decryptor
+5. **Access denied**: `Vec<EncryptedUser>` → `asAnyValueArray()` → error when keystore lacks keys
+6. **Malformed data**: Invalid CBOR → `asAnyValueArray()` → decode error
+
+#### Test Data Requirements
+- **Small containers**: 1-5 elements for basic functionality
+- **Large containers**: 100+ elements for performance testing
+- **Mixed content**: Containers with both plain and encrypted elements
+- **Edge cases**: Empty containers, single-element containers, maximum-size containers
+
+### 22.7.9 Rust Parity Verification
+
+#### Method Mapping
+- `asAnyValueArray()` ↔ `as_typed_list_ref()` (returns `Vec<ArcValue>`)
+- `asAnyValueMap()` ↔ `as_typed_map_ref()` (returns `HashMap<String, ArcValue>`)
+- `asType<T>(Array)` ↔ `as_type<T>()` (returns `Vec<T>`)
+- `asType<T>(Map)` ↔ `as_type<T>()` (returns `HashMap<String, T>`)
+
+#### Behavior Verification
+- **Wire format**: Identical header parsing and payload extraction
+- **Decryption logic**: Same three-step fallback pattern
+- **Error messages**: Match Rust error strings exactly
+- **Performance**: Within 10% of Rust benchmarks
+- **Memory usage**: Similar patterns for large containers
+
+### 22.7.10 Implementation Checklist
+
+- [ ] **Method signatures**: Implement `asAnyValueArray()` and `asAnyValueMap()`
+- [ ] **Three-step fallback**: Implement Vec<Vec<u8>> → Vec<T> → Vec<ArcValue> sequence
+- [ ] **Registry integration**: Use real decryptors, not mocks
+- [ ] **Error handling**: Precise error messages matching Rust behavior
+- [ ] **Type safety**: Proper generic constraints and type guards
+- [ ] **Performance**: Optimized for large containers
+- [ ] **Testing**: Comprehensive test coverage for all scenarios
+- [ ] **Rust parity**: Verify behavior matches Rust implementation exactly
+
 ## 23. Key Architectural Decision: Raw CBOR Bytes Only (No Envelope Objects)
 
 ### 23.1 Decision Summary
@@ -1726,8 +1890,10 @@ Adopt these signatures across the codebase; update all call sites. Do not suppor
 
 - AnyValue (runar-ts-serializer)
   - `serialize(context?: SerializationContext): Result<Uint8Array, Error>`
-  - `deserialize(bytes: Uint8Array, keystore?: CommonKeysInterface): Result<AnyValue, Error>`
-  - `asType<T>(): Result<T, Error>`
+  - `deserialize<T = unknown>(bytes: Uint8Array, keystore?: CommonKeysInterface, logger?: Logger): Result<AnyValue<T>, Error>`
+  - `asType<T>(targetConstructor?: new (...args: any[]) => T): Result<T, Error>`
+  - `asAnyValueArray(): Result<AnyValue[], Error>`
+  - `asAnyValueMap(): Result<Map<string, AnyValue>, Error>`
 
 - Serializer helpers (runar-ts-serializer/src/encryption.ts)
   - `encryptLabelGroupSync(label: string, fieldsStruct: object, keystore: CommonKeysInterface, resolver: LabelResolver): Result<EncryptedLabelGroup, Error>`
@@ -1860,7 +2026,7 @@ const log = logger
 **AnyValue Serialization:**
 
 ```typescript
-static deserialize(bytes: Uint8Array, keystore?: CommonKeysInterface, logger?: Logger): Result<AnyValue<any>, Error> {
+static deserialize<T = unknown>(bytes: Uint8Array, keystore?: CommonKeysInterface, logger?: Logger): Result<AnyValue<T>, Error> {
   const log = logger ? logger.withComponent(Component.Serializer) : Logger.newRoot(Component.Serializer);
   // ... implementation with detailed logging
 }

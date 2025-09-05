@@ -1,5 +1,5 @@
-import { Result, ok, err } from 'runar-ts-common/src/error/Result.js';
-import { ValueCategory } from './value_category.js';
+import { Result, ok, err } from 'runar-ts-common/src/error/Result';
+import { ValueCategory } from './value_category';
 
 export interface WireHeader {
   category: ValueCategory;

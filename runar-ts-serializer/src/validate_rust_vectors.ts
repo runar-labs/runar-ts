@@ -5,7 +5,7 @@
  * to ensure cross-language compatibility.
  */
 
-import { AnyValue } from './index.js';
+import { AnyValue } from './index';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
