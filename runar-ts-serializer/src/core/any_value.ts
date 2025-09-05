@@ -373,7 +373,7 @@ export class AnyValue<T = unknown> {
 
     if (category === ValueCategory.Null) {
       log.trace('Returning null value');
-              return ok(AnyValue.null() as AnyValue<T>);
+      return ok(AnyValue.null() as AnyValue<T>);
     }
 
     const isEncryptedByte = bytes[1];
@@ -940,7 +940,12 @@ export class AnyValue<T = unknown> {
         return listResult;
       }
       // If list decryption fails, fall back to direct value
-    } else if (this.category === ValueCategory.Map && this.value && typeof this.value === 'object' && !Array.isArray(this.value)) {
+    } else if (
+      this.category === ValueCategory.Map &&
+      this.value &&
+      typeof this.value === 'object' &&
+      !Array.isArray(this.value)
+    ) {
       // This is a Map container - implement 3-step fallback for Map decryption
       const mapResult = this.performMapElementDecryption(this.value, targetConstructor);
       if (mapResult.ok) {
@@ -1058,7 +1063,7 @@ export class AnyValue<T = unknown> {
                 }
                 // If map decryption fails, fall back to direct decode
               }
-              
+
               // Direct decode succeeded and we got plain data
               return ok(decoded as U);
             }
@@ -1114,7 +1119,7 @@ export class AnyValue<T = unknown> {
           }
           // If map decryption fails, fall back to direct decode
         }
-        
+
         return ok(decoded as U);
       } catch (error) {
         return err(new Error(`Failed to decode plain lazy data: ${error}`));
@@ -1154,16 +1159,16 @@ export class AnyValue<T = unknown> {
       if (Array.isArray(decoded)) {
         // Try to decode as Vec<bytes> - check if all elements are Uint8Array
         const allElementsAreBytes = decoded.every((item: any) => item instanceof Uint8Array);
-        
+
         if (allElementsAreBytes) {
           // This is Vec<bytes> - decrypt each element via registry
           const decryptedElements: any[] = [];
-          
+
           for (const elementBytes of decoded) {
             // Try to decrypt each element using registry decryptors
             // We need to determine the element type from the target constructor or context
             const elementTypeName = this.getElementTypeFromTarget(targetConstructor);
-            
+
             if (elementTypeName) {
               const decryptorResult = lookupDecryptorByTypeName(elementTypeName);
               if (decryptorResult.ok) {
@@ -1188,25 +1193,29 @@ export class AnyValue<T = unknown> {
               decryptedElements.push(elementBytes);
             }
           }
-          
+
           return ok(decryptedElements as U);
         }
       } else if (decoded && typeof decoded === 'object' && !Array.isArray(decoded)) {
         // Try to decode as Map<String,bytes> - check if all values are Uint8Array
         const entries = Object.entries(decoded);
-        const allValuesAreBytes = entries.every(([_, value]) => 
-          value instanceof Uint8Array || 
-          (value && typeof value === 'object' && (value as any).category === 4 && (value as any).value instanceof Uint8Array)
+        const allValuesAreBytes = entries.every(
+          ([_, value]) =>
+            value instanceof Uint8Array ||
+            (value &&
+              typeof value === 'object' &&
+              (value as any).category === 4 &&
+              (value as any).value instanceof Uint8Array)
         );
-        
+
         if (allValuesAreBytes) {
           // This is Map<String,bytes> - decrypt each value via registry
           const decryptedMap: Record<string, any> = {};
-          
+
           for (const [key, valueBytes] of entries) {
             // Try to decrypt each value using registry decryptors
             const valueTypeName = this.getElementTypeFromTarget(targetConstructor);
-            
+
             if (valueTypeName) {
               const decryptorResult = lookupDecryptorByTypeName(valueTypeName);
               if (decryptorResult.ok) {
@@ -1231,7 +1240,7 @@ export class AnyValue<T = unknown> {
               decryptedMap[key] = valueBytes;
             }
           }
-          
+
           return ok(decryptedMap as U);
         }
       }
@@ -1252,18 +1261,18 @@ export class AnyValue<T = unknown> {
             return fromResult.ok ? fromResult.value : AnyValue.null();
           }
         });
-        
+
         // Map each AnyValue to the target type
         const mappedElements = anyValueElements.map((av: AnyValue) => {
           const asTypeResult = av.asType<U>();
           return asTypeResult.ok ? asTypeResult.value : null;
         });
-        
+
         return ok(mappedElements as U);
       } else if (decoded && typeof decoded === 'object' && !Array.isArray(decoded)) {
         // Convert to Map<String,AnyValue> and map each value
         const anyValueMap = new Map<string, AnyValue>();
-        
+
         for (const [key, value] of Object.entries(decoded)) {
           if (value instanceof AnyValue) {
             anyValueMap.set(key, value);
@@ -1273,14 +1282,14 @@ export class AnyValue<T = unknown> {
             anyValueMap.set(key, fromResult.ok ? fromResult.value : AnyValue.null());
           }
         }
-        
+
         // Map each AnyValue to the target type
         const mappedMap = new Map<string, U>();
         for (const [key, av] of anyValueMap) {
           const asTypeResult = av.asType<U>();
-          mappedMap.set(key, asTypeResult.ok ? asTypeResult.value : null as U);
+          mappedMap.set(key, asTypeResult.ok ? asTypeResult.value : (null as U));
         }
-        
+
         return ok(mappedMap as U);
       }
     } catch (error) {
@@ -1307,7 +1316,11 @@ export class AnyValue<T = unknown> {
 
     // Step 1: Try Vec<Vec<u8>> (encrypted bytes) - only if keystore is available
     if (keystore) {
-      const encryptedBytesResult = this.tryDecryptEncryptedListElements(elements, targetConstructor, keystore);
+      const encryptedBytesResult = this.tryDecryptEncryptedListElements(
+        elements,
+        targetConstructor,
+        keystore
+      );
       if (isOk(encryptedBytesResult)) {
         return encryptedBytesResult;
       }
@@ -1316,8 +1329,11 @@ export class AnyValue<T = unknown> {
     // Step 2: Try Vec<T> (plain data) - behavior depends on target type
     // If target type is AnyValue[], return AnyValue objects
     // If target type is plain type[], return plain values
-    const shouldReturnAnyValueObjects = this.shouldReturnAnyValueObjects(targetConstructor, elements);
-    
+    const shouldReturnAnyValueObjects = this.shouldReturnAnyValueObjects(
+      targetConstructor,
+      elements
+    );
+
     if (shouldReturnAnyValueObjects) {
       // Convert plain objects to AnyValue objects
       const anyValueElements = elements.map(element => {
@@ -1330,7 +1346,7 @@ export class AnyValue<T = unknown> {
           return fromResult.ok ? fromResult.value : AnyValue.null();
         }
       });
-      
+
       return ok(anyValueElements as U);
     } else {
       // Convert AnyValue objects to plain values
@@ -1341,7 +1357,7 @@ export class AnyValue<T = unknown> {
         }
         return element;
       });
-      
+
       return ok(plainElements as U);
     }
   }
@@ -1353,7 +1369,7 @@ export class AnyValue<T = unknown> {
   ): Result<U> {
     // Check if all elements are encrypted bytes
     const allElementsAreBytes = elements.every(element => this.isEncryptedBytes(element));
-    
+
     if (!allElementsAreBytes) {
       return err(new Error('Not all elements are encrypted bytes'));
     }
@@ -1365,11 +1381,14 @@ export class AnyValue<T = unknown> {
 
     const decryptorResult = lookupDecryptorByTypeName(elementTypeName);
     if (isErr(decryptorResult)) {
-      return err(`No decryptor registered for element type: ${elementTypeName}`, decryptorResult.error);
+      return err(
+        `No decryptor registered for element type: ${elementTypeName}`,
+        decryptorResult.error
+      );
     }
 
     const decryptedElements: unknown[] = [];
-    
+
     for (const element of elements) {
       const elementBytesResult = this.extractBytesFromElement(element);
       if (isErr(elementBytesResult)) {
@@ -1379,7 +1398,10 @@ export class AnyValue<T = unknown> {
       try {
         const decryptedResult = decryptorResult.value(elementBytesResult.value, keystore);
         if (isErr(decryptedResult)) {
-          return err(`Element decryption failed: ${decryptedResult.error.message}`, decryptedResult.error);
+          return err(
+            `Element decryption failed: ${decryptedResult.error.message}`,
+            decryptedResult.error
+          );
         }
         decryptedElements.push(decryptedResult.value);
       } catch (error) {
@@ -1392,19 +1414,29 @@ export class AnyValue<T = unknown> {
   }
 
   private isEncryptedBytes(element: unknown): boolean {
-    return element instanceof Uint8Array || 
-           (element !== null && typeof element === 'object' && (element as any).category === 4 && (element as any).value instanceof Uint8Array);
+    return (
+      element instanceof Uint8Array ||
+      (element !== null &&
+        typeof element === 'object' &&
+        (element as any).category === 4 &&
+        (element as any).value instanceof Uint8Array)
+    );
   }
 
   private extractBytesFromElement(element: unknown): Result<Uint8Array> {
     if (element instanceof Uint8Array) {
       return ok(element);
     }
-    
-    if (element && typeof element === 'object' && (element as any).category === 4 && (element as any).value instanceof Uint8Array) {
+
+    if (
+      element &&
+      typeof element === 'object' &&
+      (element as any).category === 4 &&
+      (element as any).value instanceof Uint8Array
+    ) {
       return ok((element as any).value);
     }
-    
+
     return err('Element is not encrypted bytes');
   }
 
@@ -1420,48 +1452,63 @@ export class AnyValue<T = unknown> {
     if (keystore) {
       try {
         if (decoded && typeof decoded === 'object' && !Array.isArray(decoded)) {
-        const entries = Object.entries(decoded);
-        const allValuesAreBytes = entries.every(([_, value]) => 
-          value instanceof Uint8Array || 
-          (value && typeof value === 'object' && (value as any).category === 4 && (value as any).value instanceof Uint8Array)
-        );
-        
-        if (allValuesAreBytes) {
-          // Decrypt each value using registry decryptors
-          const decryptedMap: Record<string, any> = {};
-          
-          for (const [key, value] of entries) {
-            // Extract bytes from either Uint8Array or AnyValue with bytes
-            let valueBytes: Uint8Array;
-            if (value instanceof Uint8Array) {
-              valueBytes = value;
-            } else if (value && typeof value === 'object' && (value as any).category === 4 && (value as any).value instanceof Uint8Array) {
-              valueBytes = (value as any).value;
-            } else {
-              return err(new Error('Invalid value type for decryption'));
+          const entries = Object.entries(decoded);
+          const allValuesAreBytes = entries.every(
+            ([_, value]) =>
+              value instanceof Uint8Array ||
+              (value &&
+                typeof value === 'object' &&
+                (value as any).category === 4 &&
+                (value as any).value instanceof Uint8Array)
+          );
+
+          if (allValuesAreBytes) {
+            // Decrypt each value using registry decryptors
+            const decryptedMap: Record<string, any> = {};
+
+            for (const [key, value] of entries) {
+              // Extract bytes from either Uint8Array or AnyValue with bytes
+              let valueBytes: Uint8Array;
+              if (value instanceof Uint8Array) {
+                valueBytes = value;
+              } else if (
+                value &&
+                typeof value === 'object' &&
+                (value as any).category === 4 &&
+                (value as any).value instanceof Uint8Array
+              ) {
+                valueBytes = (value as any).value;
+              } else {
+                return err(new Error('Invalid value type for decryption'));
+              }
+
+              const valueTypeName = this.getElementTypeFromTarget(targetConstructor);
+              if (!valueTypeName) {
+                return err(new Error('Cannot determine value type for decryption'));
+              }
+
+              const decryptorResult = lookupDecryptorByTypeName(valueTypeName);
+              if (isErr(decryptorResult)) {
+                return err(
+                  `No decryptor registered for value type: ${valueTypeName}`,
+                  decryptorResult.error
+                );
+              }
+
+              const decryptedResult = decryptorResult.value(valueBytes, keystore);
+              if (isErr(decryptedResult)) {
+                return err(
+                  `Value decryption failed: ${decryptedResult.error.message}`,
+                  decryptedResult.error
+                );
+              }
+
+              decryptedMap[key] = decryptedResult.value;
             }
-            
-            const valueTypeName = this.getElementTypeFromTarget(targetConstructor);
-            if (!valueTypeName) {
-              return err(new Error('Cannot determine value type for decryption'));
-            }
-            
-            const decryptorResult = lookupDecryptorByTypeName(valueTypeName);
-            if (isErr(decryptorResult)) {
-              return err(`No decryptor registered for value type: ${valueTypeName}`, decryptorResult.error);
-            }
-            
-            const decryptedResult = decryptorResult.value(valueBytes, keystore);
-            if (isErr(decryptedResult)) {
-              return err(`Value decryption failed: ${decryptedResult.error.message}`, decryptedResult.error);
-            }
-            
-            decryptedMap[key] = decryptedResult.value;
+
+            return ok(decryptedMap as U);
           }
-          
-          return ok(decryptedMap as U);
         }
-      }
       } catch (error) {
         // Continue to step 3b
       }
@@ -1477,7 +1524,7 @@ export class AnyValue<T = unknown> {
         values = Object.values(decoded);
       }
       const isAnyValueMap = this.shouldReturnAnyValueObjects(targetConstructor, values);
-      
+
       if (isAnyValueMap) {
         // Return AnyValue objects as-is
         if (decoded instanceof Map) {
@@ -1531,14 +1578,21 @@ export class AnyValue<T = unknown> {
       if (decoded && typeof decoded === 'object' && !Array.isArray(decoded)) {
         // Convert each ArcValue value to T using asType<T>()
         const convertedMap: Record<string, any> = {};
-        
+
         for (const [key, arcValue] of Object.entries(decoded)) {
           // Check if this is an AnyValue (ArcValue equivalent)
-          if (arcValue && typeof arcValue === 'object' && typeof (arcValue as any).asType === 'function') {
+          if (
+            arcValue &&
+            typeof arcValue === 'object' &&
+            typeof (arcValue as any).asType === 'function'
+          ) {
             const convertedResult = (arcValue as any).asType();
             if (isErr(convertedResult)) {
               const errorMessage = `Heterogeneous value conversion failed: ${convertedResult.error instanceof Error ? convertedResult.error.message : String(convertedResult.error)}`;
-              const error = convertedResult.error instanceof Error ? convertedResult.error : new Error(String(convertedResult.error));
+              const error =
+                convertedResult.error instanceof Error
+                  ? convertedResult.error
+                  : new Error(String(convertedResult.error));
               return err(errorMessage, error);
             }
             convertedMap[key] = convertedResult.value;
@@ -1547,30 +1601,37 @@ export class AnyValue<T = unknown> {
             convertedMap[key] = arcValue;
           }
         }
-        
+
         return ok(convertedMap as U);
       }
     } catch (error) {
       // All steps failed
-      return err(new Error('Failed to deserialize map container: all deserialization approaches failed'));
+      return err(
+        new Error('Failed to deserialize map container: all deserialization approaches failed')
+      );
     }
 
-    return err(new Error('Failed to deserialize map container: all deserialization approaches failed'));
+    return err(
+      new Error('Failed to deserialize map container: all deserialization approaches failed')
+    );
   }
 
   // Helper method to detect if target type is AnyValue array
-  private shouldReturnAnyValueObjects(targetConstructor?: new (...args: any[]) => any, elements?: unknown[]): boolean {
+  private shouldReturnAnyValueObjects(
+    targetConstructor?: new (...args: any[]) => any,
+    elements?: unknown[]
+  ): boolean {
     if (!elements || elements.length === 0) {
       return false;
     }
 
     // Check if elements are already AnyValue instances
     const allElementsAreAnyValue = elements.every(element => element instanceof AnyValue);
-    
+
     // If targetConstructor is provided, use it to determine the target type
     if (targetConstructor) {
       const constructorName = targetConstructor.name;
-      
+
       // For Array constructor, we need to distinguish between:
       // - asType<string[]>(Array) -> return plain values
       // - asType<AnyValue[]>(Array) -> return AnyValue objects
@@ -1587,7 +1648,7 @@ export class AnyValue<T = unknown> {
             }
             return false;
           });
-          
+
           // If all elements are primitive AnyValue instances, we need to decide:
           // - If user wants plain values (asType<string[]>), return false
           // - If user wants AnyValue objects (asType<AnyValue[]>), return true
@@ -1597,25 +1658,25 @@ export class AnyValue<T = unknown> {
           if (allPrimitives) {
             return false; // Return plain values for primitives
           }
-          
+
           // If elements are complex AnyValue instances, preserve them
           return true;
         }
-        
+
         // Elements are not AnyValue instances - check if they're plain objects that should be converted
-        const allElementsAreObjects = elements.every(element => 
-          element !== null && typeof element === 'object' && !Array.isArray(element)
+        const allElementsAreObjects = elements.every(
+          element => element !== null && typeof element === 'object' && !Array.isArray(element)
         );
-        
+
         // If elements are plain objects, convert them to AnyValue objects
         if (allElementsAreObjects) {
           return true;
         }
-        
+
         // For primitive elements, return plain values
         return false;
       }
-      
+
       // For Map constructor, similar logic
       if (constructorName === 'Map') {
         if (allElementsAreAnyValue) {
@@ -1627,36 +1688,35 @@ export class AnyValue<T = unknown> {
             }
             return false;
           });
-          
+
           // If all elements are primitive AnyValue instances, return plain values
           if (allPrimitives) {
             return false;
           }
-          
+
           // If elements are complex AnyValue instances, preserve them
           return true;
         }
-        
+
         // Check if elements are plain objects that should be converted to AnyValue
-        const allElementsAreObjects = elements.every(element => 
-          element !== null && typeof element === 'object' && !Array.isArray(element)
+        const allElementsAreObjects = elements.every(
+          element => element !== null && typeof element === 'object' && !Array.isArray(element)
         );
-        
+
         if (allElementsAreObjects) {
           return true;
         }
-        
+
         return false;
       }
-      
+
       // For other constructors, default to AnyValue objects if elements are AnyValue instances
       return allElementsAreAnyValue;
     }
-    
+
     // Fallback: No targetConstructor provided - preserve AnyValue objects
     return allElementsAreAnyValue;
   }
-
 
   // Helper method to extract element type from target constructor
   private getElementTypeFromTarget(targetConstructor?: new (...args: any[]) => any): string | null {
@@ -1666,17 +1726,17 @@ export class AnyValue<T = unknown> {
 
     // Try to extract element type from generic type parameters
     const constructorName = targetConstructor.name;
-    
+
     // For Array constructor (when calling asType<string[]>), we need to determine the element type
     if (constructorName === 'Array') {
       // Since we can't easily extract the generic type parameter at runtime,
       // we'll try to infer it from the context or use a default approach
-      
+
       // For now, let's try common types that might be registered
       // In a real implementation, we might need more sophisticated type analysis
       return 'string'; // Default to string for testing
     }
-    
+
     // Check if it's a container type with element type info
     if (constructorName.includes('Array') || constructorName.includes('List')) {
       // For arrays/lists, try to determine element type from the constructor
@@ -1687,7 +1747,7 @@ export class AnyValue<T = unknown> {
       } else if (constructorName.includes('Boolean') || constructorName.includes('boolean')) {
         return 'boolean';
       }
-      
+
       // For complex types, return generic type that might work with registry lookup
       return 'object';
     } else if (constructorName.includes('Map') || constructorName.includes('Object')) {
@@ -1699,11 +1759,11 @@ export class AnyValue<T = unknown> {
       } else if (constructorName.includes('Boolean') || constructorName.includes('boolean')) {
         return 'boolean';
       }
-      
+
       // For complex types, return generic type
       return 'object';
     }
-    
+
     // For non-container types, return the constructor name
     return constructorName;
   }
@@ -1767,14 +1827,14 @@ export class AnyValue<T = unknown> {
   }
 
   // Container element access methods (TypeScript-specific)
-  
+
   /**
    * Explicitly return an array of AnyValue objects, preserving the container structure
    * and enabling further type conversion via .asType<T>() on individual elements.
-   * 
+   *
    * This method solves the TypeScript generic type erasure problem where we cannot
    * distinguish between asType<string[]>(Array) and asType<AnyValue[]>(Array) at runtime.
-   * 
+   *
    * @returns Result<AnyValue[], Error> - Array of AnyValue objects
    */
   asAnyValueArray(): Result<AnyValue[], Error> {
@@ -1790,7 +1850,9 @@ export class AnyValue<T = unknown> {
       }
       // After decryption, the value should be available
       if (this.category !== ValueCategory.List) {
-        return err(new Error(`Expected List category after decryption, got ${ValueCategory[this.category]}`));
+        return err(
+          new Error(`Expected List category after decryption, got ${ValueCategory[this.category]}`)
+        );
       }
     }
 
@@ -1822,10 +1884,10 @@ export class AnyValue<T = unknown> {
   /**
    * Explicitly return a Map with AnyValue objects as values, preserving the container
    * structure and enabling further type conversion.
-   * 
+   *
    * This method solves the TypeScript generic type erasure problem where we cannot
    * distinguish between asType<Map<string, string>>(Map) and asType<Map<string, AnyValue>>(Map) at runtime.
-   * 
+   *
    * @returns Result<Map<string, AnyValue>, Error> - Map with AnyValue values
    */
   asAnyValueMap(): Result<Map<string, AnyValue>, Error> {
@@ -1841,7 +1903,9 @@ export class AnyValue<T = unknown> {
       }
       // After decryption, the value should be available
       if (this.category !== ValueCategory.Map) {
-        return err(new Error(`Expected Map category after decryption, got ${ValueCategory[this.category]}`));
+        return err(
+          new Error(`Expected Map category after decryption, got ${ValueCategory[this.category]}`)
+        );
       }
     }
 

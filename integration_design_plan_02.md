@@ -1530,6 +1530,7 @@ TypeScript implementation achieves container element decryption through the unif
 **Purpose**: Explicitly return an array of AnyValue objects, preserving the container structure and enabling further type conversion via `.asType<T>()` on individual elements.
 
 **Behavior**:
+
 - Always returns `AnyValue[]` regardless of element types
 - Preserves lazy decryption semantics for encrypted elements
 - Enables chained operations: `anyValue.asAnyValueArray().value[0].asType<string>()`
@@ -1542,6 +1543,7 @@ TypeScript implementation achieves container element decryption through the unif
 **Purpose**: Explicitly return a Map with AnyValue objects as values, preserving the container structure and enabling further type conversion.
 
 **Behavior**:
+
 - Always returns `Map<string, AnyValue>` regardless of value types
 - Preserves lazy decryption semantics for encrypted values
 - Enables chained operations: `anyValue.asAnyValueMap().value.get('key')?.asType<string>()`
@@ -1552,6 +1554,7 @@ TypeScript implementation achieves container element decryption through the unif
 ### 22.7.4 Usage Patterns
 
 #### Explicit AnyValue Access
+
 ```typescript
 // Clear intent: user wants AnyValue objects
 const anyValueArray = container.asAnyValueArray();
@@ -1559,6 +1562,7 @@ const anyValueMap = container.asAnyValueMap();
 ```
 
 #### Chained Type Conversion
+
 ```typescript
 // Convert to AnyValue objects, then extract specific types
 const scores = container.asAnyValueArray();
@@ -1569,6 +1573,7 @@ if (scores.ok) {
 ```
 
 #### Plain Value Access (Existing)
+
 ```typescript
 // Clear intent: user wants plain values
 const stringArray = container.asType<string[]>(Array);
@@ -1578,10 +1583,12 @@ const stringMap = container.asType<Map<string, string>>(Map);
 ### 22.7.5 Implementation Requirements
 
 #### Method Signatures
+
 - `asAnyValueArray(): Result<AnyValue[], Error>`
 - `asAnyValueMap(): Result<Map<string, AnyValue>, Error>`
 
 #### Deserialization Logic
+
 Both methods follow the same three-step fallback pattern as `asType<T>()`:
 
 1. **Step 1**: Try `Vec<Vec<u8>>` / `Map<String, Vec<u8>>` (encrypted bytes)
@@ -1598,6 +1605,7 @@ Both methods follow the same three-step fallback pattern as `asType<T>()`:
    - Return as-is
 
 #### Error Handling
+
 - **Outer envelope decryption**: `"Outer envelope decryption failed: {reason}"`
 - **Element type resolution**: `"Cannot determine element type for decryption"`
 - **Missing decryptor**: `"No decryptor registered for element type: {typeName}"`
@@ -1607,11 +1615,13 @@ Both methods follow the same three-step fallback pattern as `asType<T>()`:
 ### 22.7.6 Registry Integration
 
 #### Required Registry Functions
+
 - `lookupDecryptorByTypeName(typeName: string): Result<DecryptFn<T>, Error>`
 - `getElementTypeFromTarget(targetConstructor?: new (...args: any[]) => T): string | null`
 - `lookupWireName(rustTypeName: string): Result<string, Error>`
 
 #### Element Type Resolution
+
 - For encrypted elements: Use registry decryptor lookup by type name
 - For plain elements: Infer type from CBOR structure or use default
 - For heterogeneous elements: Preserve existing AnyValue structure
@@ -1619,12 +1629,14 @@ Both methods follow the same three-step fallback pattern as `asType<T>()`:
 ### 22.7.7 Performance Considerations
 
 #### Optimization Strategies
+
 - **Lazy evaluation**: Only decrypt elements when accessed via `.asType<T>()`
 - **Batch operations**: Process multiple elements in single registry calls where possible
 - **Memory efficiency**: Avoid unnecessary array copies during conversion
 - **Registry caching**: Cache decryptor lookups to avoid repeated registry queries
 
 #### Memory Management
+
 - **Buffer reuse**: Reuse `innerBytes` buffer for multiple decode attempts
 - **Element streaming**: Process large containers element-by-element to avoid memory spikes
 - **Garbage collection**: Ensure proper cleanup of intermediate objects
@@ -1632,6 +1644,7 @@ Both methods follow the same three-step fallback pattern as `asType<T>()`:
 ### 22.7.8 Testing Requirements
 
 #### Test Scenarios
+
 1. **Plain containers**: `Vec<String>` → `asAnyValueArray()` → `AnyValue[]` with string values
 2. **Encrypted containers**: `Vec<EncryptedUser>` → `asAnyValueArray()` → `AnyValue[]` with encrypted elements
 3. **Heterogeneous containers**: `Vec<ArcValue>` → `asAnyValueArray()` → `AnyValue[]` with mixed types
@@ -1640,6 +1653,7 @@ Both methods follow the same three-step fallback pattern as `asType<T>()`:
 6. **Malformed data**: Invalid CBOR → `asAnyValueArray()` → decode error
 
 #### Test Data Requirements
+
 - **Small containers**: 1-5 elements for basic functionality
 - **Large containers**: 100+ elements for performance testing
 - **Mixed content**: Containers with both plain and encrypted elements
@@ -1648,12 +1662,14 @@ Both methods follow the same three-step fallback pattern as `asType<T>()`:
 ### 22.7.9 Rust Parity Verification
 
 #### Method Mapping
+
 - `asAnyValueArray()` ↔ `as_typed_list_ref()` (returns `Vec<ArcValue>`)
 - `asAnyValueMap()` ↔ `as_typed_map_ref()` (returns `HashMap<String, ArcValue>`)
 - `asType<T>(Array)` ↔ `as_type<T>()` (returns `Vec<T>`)
 - `asType<T>(Map)` ↔ `as_type<T>()` (returns `HashMap<String, T>`)
 
 #### Behavior Verification
+
 - **Wire format**: Identical header parsing and payload extraction
 - **Decryption logic**: Same three-step fallback pattern
 - **Error messages**: Match Rust error strings exactly

@@ -18,7 +18,6 @@ interface TestStruct {
   b: string;
 }
 
-
 describe('Container Element Encryption Tests', () => {
   let testEnv: AnyValueTestEnvironment;
 
@@ -43,7 +42,9 @@ describe('Container Element Encryption Tests', () => {
       const anyValue = AnyValue.newMap(map);
 
       // Test serialization with encryption context
-      const serializationContext = testEnv.createSerializationContext(testEnv.getUserMobileWrapper());
+      const serializationContext = testEnv.createSerializationContext(
+        testEnv.getUserMobileWrapper()
+      );
       const serialized = anyValue.serialize(serializationContext);
       expect(serialized.ok).toBe(true);
       if (!serialized.ok) return;
@@ -81,7 +82,9 @@ describe('Container Element Encryption Tests', () => {
       const anyValue = AnyValue.newList(vec);
 
       // Test serialization with encryption context
-      const serializationContext = testEnv.createSerializationContext(testEnv.getUserMobileWrapper());
+      const serializationContext = testEnv.createSerializationContext(
+        testEnv.getUserMobileWrapper()
+      );
       const serialized = anyValue.serialize(serializationContext);
       expect(serialized.ok).toBe(true);
       if (!serialized.ok) return;
@@ -124,7 +127,9 @@ describe('Container Element Encryption Tests', () => {
       for (const testCase of testCases) {
         const anyValue = AnyValue.newPrimitive(testCase.value);
 
-        const serializationContext = testEnv.createSerializationContext(testEnv.getUserMobileWrapper());
+        const serializationContext = testEnv.createSerializationContext(
+          testEnv.getUserMobileWrapper()
+        );
         const serialized = anyValue.serialize(serializationContext);
         expect(serialized.ok).toBe(true);
         if (!serialized.ok) continue;
@@ -146,21 +151,29 @@ describe('Container Element Encryption Tests', () => {
     test('should handle HashMap<String,Struct> roundtrip', async () => {
       // Create HashMap<String, AnyValue> like in Rust test_hashmap_of_profiles_roundtrip
       const map = new Map<string, AnyValue>();
-      map.set('u1', AnyValue.newStruct({
-        id: 'u1',
-        name: 'Alice',
-        email: 'a@x.com',
-      }));
-      map.set('u2', AnyValue.newStruct({
-        id: 'u2',
-        name: 'Bob',
-        email: 'b@x.com',
-      }));
+      map.set(
+        'u1',
+        AnyValue.newStruct({
+          id: 'u1',
+          name: 'Alice',
+          email: 'a@x.com',
+        })
+      );
+      map.set(
+        'u2',
+        AnyValue.newStruct({
+          id: 'u2',
+          name: 'Bob',
+          email: 'b@x.com',
+        })
+      );
 
       const anyValue = AnyValue.newMap(map);
 
       // Test serialization with encryption context
-      const serializationContext = testEnv.createSerializationContext(testEnv.getUserMobileWrapper());
+      const serializationContext = testEnv.createSerializationContext(
+        testEnv.getUserMobileWrapper()
+      );
       const serialized = anyValue.serialize(serializationContext);
       expect(serialized.ok).toBe(true);
       if (!serialized.ok) return;
@@ -184,7 +197,7 @@ describe('Container Element Encryption Tests', () => {
       const user1Value = typedMap.value.get('u1');
       expect(user1Value).toBeDefined();
       expect(user1Value).toBeInstanceOf(AnyValue);
-      
+
       const user1Profile = user1Value.asType<TestProfile>();
       expect(user1Profile.ok).toBe(true);
       if (user1Profile.ok) {
@@ -197,7 +210,7 @@ describe('Container Element Encryption Tests', () => {
       const user2Value = typedMap.value.get('u2');
       expect(user2Value).toBeDefined();
       expect(user2Value).toBeInstanceOf(AnyValue);
-      
+
       const user2Profile = user2Value.asType<TestProfile>();
       expect(user2Profile.ok).toBe(true);
       if (user2Profile.ok) {
@@ -225,7 +238,9 @@ describe('Container Element Encryption Tests', () => {
       const anyValue = AnyValue.newList(profiles);
 
       // Test serialization with encryption context
-      const serializationContext = testEnv.createSerializationContext(testEnv.getUserMobileWrapper());
+      const serializationContext = testEnv.createSerializationContext(
+        testEnv.getUserMobileWrapper()
+      );
       const serialized = anyValue.serialize(serializationContext);
       expect(serialized.ok).toBe(true);
       if (!serialized.ok) return;
@@ -249,7 +264,7 @@ describe('Container Element Encryption Tests', () => {
       const user1Value = typedProfiles.value[0];
       expect(user1Value).toBeDefined();
       expect(user1Value).toBeInstanceOf(AnyValue);
-      
+
       const user1Profile = user1Value.asType<TestProfile>();
       expect(user1Profile.ok).toBe(true);
       if (user1Profile.ok) {
@@ -262,7 +277,7 @@ describe('Container Element Encryption Tests', () => {
       const user2Value = typedProfiles.value[1];
       expect(user2Value).toBeDefined();
       expect(user2Value).toBeInstanceOf(AnyValue);
-      
+
       const user2Profile = user2Value.asType<TestProfile>();
       expect(user2Profile.ok).toBe(true);
       if (user2Profile.ok) {
@@ -304,7 +319,9 @@ describe('Container Element Encryption Tests', () => {
       const anyValue = AnyValue.newMap(nestedMap);
 
       // Test serialization and deserialization
-      const serialized = anyValue.serialize(testEnv.createSerializationContext(testEnv.getUserMobileWrapper()));
+      const serialized = anyValue.serialize(
+        testEnv.createSerializationContext(testEnv.getUserMobileWrapper())
+      );
       expect(serialized.ok).toBe(true);
       if (!serialized.ok) return;
 
@@ -326,17 +343,17 @@ describe('Container Element Encryption Tests', () => {
       const group1Value = typedNested.value.get('group1');
       expect(group1Value).toBeDefined();
       expect(group1Value).toBeInstanceOf(AnyValue);
-      
+
       const group1List = group1Value.asType<AnyValue[]>(Array);
       expect(group1List.ok).toBe(true);
       if (!group1List.ok) return;
       expect(group1List.value.length).toBe(2);
-      
+
       // Check the first element - should be AnyValue that can be converted to TestProfile
       const user1Element = group1List.value[0];
       expect(user1Element).toBeDefined();
       expect(user1Element).toBeInstanceOf(AnyValue);
-      
+
       const user1Profile = user1Element.asType<TestProfile>();
       expect(user1Profile.ok).toBe(true);
       if (user1Profile.ok) {
@@ -344,12 +361,12 @@ describe('Container Element Encryption Tests', () => {
         expect(user1Profile.value.name).toBe('Group1 Alice');
         expect(user1Profile.value.email).toBe('g1_a@x.com');
       }
-      
+
       // Check the second element - should be AnyValue that can be converted to TestProfile
       const user2Element = group1List.value[1];
       expect(user2Element).toBeDefined();
       expect(user2Element).toBeInstanceOf(AnyValue);
-      
+
       const user2Profile = user2Element.asType<TestProfile>();
       expect(user2Profile.ok).toBe(true);
       if (user2Profile.ok) {
@@ -362,17 +379,17 @@ describe('Container Element Encryption Tests', () => {
       const group2Value = typedNested.value.get('group2');
       expect(group2Value).toBeDefined();
       expect(group2Value).toBeInstanceOf(AnyValue);
-      
+
       const group2List = group2Value.asType<AnyValue[]>(Array);
       expect(group2List.ok).toBe(true);
       if (!group2List.ok) return;
       expect(group2List.value.length).toBe(1);
-      
+
       // Check the element - should be AnyValue that can be converted to TestProfile
       const group2User1Element = group2List.value[0];
       expect(group2User1Element).toBeDefined();
       expect(group2User1Element).toBeInstanceOf(AnyValue);
-      
+
       const group2User1Profile = group2User1Element.asType<TestProfile>();
       expect(group2User1Profile.ok).toBe(true);
       if (group2User1Profile.ok) {
@@ -387,13 +404,16 @@ describe('Container Element Encryption Tests', () => {
     test('should handle mixed content containers', async () => {
       // Test containers with mixed content types like in Rust test_mixed_content_containers
       const mixedMap = new Map<string, AnyValue>();
-      
+
       // Add a struct
-      mixedMap.set('profile', AnyValue.newStruct({
-        id: 'mixed_user',
-        name: 'Mixed User',
-        email: 'mixed@x.com',
-      }));
+      mixedMap.set(
+        'profile',
+        AnyValue.newStruct({
+          id: 'mixed_user',
+          name: 'Mixed User',
+          email: 'mixed@x.com',
+        })
+      );
 
       // Add a primitive
       const countValue = AnyValue.newPrimitive(42);
@@ -414,7 +434,9 @@ describe('Container Element Encryption Tests', () => {
       const anyValue = AnyValue.newMap(mixedMap);
 
       // Test serialization and deserialization
-      const serialized = anyValue.serialize(testEnv.createSerializationContext(testEnv.getUserMobileWrapper()));
+      const serialized = anyValue.serialize(
+        testEnv.createSerializationContext(testEnv.getUserMobileWrapper())
+      );
       expect(serialized.ok).toBe(true);
       if (!serialized.ok) return;
 
@@ -433,7 +455,7 @@ describe('Container Element Encryption Tests', () => {
       const profileValue = typedMap.value.get('profile');
       expect(profileValue).toBeDefined();
       expect(profileValue).toBeInstanceOf(AnyValue);
-      
+
       const profile = profileValue.asType<TestProfile>();
       expect(profile.ok).toBe(true);
       if (profile.ok) {
@@ -446,7 +468,7 @@ describe('Container Element Encryption Tests', () => {
       const countValueFromMap = typedMap.value.get('count');
       expect(countValueFromMap).toBeDefined();
       expect(countValueFromMap).toBeInstanceOf(AnyValue);
-      
+
       const count = countValueFromMap!.asType<number>();
       expect(count.ok).toBe(true);
       if (count.ok) {
@@ -457,7 +479,7 @@ describe('Container Element Encryption Tests', () => {
       const descValueFromMap = typedMap.value.get('description');
       expect(descValueFromMap).toBeDefined();
       expect(descValueFromMap).toBeInstanceOf(AnyValue);
-      
+
       const description = descValueFromMap!.asType<string>();
       expect(description.ok).toBe(true);
       if (description.ok) {
@@ -468,21 +490,21 @@ describe('Container Element Encryption Tests', () => {
       const scoresValue = typedMap.value.get('scores');
       expect(scoresValue).toBeDefined();
       expect(scoresValue).toBeInstanceOf(AnyValue);
-      
+
       const scores = scoresValue.asAnyValueArray();
       expect(scores.ok).toBe(true);
       if (!scores.ok) return;
       expect(scores.value.length).toBe(3);
-      
+
       // Check elements - should be AnyValue objects that can be converted to numbers
       const score1 = scores.value[0].asType<number>();
       expect(score1.ok).toBe(true);
       if (score1.ok) expect(score1.value).toBe(85);
-      
+
       const score2 = scores.value[1].asType<number>();
       expect(score2.ok).toBe(true);
       if (score2.ok) expect(score2.value).toBe(92);
-      
+
       const score3 = scores.value[2].asType<number>();
       expect(score3.ok).toBe(true);
       if (score3.ok) expect(score3.value).toBe(78);
@@ -493,13 +515,15 @@ describe('Container Element Encryption Tests', () => {
     test('should handle containers with encrypted elements', async () => {
       // This test will verify that container element decryption works
       // when containers contain encrypted elements that need to be decrypted
-      
+
       // Manually encrypt some data using the encryption functions
       const sensitiveData = 'sensitive_data';
       const sensitiveDataBytes = new TextEncoder().encode(sensitiveData);
-      
+
       // Encrypt the sensitive data using the resolver
-      const serializationContext = testEnv.createSerializationContext(testEnv.getUserMobileWrapper());
+      const serializationContext = testEnv.createSerializationContext(
+        testEnv.getUserMobileWrapper()
+      );
       const encryptResult = encryptLabelGroupSync(
         'user',
         { data: sensitiveDataBytes },
@@ -508,7 +532,7 @@ describe('Container Element Encryption Tests', () => {
       );
       expect(encryptResult.ok).toBe(true);
       if (!encryptResult.ok) return;
-      
+
       // Create a container with both encrypted and plain elements
       const encryptedMap = new Map<string, any>();
       encryptedMap.set('encrypted_field', encryptResult.value.envelopeCbor); // This will be encrypted bytes
@@ -540,16 +564,18 @@ describe('Container Element Encryption Tests', () => {
 
     test('should handle heterogeneous containers with mixed plain/encrypted elements', async () => {
       // This test verifies the heterogeneous container support mentioned in the design
-      
+
       // Encrypt some sensitive data
       const secretData = 'secret_data';
       const personalData = 'private_info';
-      
+
       const secretBytes = new TextEncoder().encode(secretData);
       const personalBytes = new TextEncoder().encode(personalData);
-      
+
       // Encrypt the sensitive data
-      const serializationContext = testEnv.createSerializationContext(testEnv.getUserMobileWrapper());
+      const serializationContext = testEnv.createSerializationContext(
+        testEnv.getUserMobileWrapper()
+      );
       const secretEncryptResult = encryptLabelGroupSync(
         'user',
         { data: secretBytes },
@@ -558,7 +584,7 @@ describe('Container Element Encryption Tests', () => {
       );
       expect(secretEncryptResult.ok).toBe(true);
       if (!secretEncryptResult.ok) return;
-      
+
       const personalEncryptResult = encryptLabelGroupSync(
         'user',
         { data: personalBytes },
@@ -567,13 +593,13 @@ describe('Container Element Encryption Tests', () => {
       );
       expect(personalEncryptResult.ok).toBe(true);
       if (!personalEncryptResult.ok) return;
-      
+
       const heterogeneousMap = new Map<string, any>();
-      
+
       // Add plain elements
       heterogeneousMap.set('plain_string', 'public_data');
       heterogeneousMap.set('plain_number', 42);
-      
+
       // Add encrypted elements (actual encrypted bytes)
       heterogeneousMap.set('encrypted_sensitive', secretEncryptResult.value.envelopeCbor);
       heterogeneousMap.set('encrypted_personal', personalEncryptResult.value.envelopeCbor);
@@ -643,8 +669,10 @@ describe('Container Element Encryption Tests', () => {
       // Test empty HashMap
       const emptyMap = new Map<string, any>();
       const mapAnyValue = AnyValue.newMap(emptyMap);
-      
-      const mapSerialized = mapAnyValue.serialize(testEnv.createSerializationContext(testEnv.getUserMobileWrapper()));
+
+      const mapSerialized = mapAnyValue.serialize(
+        testEnv.createSerializationContext(testEnv.getUserMobileWrapper())
+      );
       expect(mapSerialized.ok).toBe(true);
       if (!mapSerialized.ok) return;
 
@@ -660,8 +688,10 @@ describe('Container Element Encryption Tests', () => {
       // Test empty Vec
       const emptyVec: any[] = [];
       const vecAnyValue = AnyValue.newList(emptyVec);
-      
-      const vecSerialized = vecAnyValue.serialize(testEnv.createSerializationContext(testEnv.getUserMobileWrapper()));
+
+      const vecSerialized = vecAnyValue.serialize(
+        testEnv.createSerializationContext(testEnv.getUserMobileWrapper())
+      );
       expect(vecSerialized.ok).toBe(true);
       if (!vecSerialized.ok) return;
 
@@ -685,7 +715,9 @@ describe('Container Element Encryption Tests', () => {
 
       const anyValue = AnyValue.newMap(largeMap);
 
-      const serialized = anyValue.serialize(testEnv.createSerializationContext(testEnv.getUserMobileWrapper()));
+      const serialized = anyValue.serialize(
+        testEnv.createSerializationContext(testEnv.getUserMobileWrapper())
+      );
       expect(serialized.ok).toBe(true);
       if (!serialized.ok) return;
 
