@@ -110,10 +110,7 @@ describe('Comprehensive AnyValue Tests - Basic Functionality', () => {
 
   describe('Container Type Tests', () => {
     test('should handle list with mixed primitives', async () => {
-      const original = [
-        AnyValue.newPrimitive(1),
-        AnyValue.newPrimitive('two')
-      ];
+      const original = [AnyValue.newPrimitive(1), AnyValue.newPrimitive('two')];
       const anyValue = AnyValue.newList(original);
       expect(anyValue.getCategory()).toBe(ValueCategory.List);
 
@@ -129,11 +126,11 @@ describe('Comprehensive AnyValue Tests - Basic Functionality', () => {
       expect(resolved.ok).toBe(true);
       if (resolved.ok) {
         expect(resolved.value.length).toBe(2);
-        
+
         const item0 = resolved.value[0].asType<number>();
         expect(item0.ok).toBe(true);
         if (item0.ok) expect(item0.value).toBe(1);
-        
+
         const item1 = resolved.value[1].asType<string>();
         expect(item1.ok).toBe(true);
         if (item1.ok) expect(item1.value).toBe('two');
@@ -160,11 +157,11 @@ describe('Comprehensive AnyValue Tests - Basic Functionality', () => {
       expect(resolved.ok).toBe(true);
       if (resolved.ok) {
         expect(resolved.value.size).toBe(2);
-        
+
         const val1 = resolved.value.get('key1')?.asType<number>();
         expect(val1?.ok).toBe(true);
         if (val1?.ok) expect(val1.value).toBe(42);
-        
+
         const val2 = resolved.value.get('key2')?.asType<string>();
         expect(val2?.ok).toBe(true);
         if (val2?.ok) expect(val2.value).toBe('value');
@@ -235,7 +232,7 @@ describe('Comprehensive AnyValue Tests - Basic Functionality', () => {
     test('should handle struct roundtrip', async () => {
       const original: TestStruct = {
         a: 123,
-        b: 'test'
+        b: 'test',
       };
       const anyValue = AnyValue.newStruct(original);
       expect(anyValue.getCategory()).toBe(ValueCategory.Struct);
@@ -277,7 +274,7 @@ describe('Comprehensive AnyValue Tests - Basic Functionality', () => {
       expect(resolved.ok).toBe(true);
       if (resolved.ok) {
         expect(resolved.value.length).toBe(1);
-        
+
         // After deserialization, Maps become Structs (plain objects)
         const innerStructResolved = resolved.value[0].asType<Record<string, any>>();
         expect(innerStructResolved.ok).toBe(true);
@@ -315,7 +312,7 @@ describe('Comprehensive AnyValue Tests - Basic Functionality', () => {
         number: 42,
         boolean: true,
         array: [1, 2, 3],
-        object: { key: 'value' }
+        object: { key: 'value' },
       };
 
       const anyValue = AnyValue.newJson(jsonVal);
@@ -346,7 +343,7 @@ describe('Comprehensive AnyValue Tests - Basic Functionality', () => {
     test('should handle empty containers', async () => {
       const emptyMap = new Map<string, any>();
       const mapAnyValue = AnyValue.newMap(emptyMap);
-      
+
       const mapSerialized = mapAnyValue.serialize();
       expect(mapSerialized.ok).toBe(true);
       if (!mapSerialized.ok) return;
@@ -363,7 +360,7 @@ describe('Comprehensive AnyValue Tests - Basic Functionality', () => {
 
       const emptyVec: any[] = [];
       const vecAnyValue = AnyValue.newList(emptyVec);
-      
+
       const vecSerialized = vecAnyValue.serialize();
       expect(vecSerialized.ok).toBe(true);
       if (!vecSerialized.ok) return;
