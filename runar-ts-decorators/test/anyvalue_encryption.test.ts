@@ -3,7 +3,7 @@ import { AnyValue, ValueCategory } from 'runar-ts-serializer/src/index';
 import { type RunarEncryptable } from '../src/index';
 import { TestProfile } from '../test_fixtures/dist/test_fixtures/test_fixtures';
 import type { EncryptedTestProfile } from '../src/encrypted-types';
-import { AnyValueTestEnvironment } from '../../runar-ts-serializer/test/test_utils/key_managers';
+import { TestEnvironment } from '../../runar-ts-serializer/test/test_utils/key_managers';
 
 // Import Result type and utilities
 import { Result, isErr, isOk } from 'runar-ts-common/src/error/Result';
@@ -32,7 +32,7 @@ import { LoggingConfig, LogLevel, applyLoggingConfig } from 'runar-ts-common/src
 // TestProfile class is now imported from compiled fixtures
 
 describe('AnyValue Encryption Tests', () => {
-  let testEnv: AnyValueTestEnvironment;
+  let testEnv: TestEnvironment;
   let logger: Logger;
 
   beforeAll(async () => {
@@ -44,7 +44,7 @@ describe('AnyValue Encryption Tests', () => {
 
     logger.info('Starting AnyValue Encryption Tests');
 
-    testEnv = new AnyValueTestEnvironment();
+    testEnv = new TestEnvironment();
     await testEnv.initialize();
   });
 
@@ -129,7 +129,7 @@ describe('AnyValue Encryption Tests', () => {
       expect(mobileProfile.systemMetadata).toBe(''); // Mobile should NOT have access to system_metadata
 
       // Test direct encryptWithKeystore/decryptWithKeystore (matches Rust: profile.encrypt_with_keystore(&context))
-      const encryptableProfile = profile as TestProfile & RunarEncryptable<TestProfile, any>;
+      const encryptableProfile = profile as TestProfile & RunarEncryptable<TestProfile, EncryptedTestProfile>;
       const encryptedProfileResult = encryptableProfile.encryptWithKeystore(
         testEnv.getNodeWrapper(),
         testEnv.getResolver()
@@ -147,7 +147,7 @@ describe('AnyValue Encryption Tests', () => {
       expect(encryptedProfile.user_encrypted).toBeDefined();
 
       // Test decryptWithKeystore on the encrypted companion (matches Rust: encrypted.decrypt_with_keystore(&node_ks))
-      const encryptedCompanion = encryptedProfile as RunarEncryptable<TestProfile, any>;
+      const encryptedCompanion = encryptedProfile as RunarEncryptable<TestProfile, EncryptedTestProfile>;
       const finalNodeProfile = encryptedCompanion.decryptWithKeystore(
         testEnv.getNodeWrapper(),
         logger

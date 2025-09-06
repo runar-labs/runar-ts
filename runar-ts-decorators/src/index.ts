@@ -41,7 +41,6 @@ export interface EncryptOptions {
 
 export interface EncryptFieldOptions {
   label: string;
-  priority?: number;
 }
 
 
@@ -49,7 +48,6 @@ export interface EncryptFieldOptions {
 export interface FieldEncryption {
   label: string;
   propertyKey: string | symbol;
-  priority?: number;
 }
 
 export interface ClassMetadata {
@@ -82,6 +80,34 @@ declare global {
   interface Function {
     fieldEncryptions?: FieldEncryption[];
   }
+}
+
+// ============================================================================
+// FIELD GROUPING HELPERS
+// ============================================================================
+
+/**
+ * Group fields by label for processing
+ */
+export function groupFieldsByLabel(fieldEncryptions: FieldEncryption[]): Map<string, FieldEncryption[]> {
+  const groups = new Map<string, FieldEncryption[]>();
+  
+  for (const field of fieldEncryptions) {
+    if (!groups.has(field.label)) {
+      groups.set(field.label, []);
+    }
+    groups.get(field.label)!.push(field);
+  }
+  
+  return groups;
+}
+
+/**
+ * Get unique labels in natural order (as they appear)
+ */
+export function getUniqueLabels(fieldEncryptions: FieldEncryption[]): string[] {
+  const uniqueLabels = [...new Set(fieldEncryptions.map(f => f.label))];
+  return uniqueLabels;
 }
 
 // Design Section 18.2: @Plain decorator (TS 5 standard)
@@ -120,7 +146,6 @@ export function EncryptField(options: EncryptFieldOptions) {
       this.constructor.fieldEncryptions.push({
         label: options.label,
         propertyKey: context.name,
-        priority: options.priority || 0,
       });
     });
 
@@ -155,6 +180,11 @@ export function Encrypt<T extends Constructor>(value: T, context: ClassDecorator
         
         log.trace(`Starting decryptWithKeystore for ${className}`);
 
+        // Handle null keystore gracefully
+        if (!keystore) {
+          log.debug('Keystore is null, returning error');
+          return err(new Error('Keystore is required for decryption'));
+        }
         
         const fieldEncryptions = (value as Function & { fieldEncryptions?: FieldEncryption[] }).fieldEncryptions || [];
         const labels = [...new Set(fieldEncryptions.map((e: FieldEncryption) => e.label))];
@@ -170,10 +200,14 @@ export function Encrypt<T extends Constructor>(value: T, context: ClassDecorator
         const plainInstance = new (value as Constructor)('', '', '', '', '');
         log.trace(`Initialized ${className} instance with default values`);
 
-        // CRITICAL: Process each label group independently
+        // Group fields by label for processing
+        const fieldGroups = groupFieldsByLabel(fieldEncryptions);
+        const uniqueLabels = getUniqueLabels(fieldEncryptions);
+        
+        // Process each label group independently
         // If decryption fails for a label group, skip it but continue with others
         // This implements the access control behavior from Rust
-        for (const label of labels) {
+        for (const label of uniqueLabels) {
           const encryptedFieldName = `${label}_encrypted`;
           const encryptedGroup = this[encryptedFieldName];
 
@@ -190,11 +224,30 @@ export function Encrypt<T extends Constructor>(value: T, context: ClassDecorator
                 log.trace(`Decryption successful for label ${label}, assigning ${Object.keys(decryptedFields).length} fields`);
                 // Only assign fields if decryption succeeded
                 for (const fieldName in decryptedFields) {
-                  plainInstance[fieldName] = decryptedFields[fieldName];
+                  const fieldValue = decryptedFields[fieldName];
+                  
+                  // Handle nested encrypted objects
+                  if (fieldValue && typeof fieldValue === 'object' && 
+                      'decryptWithKeystore' in fieldValue && 
+                      typeof fieldValue.decryptWithKeystore === 'function') {
+                    // This is a nested encrypted object - decrypt it
+                    const nestedDecryptResult = (fieldValue as RunarEncryptable<unknown, unknown>).decryptWithKeystore(keystore, log);
+                    if (nestedDecryptResult.ok) {
+                      plainInstance[fieldName] = nestedDecryptResult.value;
+                      log.trace(`Decrypted nested object for field ${fieldName}`);
+                    } else {
+                      log.debug(`Failed to decrypt nested object for field ${fieldName}: ${nestedDecryptResult.error.message}`);
+                      // Set to default value if nested decryption fails
+                      plainInstance[fieldName] = '';
+                    }
+                  } else {
+                    plainInstance[fieldName] = fieldValue;
+                  }
+                  
                   // Log field assignment but not the actual value for security
-                  const valueType = typeof decryptedFields[fieldName];
-                  const valueLength = typeof decryptedFields[fieldName] === 'string' ? 
-                    (decryptedFields[fieldName] as string).length : 'N/A';
+                  const valueType = typeof plainInstance[fieldName];
+                  const valueLength = typeof plainInstance[fieldName] === 'string' ? 
+                    (plainInstance[fieldName] as string).length : 'N/A';
                   log.trace(`Assigned field ${fieldName} (${valueType}, length: ${valueLength})`);
                 }
               } else {
@@ -254,22 +307,42 @@ export function Encrypt<T extends Constructor>(value: T, context: ClassDecorator
       const encryptedInstance = new EncryptedClass();
 
       const fieldEncryptions = ((this as { constructor: Function & { fieldEncryptions?: FieldEncryption[] } }).constructor).fieldEncryptions || [];
-      const labelsSet = new Set<string>(fieldEncryptions.map((e: FieldEncryption) => e.label));
-      const labels: string[] = Array.from(labelsSet);
+      
+      // Group fields by label for processing
+      const fieldGroups = groupFieldsByLabel(fieldEncryptions);
+      const uniqueLabels = getUniqueLabels(fieldEncryptions);
 
-      // For each label, build fields object and encrypt
-      for (const label of labels) {
-        const fieldsForLabel = fieldEncryptions
-          .filter((e: FieldEncryption) => e.label === label)
-          .sort(
-            (a: FieldEncryption, b: FieldEncryption) =>
-              fieldEncryptions.indexOf(a) - fieldEncryptions.indexOf(b)
-          );
+      // Process each label group
+      for (const label of uniqueLabels) {
+        const fieldsForLabel = fieldGroups.get(label) || [];
+        
+        // Sort fields within the group by their original order
+        const sortedFields = fieldsForLabel.sort(
+          (a: FieldEncryption, b: FieldEncryption) =>
+            fieldEncryptions.indexOf(a) - fieldEncryptions.indexOf(b)
+        );
 
         const labelFieldsInstance: Record<string, unknown> = {};
-        for (const field of fieldsForLabel) {
+        for (const field of sortedFields) {
           const fieldName = field.propertyKey.toString();
-          labelFieldsInstance[fieldName] = (this as Record<string, unknown>)[fieldName];
+          const fieldValue = (this as Record<string, unknown>)[fieldName];
+          
+          // Handle nested encrypted objects
+          if (fieldValue && typeof fieldValue === 'object' && 
+              'encryptWithKeystore' in fieldValue && 
+              typeof fieldValue.encryptWithKeystore === 'function') {
+            // This is a nested encrypted object - encrypt it separately
+            const nestedEncryptResult = (fieldValue as RunarEncryptable<unknown, unknown>).encryptWithKeystore(keystore, resolver);
+            if (nestedEncryptResult.ok) {
+              // Store the encrypted companion object directly
+              // The encrypted companion should have the decryptWithKeystore method
+              labelFieldsInstance[fieldName] = nestedEncryptResult.value;
+            } else {
+              return err(new Error(`Failed to encrypt nested object for field '${fieldName}': ${nestedEncryptResult.error.message}`));
+            }
+          } else {
+            labelFieldsInstance[fieldName] = fieldValue;
+          }
         }
 
         const encRes = encryptLabelGroupSync(label, labelFieldsInstance, keystore, resolver);
@@ -372,8 +445,8 @@ export function Encrypt<T extends Constructor>(value: T, context: ClassDecorator
 }
 
 // Design Section 18.5: @runar decorator with string-based labels (TS 5 standard)
-// Syntax: @runar("labelName") where labelName is user-defined
-export function runar(label: string) {
+// Syntax: @runar("labelName") or @runar(["label1", "label2"]) for multiple labels
+export function runar(label: string | string[]) {
   return function <T, V>(initialValue: V, context: ClassFieldDecoratorContext<T, V>): V {
     // Use context.addInitializer to attach instance-level initialization
     context.addInitializer(function (this: any) {
@@ -381,12 +454,16 @@ export function runar(label: string) {
         this.constructor.fieldEncryptions = [];
       }
 
-      // Add field encryption with the specified label
-      this.constructor.fieldEncryptions.push({
-        label: label,
-        propertyKey: context.name,
-        priority: 0, // Default priority
-      });
+      // Handle both single string and array of strings
+      const labels = Array.isArray(label) ? label : [label];
+      
+      // Add field encryption for each label
+      for (const singleLabel of labels) {
+        this.constructor.fieldEncryptions.push({
+          label: singleLabel,
+          propertyKey: context.name,
+        });
+      }
     });
 
     // Return the initial value unchanged
@@ -402,23 +479,9 @@ export function ensureClassRegistered<T extends Constructor>(cls: T): void {
   }
 
   const fieldEncryptions = (cls as Function & { fieldEncryptions?: FieldEncryption[] }).fieldEncryptions || [];
-  const labels = [...new Set(fieldEncryptions.map((e: FieldEncryption) => e.label))] as string[];
+  const uniqueLabels = getUniqueLabels(fieldEncryptions);
 
-  const sortedLabels = labels.sort((a: string, b: string) => {
-    const getPriority = (label: string) => {
-      if (label === 'system') return 0;
-      if (label === 'user') return 1;
-      return 2;
-    };
-    const priorityA = getPriority(a);
-    const priorityB = getPriority(b);
-    if (priorityA !== priorityB) {
-      return priorityA - priorityB;
-    }
-    return a.localeCompare(b);
-  });
-
-  classMeta.orderedLabels = sortedLabels;
+  classMeta.orderedLabels = uniqueLabels;
 
   // Register wire name
   const wireNameResult = registerWireName(cls.name, classMeta.wireName);

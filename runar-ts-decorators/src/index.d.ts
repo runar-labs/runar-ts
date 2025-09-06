@@ -1,4 +1,4 @@
-import type { CommonKeysInterface } from 'runar-ts-serializer/src/wire';
+import type { CommonKeysInterface } from 'runar-ts-serializer/src/keystore/device_caps';
 import type { LabelResolver } from 'runar-ts-serializer/src/label_resolver';
 import { Result } from 'runar-ts-common/src/error/Result';
 import { Logger } from 'runar-ts-common/src/logging/logger';
@@ -19,12 +19,10 @@ export interface EncryptOptions {
 }
 export interface EncryptFieldOptions {
   label: string;
-  priority?: number;
 }
 export interface FieldEncryption {
   label: string;
   propertyKey: string | symbol;
-  priority?: number;
 }
 export interface ClassMetadata {
   typeName: string;

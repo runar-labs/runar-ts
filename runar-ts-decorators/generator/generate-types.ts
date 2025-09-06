@@ -70,22 +70,31 @@ function analyzeSourceFile(filePath: string): ClassInfo[] {
               return false;
             });
 
-            let label: string | undefined;
+            let labels: string[] | undefined;
             if (
               runarDecorator &&
               ts.isDecorator(runarDecorator) &&
               ts.isCallExpression(runarDecorator.expression)
             ) {
               const args = runarDecorator.expression.arguments;
-              if (args.length > 0 && ts.isStringLiteral(args[0])) {
-                label = args[0].text;
-                console.log(`  Found @runar('${label}') field: ${fieldName}`);
+              if (args.length > 0) {
+                if (ts.isStringLiteral(args[0])) {
+                  // Single string label: @runar('label')
+                  labels = [args[0].text];
+                  console.log(`  Found @runar('${args[0].text}') field: ${fieldName}`);
+                } else if (ts.isArrayLiteralExpression(args[0])) {
+                  // Array of labels: @runar(['label1', 'label2'])
+                  labels = args[0].elements
+                    .filter(element => ts.isStringLiteral(element))
+                    .map(element => (element as ts.StringLiteral).text);
+                  console.log(`  Found @runar([${labels.join(', ')}]) field: ${fieldName}`);
+                }
               }
             } else {
               console.log(`  Found plain field: ${fieldName}`);
             }
 
-            fields.push({ name: fieldName, type: fieldType, label });
+            fields.push({ name: fieldName, type: fieldType, label: labels?.[0] });
           }
         });
 
@@ -115,17 +124,30 @@ function generateTypeDefinitions(classes: ClassInfo[]): string {
   for (const classInfo of classes) {
     const encryptedClassName = `Encrypted${classInfo.name}`;
 
+    // Collect unique labels and plain fields
+    const uniqueLabels = new Set<string>();
+    const plainFields = new Set<string>();
+    
+    for (const field of classInfo.fields) {
+      if (field.label) {
+        uniqueLabels.add(field.label);
+      } else {
+        plainFields.add(field.name);
+      }
+    }
+
     // Generate the encrypted interface that extends RunarEncryptable
     output += `export interface ${encryptedClassName} extends RunarEncryptable<${classInfo.name}, ${encryptedClassName}> {\n`;
 
-    for (const field of classInfo.fields) {
-      if (field.label) {
-        // This is an encrypted field - it contains an EncryptedLabelGroup
-        output += `  ${field.label}_encrypted: EncryptedLabelGroup;\n`;
-      } else {
-        // This is a plain field
-        output += `  ${field.name}: ${field.type};\n`;
-      }
+    // Add encrypted fields (one per unique label)
+    for (const label of uniqueLabels) {
+      output += `  ${label}_encrypted: EncryptedLabelGroup;\n`;
+    }
+
+    // Add plain fields
+    for (const fieldName of plainFields) {
+      const field = classInfo.fields.find(f => f.name === fieldName);
+      output += `  ${fieldName}: ${field?.type || 'string'};\n`;
     }
 
     output += '}\n\n';

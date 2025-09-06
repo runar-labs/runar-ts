@@ -4,7 +4,7 @@
 
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { AnyValue, ValueCategory } from '../src';
-import { AnyValueTestEnvironment } from './test_utils/key_managers';
+import { TestEnvironment } from './test_utils/key_managers';
 
 // Test structs matching Rust exactly
 interface TestStruct {
@@ -13,10 +13,10 @@ interface TestStruct {
 }
 
 describe('Comprehensive AnyValue Tests - Basic Functionality', () => {
-  let testEnv: AnyValueTestEnvironment;
+  let testEnv: TestEnvironment;
 
   beforeAll(async () => {
-    testEnv = new AnyValueTestEnvironment();
+    testEnv = new TestEnvironment();
     await testEnv.initialize();
   });
 

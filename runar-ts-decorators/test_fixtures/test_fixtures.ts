@@ -32,3 +32,100 @@ export class TestProfile {
     this.systemMetadata = systemMetadata;
   }
 }
+
+// Advanced test class with multiple labels per field
+@Encrypt
+export class AdvancedTestProfile {
+  public id: string; // plain field
+
+  @runar(['system', 'user']) // Multiple labels for same field
+  public sharedData: string;
+
+  @runar('system')
+  public systemData: string;
+
+  @runar('user')
+  public userData: string;
+
+  @runar('search')
+  public searchData: string;
+
+  @runar('custom') // Custom label with lowest priority
+  public customData: string;
+
+  constructor(
+    id: string,
+    sharedData: string,
+    systemData: string,
+    userData: string,
+    searchData: string,
+    customData: string
+  ) {
+    this.id = id;
+    this.sharedData = sharedData;
+    this.systemData = systemData;
+    this.userData = userData;
+    this.searchData = searchData;
+    this.customData = customData;
+  }
+}
+
+// Nested encrypted object test
+@Encrypt
+export class NestedEncryptedProfile {
+  public id: string; // plain field
+
+  @runar('user')
+  public profile: TestProfile; // Nested encrypted object
+
+  @runar('system')
+  public metadata: string;
+
+  constructor(id: string, profile: TestProfile, metadata: string) {
+    this.id = id;
+    this.profile = profile;
+    this.metadata = metadata;
+  }
+}
+
+// Complex test with mixed field types
+@Encrypt
+export class ComplexPriorityProfile {
+  public id: string; // plain field
+
+  @runar('system_only') // System only access
+  public criticalData: string;
+
+  @runar('system') // System access
+  public systemInfo: string;
+
+  @runar('user') // User access
+  public userInfo: string;
+
+  @runar('search') // Search access
+  public searchInfo: string;
+
+  @runar('custom') // Custom access
+  public customInfo: string;
+
+  @runar(['system', 'user']) // Multiple labels
+  public sharedInfo: string;
+
+  constructor(
+    id: string,
+    criticalData: string,
+    systemInfo: string,
+    userInfo: string,
+    searchInfo: string,
+    customInfo: string,
+    sharedInfo: string
+  ) {
+    this.id = id;
+    this.criticalData = criticalData;
+    this.systemInfo = systemInfo;
+    this.userInfo = userInfo;
+    this.searchInfo = searchInfo;
+    this.customInfo = customInfo;
+    this.sharedInfo = sharedInfo;
+  }
+}

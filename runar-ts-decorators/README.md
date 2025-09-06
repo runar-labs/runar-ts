@@ -55,7 +55,7 @@ runar-ts-decorators/
 │   ├── encryption.test.ts        # Direct encryption/decryption tests
 │   ├── anyvalue_encryption.test.ts # AnyValue serialization tests
 │   └── test_utils/               # Shared test utilities
-│       └── key_managers.ts       # AnyValueTestEnvironment class
+│       └── key_managers.ts       # TestEnvironment class
 ├── test_fixtures/                # Test fixtures (decorated classes)
 │   ├── test_fixtures.ts          # TestProfile class with decorators
 │   ├── tsconfig.json             # TypeScript config for fixtures

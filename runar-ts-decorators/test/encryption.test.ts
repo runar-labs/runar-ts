@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { type RunarEncryptable } from '../src/index';
 import { TestProfile } from '../test_fixtures/dist/test_fixtures/test_fixtures';
 import type { EncryptedTestProfile } from '../src/encrypted-types';
-import { AnyValueTestEnvironment } from '../../runar-ts-serializer/test/test_utils/key_managers';
+import { TestEnvironment } from '../../runar-ts-serializer/test/test_utils/key_managers';
 
 // Import Result type and utilities
 import { Result, isErr, isOk } from 'runar-ts-common/src/error/Result';
@@ -26,7 +26,7 @@ import { LoggingConfig, LogLevel, applyLoggingConfig } from 'runar-ts-common/src
  */
 
 describe('Direct Encryption/Decryption Tests', () => {
-  let testEnv: AnyValueTestEnvironment;
+  let testEnv: TestEnvironment;
   let logger: Logger;
 
   beforeAll(async () => {
@@ -38,7 +38,7 @@ describe('Direct Encryption/Decryption Tests', () => {
 
     logger.info('Starting Direct Encryption/Decryption Tests');
 
-    testEnv = new AnyValueTestEnvironment();
+    testEnv = new TestEnvironment();
     await testEnv.initialize();
   });
 
@@ -170,7 +170,7 @@ describe('Direct Encryption/Decryption Tests', () => {
 
       // Validate label resolver configuration
       const config = testEnv.getLabelResolverConfig();
-      expect(config.labelMappings.size).toBe(4);
+      expect(config.labelMappings.size).toBe(5);
       expect(config.labelMappings.has('user')).toBe(true);
       expect(config.labelMappings.has('system')).toBe(true);
       expect(config.labelMappings.has('search')).toBe(true);

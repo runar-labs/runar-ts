@@ -3,7 +3,7 @@
 
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { AnyValue, ValueCategory, encryptLabelGroupSync } from '../src';
-import { AnyValueTestEnvironment } from './test_utils/key_managers';
+import { TestEnvironment } from './test_utils/key_managers';
 
 // Test struct without encryption (like TestProfile in Rust)
 interface TestProfile {
@@ -19,10 +19,10 @@ interface TestStruct {
 }
 
 describe('Container Element Encryption Tests', () => {
-  let testEnv: AnyValueTestEnvironment;
+  let testEnv: TestEnvironment;
 
   beforeAll(async () => {
-    testEnv = new AnyValueTestEnvironment();
+    testEnv = new TestEnvironment();
     await testEnv.initialize();
   });
 
@@ -198,6 +198,7 @@ describe('Container Element Encryption Tests', () => {
       expect(user1Value).toBeDefined();
       expect(user1Value).toBeInstanceOf(AnyValue);
 
+      if (!user1Value) return; // Type guard
       const user1Profile = user1Value.asType<TestProfile>();
       expect(user1Profile.ok).toBe(true);
       if (user1Profile.ok) {
@@ -211,6 +212,7 @@ describe('Container Element Encryption Tests', () => {
       expect(user2Value).toBeDefined();
       expect(user2Value).toBeInstanceOf(AnyValue);
 
+      if (!user2Value) return; // Type guard
       const user2Profile = user2Value.asType<TestProfile>();
       expect(user2Profile.ok).toBe(true);
       if (user2Profile.ok) {
@@ -344,6 +346,7 @@ describe('Container Element Encryption Tests', () => {
       expect(group1Value).toBeDefined();
       expect(group1Value).toBeInstanceOf(AnyValue);
 
+      if (!group1Value) return; // Type guard
       const group1List = group1Value.asType<AnyValue[]>(Array);
       expect(group1List.ok).toBe(true);
       if (!group1List.ok) return;
@@ -380,6 +383,7 @@ describe('Container Element Encryption Tests', () => {
       expect(group2Value).toBeDefined();
       expect(group2Value).toBeInstanceOf(AnyValue);
 
+      if (!group2Value) return; // Type guard
       const group2List = group2Value.asType<AnyValue[]>(Array);
       expect(group2List.ok).toBe(true);
       if (!group2List.ok) return;
@@ -456,6 +460,7 @@ describe('Container Element Encryption Tests', () => {
       expect(profileValue).toBeDefined();
       expect(profileValue).toBeInstanceOf(AnyValue);
 
+      if (!profileValue) return; // Type guard
       const profile = profileValue.asType<TestProfile>();
       expect(profile.ok).toBe(true);
       if (profile.ok) {
@@ -491,6 +496,7 @@ describe('Container Element Encryption Tests', () => {
       expect(scoresValue).toBeDefined();
       expect(scoresValue).toBeInstanceOf(AnyValue);
 
+      if (!scoresValue) return; // Type guard
       const scores = scoresValue.asAnyValueArray();
       expect(scores.ok).toBe(true);
       if (!scores.ok) return;

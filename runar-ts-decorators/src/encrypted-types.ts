@@ -4,12 +4,38 @@
 import { EncryptedLabelGroup } from 'runar-ts-serializer/src/encryption';
 import { type RunarEncryptable } from './index';
 import { TestProfile } from '../test_fixtures/dist/test_fixtures/test_fixtures';
+import { AdvancedTestProfile } from '../test_fixtures/dist/test_fixtures/test_fixtures';
+import { NestedEncryptedProfile } from '../test_fixtures/dist/test_fixtures/test_fixtures';
+import { ComplexPriorityProfile } from '../test_fixtures/dist/test_fixtures/test_fixtures';
 
 export interface EncryptedTestProfile extends RunarEncryptable<TestProfile, EncryptedTestProfile> {
-  id: string;
   system_encrypted: EncryptedLabelGroup;
   user_encrypted: EncryptedLabelGroup;
   search_encrypted: EncryptedLabelGroup;
   system_only_encrypted: EncryptedLabelGroup;
+  id: string;
+}
+
+export interface EncryptedAdvancedTestProfile extends RunarEncryptable<AdvancedTestProfile, EncryptedAdvancedTestProfile> {
+  system_encrypted: EncryptedLabelGroup;
+  user_encrypted: EncryptedLabelGroup;
+  search_encrypted: EncryptedLabelGroup;
+  custom_encrypted: EncryptedLabelGroup;
+  id: string;
+}
+
+export interface EncryptedNestedEncryptedProfile extends RunarEncryptable<NestedEncryptedProfile, EncryptedNestedEncryptedProfile> {
+  user_encrypted: EncryptedLabelGroup;
+  system_encrypted: EncryptedLabelGroup;
+  id: string;
+}
+
+export interface EncryptedComplexPriorityProfile extends RunarEncryptable<ComplexPriorityProfile, EncryptedComplexPriorityProfile> {
+  system_only_encrypted: EncryptedLabelGroup;
+  system_encrypted: EncryptedLabelGroup;
+  user_encrypted: EncryptedLabelGroup;
+  search_encrypted: EncryptedLabelGroup;
+  custom_encrypted: EncryptedLabelGroup;
+  id: string;
 }
 

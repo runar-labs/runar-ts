@@ -108,35 +108,323 @@ Achieve 100% functional and API parity between the TypeScript LabelResolver ecos
 - Performance:
   - Add micro-benchmarks mirroring Rust tests: baseline creation, cache hits/misses, TTL, LRU, and concurrent access using worker threads for contention simulation.
 
-### 2.3 Encryption Integration
+### 2.3 Complete Encryption and Decorator System Design
 
-- Envelope encryption:
-  - ✅ **IMPLEMENTED**: TS stores only raw CBOR bytes from native keys layer (no intermediate object representation).
-  - ✅ **IMPLEMENTED**: `encryptLabelGroupSync(label, fieldsStruct, keystore, resolver)`:
-    - Serialize fields with CBOR; look up `LabelKeyInfo` via `resolver.resolveLabelInfo`; call native `encryptWithEnvelope(data, networkPublicKey?, profilePublicKeys[])` returning raw CBOR bytes.
-    - Store raw CBOR bytes directly in `EncryptedLabelGroup.envelopeCbor` for optimal performance and correctness.
-  - ✅ **IMPLEMENTED**: `decryptLabelGroupSync(group, keystore)`:
-    - Use `group.envelopeCbor` directly for decryption via `keystore.decryptEnvelope`; then CBOR-decode to fields struct.
-- **Access Control Logic (CRITICAL)**:
-  - **Decryption Strategy**: When `decryptLabelGroupSync` is called, it MUST attempt decryption using the provided keystore
-  - **Success Path**: If decryption succeeds, return the decrypted fields struct
-  - **Failure Path**: If decryption fails due to missing keys, return `Result<T, Error>` with appropriate error
-  - **Field Assignment**: In the generated `decryptWithKeystore` method, only assign fields if `decryptLabelGroupSync` succeeds
-  - **Default Values**: If decryption fails, fields remain at their default values (empty strings, zero numbers, etc.)
-- **Keystore Capabilities**:
-  - **Mobile Keystore**: Has user profile keys + network public key (NO network private key)
-  - **Node Keystore**: Has network private keys (NO user profile keys)
-  - **Decryption Priority**: Mobile keystore tries profile keys first, then network keys; Node keystore only tries network keys
-- **Label Resolution**:
-  - ✅ **IMPLEMENTED**: Ensure labels map to keys exactly as Rust (error when label missing).
-  - **Multi-Key Labels**: Labels with both profile and network keys can be decrypted by EITHER keystore type
-  - **Single-Key Labels**: Labels with only profile keys can only be decrypted by mobile keystore; labels with only network keys can only be decrypted by node keystore
-- SerializationContext:
-  - ✅ **IMPLEMENTED**: TS `SerializationContext` finalized as:
-    - `{ keystore: CommonKeysInterface; resolver: LabelResolver; networkPublicKey: Uint8Array; profilePublicKeys: Uint8Array[] }` with all properties required (not optional) when encrypting.
-- Decryption flow:
-  - ✅ **IMPLEMENTED**: Provide `decryptBytesSync(bytes, keystore)` that expects raw CBOR bytes and decrypts via `keystore.decryptEnvelope`.
-- **API Alignment**: ✅ **COMPLETE**: All encryption methods use `networkPublicKey: Uint8Array` instead of `network_id: string`, aligning with updated NodeJS native API.
+This section consolidates all encryption-related functionality into one comprehensive design, ensuring 100% Rust parity and eliminating any contradictory or outdated information.
+
+#### 2.3.1 Core Encryption Architecture
+
+**Envelope Encryption (Raw CBOR Bytes Only)**:
+- ✅ **IMPLEMENTED**: TS stores only raw CBOR bytes from native keys layer (no intermediate object representation)
+- ✅ **IMPLEMENTED**: `encryptLabelGroupSync(label, fieldsStruct, keystore, resolver)`:
+  - Serialize fields with CBOR; look up `LabelKeyInfo` via `resolver.resolveLabelInfo`
+  - Call native `encryptWithEnvelope(data, networkPublicKey?, profilePublicKeys[])` returning raw CBOR bytes
+  - Store raw CBOR bytes directly in `EncryptedLabelGroup.envelopeCbor` for optimal performance and correctness
+- ✅ **IMPLEMENTED**: `decryptLabelGroupSync(group, keystore)`:
+  - Use `group.envelopeCbor` directly for decryption via `keystore.decryptEnvelope`
+  - Then CBOR-decode to fields struct
+
+**SerializationContext**:
+- ✅ **IMPLEMENTED**: TS `SerializationContext` finalized as:
+  - `{ keystore: CommonKeysInterface; resolver: LabelResolver; networkPublicKey: Uint8Array; profilePublicKeys: Uint8Array[] }`
+  - All properties required (not optional) when encrypting
+
+**API Alignment**: ✅ **COMPLETE**: All encryption methods use `networkPublicKey: Uint8Array` instead of `network_id: string`, aligning with updated NodeJS native API
+
+#### 2.3.2 Access Control and Keystore Capabilities
+
+**Keystore Role Separation**:
+- **Mobile Keystore**: Has user profile keys + network public key (NO network private key)
+- **Node Keystore**: Has network private keys (NO user profile keys)
+- **Decryption Priority**: Mobile keystore tries profile keys first, then network keys; Node keystore only tries network keys
+
+**Label Resolution and Access Control**:
+- ✅ **IMPLEMENTED**: Ensure labels map to keys exactly as Rust (error when label missing)
+- **Multi-Key Labels**: Labels with both profile and network keys can be decrypted by EITHER keystore type
+- **Single-Key Labels**: Labels with only profile keys can only be decrypted by mobile keystore; labels with only network keys can only be decrypted by node keystore
+
+**Access Control Logic (CRITICAL)**:
+- **Decryption Strategy**: When `decryptLabelGroupSync` is called, it MUST attempt decryption using the provided keystore
+- **Success Path**: If decryption succeeds, return the decrypted fields struct
+- **Failure Path**: If decryption fails due to missing keys, return `Result<T, Error>` with appropriate error
+- **Field Assignment**: In the generated `decryptWithKeystore` method, only assign fields if `decryptLabelGroupSync` succeeds
+- **Default Values**: If decryption fails, fields remain at their default values (empty strings, zero numbers, etc.)
+
+#### 2.3.3 Decorator System Design
+
+**@Encrypt Decorator**:
+- Generate companion encrypted class (e.g., `EncryptedTestProfile`) and auto-register:
+  - decryptor: `register_decrypt<Plain, Enc>()` equivalent in TS registry
+  - encryptor: `register_encrypt<Plain, Enc>()` using a function that accepts `Plain`, context keys, label resolver
+  - JSON converters and `registerTypeName` for both plain and encrypted representations with proper wire names
+
+**@runar Field Decorator**:
+- **Syntax**: `@runar("<LABEL>")` where `<LABEL>` is a user-defined string label
+- **Flexibility**: Labels are completely user-defined and can be any string (e.g., `"user"`, `"system"`, `"search"`, `"customLabel"`, `"admin"`, etc.)
+- **Label Resolution**: The label resolver maps these user-defined labels to actual public keys via `LabelResolverConfig`
+- **Examples**:
+  - `@runar("user")` - encrypts field with user profile keys
+  - `@runar("system")` - encrypts field with system/network keys
+  - `@runar("search")` - encrypts field with search-specific keys
+  - `@runar("admin")` - encrypts field with admin-specific keys
+  - `@runar("customLabel")` - encrypts field with custom label keys
+- **No Restrictions**: No hardcoded label names; developers define their own labels
+- **Rust Parity**: Aligned with Rust macro semantics where labels are user-defined strings
+
+**Type Registration**:
+- On module import or decorator evaluation, register both the plain and encrypted types in wire-name registry and JSON converters
+
+#### 2.3.4 Nested Encrypted Objects Design
+
+**Key Understanding**:
+1. **Labels apply to fields, not to the entire nested object**
+2. **Nested objects are encrypted/decrypted using the same rules as top-level objects**
+3. **Access control is enforced at every level**
+4. **`| null` requirement ONLY applies to nested encrypted objects with labels**
+5. **Primitive fields with labels use default values (`''`, `0`, etc.) when not accessible**
+6. **Plain fields (no labels) are always accessible but still encrypted IF the object has @Encrypt decorator**
+7. **AnyValue is never used inside objects as nested values**
+8. **Nested objects can only be accessed when decrypting the top level**
+
+**Type Declaration Rules**:
+```typescript
+@Encrypt
+export class NestedEncryptedProfile {
+  public id: string; // plain field
+  
+  @runar('user')
+  public profile: TestProfile | null; // Nested encrypted object with label - must be nullable
+  
+  @runar('system')
+  public metadata: SystemMetadata | null; // Nested encrypted object with label - must be nullable
+  
+  @runar('user')
+  public userPrivateData: string; // Primitive with label - uses default value when not accessible
+  
+  @runar('user')
+  public nestedData: TestProfile | null; // Nested encrypted object with label - must be nullable
+  
+  constructor(
+    id: string, 
+    profile: TestProfile | null, 
+    metadata: SystemMetadata | null, 
+    userPrivateData: string,
+    nestedData: TestProfile | null
+  ) {
+    this.id = id;
+    this.profile = profile;
+    this.metadata = metadata;
+    this.userPrivateData = userPrivateData;
+    this.nestedData = nestedData;
+  }
+}
+```
+
+**Field Classification**:
+- **Nested Encrypted Objects with Labels**: Must be declared as `Type | null`
+- **Primitive Fields with Labels**: Use default values when not accessible (`''`, `0`, `false`, etc.)
+- **Plain Fields (no labels)**: Always accessible, still encrypted IF the object has @Encrypt decorator
+- **AnyValue**: Never used inside objects as nested values
+
+**Access Control Examples**:
+
+**Backend (Node) - Only System Keys**:
+```typescript
+// Decrypting NestedEncryptedProfile
+const decrypted = encryptedProfile.decryptWithKeystore(nodeKeystore);
+// Result:
+// {
+//   id: "parent-123",
+//   profile: null,                    // ❌ No access to 'user' label
+//   metadata: SystemMetadata,         // ✅ Access to 'system' label
+//   userPrivateData: "",              // ❌ No access to 'user' label (primitive default)
+//   nestedData: null                  // ❌ No access to 'user' label
+// }
+
+// The metadata field is accessible and its internal fields follow access control:
+// {
+//   id: "metadata-123",
+//   name: "metadata name",            // ✅ Access to 'system' label
+//   privateData: "",                  // ❌ No access to 'user' label (primitive default)
+//   email: "metadata@example.com",    // ✅ Access to 'search' label (mapped to both user and system)
+//   systemMetadata: "metadata data"   // ✅ Access to 'system_only' label
+// }
+```
+
+**Frontend (Mobile) - Only User Keys**:
+```typescript
+// Decrypting NestedEncryptedProfile
+const decrypted = encryptedProfile.decryptWithKeystore(mobileKeystore);
+// Result:
+// {
+//   id: "parent-123",
+//   profile: TestProfile,            // ✅ Access to 'user' label
+//   metadata: null,                  // ❌ No access to 'system' label
+//   userPrivateData: "user data",    // ✅ Access to 'user' label
+//   nestedData: TestProfile          // ✅ Access to 'user' label
+// }
+
+// The profile and nestedData fields are accessible and their internal fields follow access control:
+// {
+//   id: "nested-123",
+//   name: "",                        // ❌ No access to 'system' label (primitive default)
+//   privateData: "nested private",   // ✅ Access to 'user' label
+//   email: "nested@example.com",     // ✅ Access to 'search' label (mapped to both user and system)
+//   systemMetadata: ""               // ❌ No access to 'system_only' label (primitive default)
+// }
+```
+
+**Encryption Flow**:
+```typescript
+// For each field in the label group:
+if (fieldValue && typeof fieldValue === 'object' && 
+    'encryptWithKeystore' in fieldValue) {
+  // This is a nested encrypted object
+  const nestedEncryptResult = fieldValue.encryptWithKeystore(keystore, resolver);
+  if (nestedEncryptResult.ok) {
+    labelFieldsInstance[fieldName] = nestedEncryptResult.value; // Store encrypted companion
+  } else {
+    return err(new Error(`Failed to encrypt nested object for field '${fieldName}'`));
+  }
+} else {
+  labelFieldsInstance[fieldName] = fieldValue; // Store plain value
+}
+```
+
+**Decryption Flow**:
+```typescript
+// For each field in the decrypted label group:
+if (fieldValue && typeof fieldValue === 'object' && 
+    'decryptWithKeystore' in fieldValue) {
+  // This is a nested encrypted object
+  const nestedDecryptResult = fieldValue.decryptWithKeystore(keystore, logger);
+  if (nestedDecryptResult.ok) {
+    plainInstance[fieldName] = nestedDecryptResult.value; // Store decrypted object
+  } else {
+    // Set to null for nested objects with labels, empty object for plain fields
+    plainInstance[fieldName] = fieldHasLabel ? null : new (fieldType.constructor)();
+  }
+} else {
+  plainInstance[fieldName] = fieldValue; // Store plain value
+}
+```
+
+**Decorator Validation Rules**:
+```typescript
+// In the @Encrypt decorator, validate field types
+for (const field of fieldEncryptions) {
+  const fieldName = field.propertyKey.toString();
+  const fieldValue = instance[fieldName];
+  
+  if (fieldValue && typeof fieldValue === 'object' && 
+      'encryptWithKeystore' in fieldValue) {
+    // This is a nested encrypted object
+    const fieldType = getFieldType(constructor, fieldName);
+    const hasLabel = fieldEncryptions.some(f => f.propertyKey === field.propertyKey);
+    
+    if (hasLabel && !fieldType.includes('null') && !fieldType.includes('undefined')) {
+      throw new Error(
+        `Field '${fieldName}' contains a nested encrypted object with a label but is not declared as nullable. ` +
+        `Labeled nested encrypted objects must be declared as 'Type | null' to handle access control.`
+      );
+    }
+  }
+}
+```
+
+**Type Generation Rules (Corrected)**:
+```typescript
+// Generated types should reflect the nullable requirements
+export interface EncryptedNestedEncryptedProfile {
+  id: string;
+  profile: EncryptedTestProfile | null;  // Labeled nested object - nullable
+  metadata: EncryptedSystemMetadata | null; // Labeled nested object - nullable
+  userPrivateData: string;               // Labeled primitive - non-nullable
+  nestedData: EncryptedTestProfile | null; // Labeled nested object - nullable
+}
+
+// NOTE: The class itself is the proper type to be used - no DecryptedNestedEncryptedProfile needed
+// The class itself should NOT be exported in the generated file to avoid confusion
+```
+
+**AnyValue Integration Rules**:
+- **AnyValue is never used inside objects as nested values**
+- **Nested objects can only be accessed when decrypting the top level**
+- **No intermediate AnyValue operations on nested fields**
+- **Top-level operations**: `anyValueInstance.asType<Encrypted<Type>>()` works
+- **Field-level operations**: `topLevel.field` cannot retrieve encrypted versions
+
+#### 2.3.5 Build-Time Type Generation
+
+**CRITICAL SOLUTION**: Use build-time type generation to create proper TypeScript interfaces for encrypted companion types, eliminating the need for `any` types.
+
+**Problem**: Decorators generate runtime classes but cannot export TypeScript types, forcing use of `any` types.
+
+**Solution**: Build script that analyzes TypeScript AST and generates proper type definitions.
+
+**Implementation**:
+1. **AST Analysis**: Parse source files to find `@Encrypt` decorators and `@runar` field decorators
+2. **Type Generation**: Generate TypeScript interfaces for encrypted companion types
+3. **Build Integration**: Run type generation before TypeScript compilation
+
+**Generated Output Example**:
+```typescript
+// Generated types - do not edit manually
+// This file is automatically generated by the build script
+
+import { EncryptedLabelGroup } from 'runar-ts-serializer/src/encryption.js';
+
+export interface EncryptedTestProfile {
+  id: string; // plain field
+  system_encrypted: EncryptedLabelGroup; // encrypted label group (contains: { name: 'Test User' })
+  user_encrypted: EncryptedLabelGroup; // encrypted label group (contains: { privateData: 'secret123' })
+  search_encrypted: EncryptedLabelGroup; // encrypted label group (contains: { email: 'test@example.com' })
+  system_only_encrypted: EncryptedLabelGroup; // encrypted label group (contains: { systemMetadata: 'system_data' })
+}
+
+export interface EncryptedNestedEncryptedProfile {
+  id: string;
+  profile: EncryptedTestProfile | null;  // Labeled nested object - nullable
+  metadata: EncryptedSystemMetadata | null; // Labeled nested object - nullable
+  userPrivateData: string;               // Labeled primitive - non-nullable
+  nestedData: EncryptedTestProfile | null; // Labeled nested object - nullable
+}
+
+// NOTE: Classes are NOT exported in generated files to avoid confusion
+// The class itself is the proper type to be used
+```
+
+**Build Integration**:
+```json
+{
+  "scripts": {
+    "generate-types": "bun run build-script.ts",
+    "build-with-types": "bun run generate-types && tsc"
+  }
+}
+```
+
+**Benefits**:
+- ✅ **No More `any` Types**: Full type safety throughout
+- ✅ **IntelliSense Support**: IDEs provide proper autocomplete
+- ✅ **Compile-Time Validation**: TypeScript catches errors at build time
+- ✅ **No Runtime Overhead**: Types are generated at build time
+- ✅ **Maintainable**: Generated types are automatically updated
+
+#### 2.3.6 Synchronous Semantics and Error Handling
+
+**All public decorator methods are synchronous and return `Result`**:
+- `encryptWithKeystore(keystore: CommonKeysInterface, resolver: LabelResolver): Result<EncryptedT>`
+- `decryptWithKeystore(keystore: CommonKeysInterface): Result<T>`
+
+**Error Handling (never throw; no empty catch)**:
+- Public APIs return `Result<T, Error>`; do not throw for expected error paths
+- When calling external/native APIs that may throw, wrap in `try/catch`; either resolve the condition or return a meaningful `Error` in `Result`
+- Never use empty catch blocks; never swallow errors
+
+**No fallbacks without explicit approval**:
+- Code must be predictable. Do not introduce implicit fallbacks or hidden heuristics
+- Any fallback behavior must be explicitly documented, validated, and pre‑approved. Otherwise, fail fast with a precise `Result` error
 
 ### 2.4 AnyValue/ArcValue Implementation
 
@@ -152,29 +440,7 @@ Achieve 100% functional and API parity between the TypeScript LabelResolver ecos
   - Lazy deserialization:
     - Store `keystore` and `encrypted` flags in the lazy holder; on `asTypeRef<T>()`, attempt direct decode to `T`, else use decryptor registry fallback with `keystore` requirement.
 
-### 2.5 Decorator System
-
-- `@Encrypt` decorator:
-  - Generate companion encrypted class (e.g., `EncryptedTestProfile`) and auto-register:
-    - decryptor: `register_decrypt<Plain, Enc>()` equivalent in TS registry.
-    - encryptor: `register_encrypt<Plain, Enc>()` using a function that accepts `Plain`, context keys, label resolver.
-    - JSON converters and `registerTypeName` for both plain and encrypted representations with proper wire names.
-- `@runar` field decorator:
-  - **Syntax**: `@runar("<LABEL>")` where `<LABEL>` is a user-defined string label
-  - **Flexibility**: Labels are completely user-defined and can be any string (e.g., `"user"`, `"system"`, `"search"`, `"customLabel"`, `"admin"`, etc.)
-  - **Label Resolution**: The label resolver maps these user-defined labels to actual public keys via `LabelResolverConfig`
-  - **Examples**:
-    - `@runar("user")` - encrypts field with user profile keys
-    - `@runar("system")` - encrypts field with system/network keys
-    - `@runar("search")` - encrypts field with search-specific keys
-    - `@runar("admin")` - encrypts field with admin-specific keys
-    - `@runar("customLabel")` - encrypts field with custom label keys
-  - **No Restrictions**: No hardcoded label names; developers define their own labels
-  - **Rust Parity**: Aligned with Rust macro semantics where labels are user-defined strings
-- Type registration:
-  - On module import or decorator evaluation, register both the plain and encrypted types in wire-name registry and JSON converters.
-
-### 2.6 Node Integration
+### 2.5 Node Integration
 
 - NodeConfig additions:
   - Require `LabelResolverConfig` and provide `getLabelResolverConfig()`.
@@ -192,7 +458,7 @@ Achieve 100% functional and API parity between the TypeScript LabelResolver ecos
     - During request: build `SerializationContext` with cached resolver and pre-resolved keys, call `AnyValue.serialize(context)` to encrypt, send via transport.
     - On response: `AnyValue.deserialize(bytes, keystore)` with node's keystore.
 
-### 2.7 Native API Integration
+### 2.6 Native API Integration
 
 - Transport Layer:
   - Wrap `runar-nodejs-api` `Transport` and `Keys` in TS for strong typing (`CommonKeysInterface`).
@@ -909,348 +1175,7 @@ This section incorporates the review's valid points, adding concrete algorithms 
 
 With these additions, the plan specifies the "how" with enough detail to implement without ambiguity and ensures strict alignment with Rust behavior and the updated NodeJS transporter API.
 
-## 17. Final Corrections: Encryption Flow, Decorators, Registry (Rust-Parity)
-
-This section reconciles the design with the exact Rust behavior and supersedes any earlier conflicting statements.
-
-### 17.1 Source of Truth: When Encryption Happens
-
-- Rust performs label-group encryption inside `encrypt_with_keystore` (macro expands calls to `encrypt_label_group` for each label). This method is invoked directly by user code and also from `ArcValue::serialize(context)` when a context is provided. After that, `ArcValue::serialize` applies an outer envelope (`encrypt_with_envelope`) to the CBOR of the encrypted struct.
-- TS MUST mirror this:
-  - `encryptWithKeystore(keystore, resolver)` performs label-group encryption synchronously (per label) using serializer helpers.
-  - `AnyValue.serialize(context)` invokes `encryptWithKeystore` when a context exists (struct case), then wraps the resulting CBOR with an outer envelope, exactly as Rust.
-
-### 17.2 Decorator Responsibilities (Corrected)
-
-- Generate at runtime:
-  - `Encrypted<Class>` companion with encrypted-group fields.
-  - `<Class><Label>Fields` classes (one per label) containing the grouped plaintext fields for that label.
-- Provide synchronous methods that DO perform label-group encryption:
-  - `encryptWithKeystore(keystore, resolver): Result<Encrypted<Class>>` builds each `<Class><Label>Fields` instance from `self`, calls `encryptLabelGroupSync` per label, and returns a fully populated `Encrypted<Class>` with its encrypted-group fields set.
-  - `decryptWithKeystore(keystore): Result<Class>` reconstructs the plain struct from an `Encrypted<Class>` by decrypting present groups.
-- Registration (idempotent):
-  - Register encryptor/decryptor and wire names in the serializer registry.
-  - Cache generated classes/metadata in a `WeakMap` to avoid duplicate work.
-
-### 17.3 Registry Encryptor: Field Grouping + Envelope Encryption
-
-- The registry encryptor for `Plain` MUST:
-  1. Build per-label plaintext sub-structs using the generated `<Class><Label>Fields` classes.
-  2. For each label:
-     - Resolve `LabelKeyInfo` via `LabelResolver`.
-     - Perform envelope encryption (CBOR `EnvelopeEncryptedData`).
-     - Place the resulting `EncryptedLabelGroup` into the corresponding field of the `Encrypted<Class>`.
-  3. Serialize the `Encrypted<Class>` to CBOR and return the bytes to the serializer.
-- Note: Fields may appear in multiple labels (duplication is allowed and required by Rust behavior). Grouping must include duplicates as per field annotations.
-
-### 17.4 AnyValue (TS) Serialize/Deserialize MUST be Synchronous
-
-- Match Rust's synchronous API:
-  - `serialize(context?: SerializationContext): Result<Uint8Array>`
-  - `deserialize<T = unknown>(bytes: Uint8Array, keystore?: CommonKeysInterface, logger?: Logger): Result<AnyValue<T>, Error>`
-- Under the hood, the NodeJS API `Keys` methods used by the serializer are synchronous (per NAPI surface), so no async/await in serializer paths.
-- Encrypted path (Struct/List/Map/Json):
-  - Resolve wire name and build header.
-  - Call `ser_fn(inner, keystore, resolver)`. For structs, this calls the registry encryptor which returns CBOR of `Encrypted<Class>`.
-  - Wrap result with `encryptWithEnvelope` if/where required by the Rust parity (for top-level struct encryption as designed in ArcValue). The CBOR bytes stored in the body are the CBOR-encoded `EnvelopeEncryptedData`.
-- Plain path: append the raw CBOR produced by `ser_fn(inner, None, None)`.
-
-### 17.5 Lazy Deserialization: No Immediate Decrypt for Complex Types
-
-- Maintain the lazy holder (`LazyDataWithOffset`) for Struct/List/Map/Json with:
-  - Original buffer slice, offsets, `typeName`, `encrypted` flag, and optional `keystore`.
-- Access-time behavior:
-  - If `encrypted`: decrypt the outer envelope first using `keystore.decryptEnvelope` (CBOR parse + unwrap), then proceed to parse either plain types or container-of-bytes forms.
-  - For list/map element-level encrypted forms: try `Vec<bytes>`/`Map<String, bytes>` decryption via registered decryptors for the element value type.
-  - Fallbacks: heterogeneous `Vec<AnyValue>`/`Map<String, AnyValue>` and direct CBOR decode consistent with Rust.
-
-### 17.6 Synchronous Encryption Helpers in TS Serializer
-
-- Provide sync helpers in the serializer to mirror Rust semantics:
-  - `encryptLabelGroupSync(label, fields, keystore, resolver): Result<EncryptedLabelGroup>`
-  - `decryptLabelGroupSync(encryptedGroup, keystore): Result<T>`
-- These are used by registry encryptors/decryptors, not by decorators directly.
-
-#### 17.6.1 Access Control Implementation Requirements (CRITICAL)
-
-**`decryptLabelGroupSync` Behavior:**
-
-- Attempt decryption using the provided keystore via `keystore.decryptEnvelope(encryptedGroup.envelopeCbor)`
-- If decryption succeeds, deserialize the CBOR result and return `ok(fieldsStruct)`
-- If decryption fails due to missing keys, return `err(Error)` with appropriate error message
-- Never throw exceptions - always return `Result<T, Error>`
-
-**Generated `decryptWithKeystore` Method Logic:**
-
-- Initialize result instance with default values (empty strings, zero numbers, etc.)
-- Process each label group independently in a loop
-- For each encrypted label group, call `decryptLabelGroupSync` with the provided keystore
-- If `decryptLabelGroupSync` returns `ok`, assign the decrypted fields to the result instance
-- If `decryptLabelGroupSync` returns `err`, skip that label group but continue processing others
-- Copy any plaintext (non-encrypted) fields from the encrypted instance to the result
-- Return `ok(resultInstance)` - never return errors for individual label group failures
-
-**Key Implementation Rules:**
-
-1. **No Silent Failures**: `decryptLabelGroupSync` returns `Result<T, Error>` - never throws
-2. **Independent Processing**: Each label group is processed independently - failure of one does not affect others
-3. **Access Control**: Access control is implemented by keystore's `decryptEnvelope` method failing when it lacks required keys
-4. **Default Values**: Fields that cannot be decrypted remain at their default values (empty strings, zero numbers, etc.)
-5. **Error Isolation**: Decryption errors for individual label groups are captured but don't prevent other fields from being decrypted
-6. **Success Guarantee**: `decryptWithKeystore` always returns `ok(instance)` - the instance contains whatever fields could be decrypted plus default values for inaccessible fields
-
-### 17.7.1 Serializer Struct Path Checklist (to avoid envelope/body mix-ups)
-
-- For Struct with context present:
-  1. Invoke `encryptWithKeystore(keystore, resolver)` on the struct value to produce `Encrypted{T}` with label groups populated
-  2. CBOR-encode the `Encrypted{T}` into `structBytes`
-  3. Call `keystore.encryptWithEnvelope(structBytes, networkPublicKey, profilePublicKeys)` to get EnvelopeEncryptedData
-  4. Write wire header: `[category][is_encrypted=1][type_len][type_bytes]`
-  5. Append CBOR(EnvelopeEncryptedData) as the wire body
-- For Struct with no context: CBOR-encode the plain struct and write with `is_encrypted=0`
-
-### 17.7 API Signatures (Parity)
-
-- Traits-equivalent in TS:
-  - `encryptWithKeystore(keystore, resolver): Result<Encrypted<Class>>`
-  - `decryptWithKeystore(keystore): Result<Class>`
-- Serializer context remains: `{ keystore, resolver, networkPublicKey, profilePublicKeys }` – all required when encrypting, and optional only for plaintext serialization.
-
-### 17.8 Field Duplication Semantics (Labels)
-
-- A field can appear in more than one label group (e.g., `user`, `search`).
-- Grouping must include the field in every matching label's `<Class><Label>Fields` sub-struct.
-- The serializer encryptor produces distinct `EncryptedLabelGroup` entries per label.
-
-### 17.9 Tests to Validate Corrections
-
-- Struct encryption parity: `AnyValue.newStruct(Plain).serialize(context)` produces header + CBOR `EnvelopeEncryptedData`; decrypt path through lazy access matches Rust.
-- Decorator registration: encryptor/decryptor invoked only from serializer paths; `encryptWithKeystore` returns structural companion without performing crypto.
-- Field duplication: verify fields present in multiple label groups are included and encrypted in both groups.
-- Synchronous enforcement: serializer paths contain no `await`; NodeJS `Keys` calls used are sync.
-
-### 17.10 TS-only API Note: No Ref-returning methods
-
-- Rust exposes `as_type_ref<T>` and similar methods returning borrowed references. TS is GC-based and cannot return borrowed references.
-- TS exposes a single method `asType<T>(): Result<T, Error>` that performs the same lazy decrypt-on-access logic and returns a concrete instance.
-- Impact on design:
-  - All mentions of `as_type_ref` in Rust map to `asType` in TS
-  - Performance and functionality remain equivalent for our use-cases; no observable behavior change for consumers
-  - Tests and examples must use `asType<T>()` in TS
-
-These corrections ensure the TS implementation matches Rust precisely: decorators generate structure and register handlers; only `AnyValue.serialize` triggers encryption (via registry); deserialization is lazy with decrypt-on-access for complex types; the entire flow remains synchronous as in Rust.
-
-## 18. Consolidated Decorator Design (Merged from decorator_design_02.md)
-
-This section consolidates and reconciles the decorator system design into the overall integration plan, removing duplication and conflicts while aligning 100% with Rust.
-
-### 18.1 Executive Summary (Decorators)
-
-- Three-layer architecture: serializer (wire/registry/crypto), decorators (metadata + runtime codegen), application.
-- Decorator APIs mirror Rust traits: synchronous `encryptWithKeystore/decryptWithKeystore`, Result-based.
-- No crypto in decorators; all encryption occurs during `AnyValue.serialize(context)` via registry encryptors.
-- Runtime generation with deterministic names: `Encrypted{Type}` and `{Type}{Label}Fields`.
-- Deterministic label grouping/ordering: priority system=0, user=1, other=2; then lexical.
-
-### 18.2 Responsibilities and Separation
-
-- Serializer (runar-ts-serializer): owns LabelResolver, wire format, AnyValue, registries, crypto helpers; provides sync `encryptLabelGroupSync/decryptLabelGroupSync`.
-- Decorators (runar-ts-decorators): capture metadata, generate companions and per-label structs at runtime, register type names and handlers lazily/idempotently, define sync trait-like methods without performing crypto.
-
-### 18.3 Decorator APIs and Types (Final)
-
-- Marker: `RunarEncryptable`.
-- Traits-equivalent:
-  - `encryptWithKeystore(keystore: CommonKeysInterface, resolver: LabelResolver): Result<EncryptedT>`
-  - `decryptWithKeystore(keystore: CommonKeysInterface): Result<T>`
-- Use serializer types: `LabelResolver`, `LabelKeyInfo`, `EncryptedLabelGroup`, `Result`.
-- No duplicated types in decorators.
-
-### 18.4 Build-Time Type Generation and Runtime Code Generation
-
-**CRITICAL SOLUTION**: Use build-time type generation to create proper TypeScript interfaces for encrypted companion types, eliminating the need for `any` types.
-
-#### 18.4.1 Build-Time Type Generation
-
-**Problem**: Decorators generate runtime classes but cannot export TypeScript types, forcing use of `any` types.
-
-**Solution**: Build script that analyzes TypeScript AST and generates proper type definitions.
-
-**Implementation**:
-
-1. **AST Analysis**: Parse source files to find `@Encrypt` decorators and `@runar` field decorators
-2. **Type Generation**: Generate TypeScript interfaces for encrypted companion types
-3. **Build Integration**: Run type generation before TypeScript compilation
-
-**Build Script Process**:
-
-```typescript
-// 1. Analyze source files for @Encrypt classes
-const classes = analyzeSourceFile('src/test-class.ts');
-
-// 2. Extract field information with labels
-interface ClassInfo {
-  name: string;
-  fields: FieldInfo[];
-}
-
-interface FieldInfo {
-  name: string;
-  type: string;
-  label?: string; // from @runar decorator
-}
-
-// 3. Generate type definitions
-function generateTypeDefinitions(classes: ClassInfo[]): string {
-  // Creates interfaces like:
-  // export interface EncryptedTestProfile {
-  //   id: string; // plain field
-  //   system_encrypted: string; // encrypted field (label: 'system')
-  //   user_encrypted: string; // encrypted field (label: 'user')
-  //   search_encrypted: string; // encrypted field (label: 'search')
-  //   system_only_encrypted: string; // encrypted field (label: 'system_only')
-  // }
-}
-```
-
-**Generated Output Example**:
-
-```typescript
-// Generated types - do not edit manually
-// This file is automatically generated by the build script
-
-import { EncryptedLabelGroup } from 'runar-ts-serializer/src/encryption.js';
-
-export interface EncryptedTestProfile {
-  id: string; // plain field
-  system_encrypted: EncryptedLabelGroup; // encrypted label group (contains: { name: 'Test User' })
-  user_encrypted: EncryptedLabelGroup; // encrypted label group (contains: { privateData: 'secret123' })
-  search_encrypted: EncryptedLabelGroup; // encrypted label group (contains: { email: 'test@example.com' })
-  system_only_encrypted: EncryptedLabelGroup; // encrypted label group (contains: { systemMetadata: 'system_data' })
-}
-```
-
-**Usage**:
-
-```typescript
-// ✅ PERFECT: Using proper types instead of 'any'
-const encryptableOriginal = original as TestProfile &
-  RunarEncryptable<TestProfile, EncryptedTestProfile>;
-
-// Full type safety, IntelliSense, and compile-time validation!
-// Each _encrypted field contains an EncryptedLabelGroup with all fields for that label
-const encrypted: EncryptedTestProfile = {
-  id: '123', // plain field
-  system_encrypted: encryptedLabelGroup, // contains all fields with @runar('system')
-  user_encrypted: encryptedLabelGroup, // contains all fields with @runar('user')
-  search_encrypted: encryptedLabelGroup, // contains all fields with @runar('search')
-  system_only_encrypted: encryptedLabelGroup, // contains all fields with @runar('system_only')
-};
-```
-
-#### 18.4.2 Runtime Code Generation and Registration
-
-- Per-class `WeakMap<Function, ClassMeta>` storing: `wireName`, `encryptedCtor`, `labelFieldConstructors`, `orderedLabels`, `registered: boolean`.
-- Codegen:
-  - Create `EncryptedT` and `TLFields` constructors with stable names (for diagnostics/testing) and plain data-only fields.
-  - Attach sync methods to prototypes as per 17.2; `encryptWithKeystore` performs label-group encryption using `encryptLabelGroupSync` per label, and `decryptWithKeystore` mirrors decryption.
-- Lazy registration (idempotent): when first decorated class is processed:
-  - Register wire name for `T`.
-  - Register encryptor/decryptor handlers for `T`/`EncryptedT` with serializer registry.
-  - Register JSON converters as needed.
-
-#### 18.4.3 Build Integration
-
-**Package.json Scripts**:
-
-```json
-{
-  "scripts": {
-    "generate-types": "bun run build-script.ts",
-    "build-with-types": "bun run generate-types && tsc"
-  }
-}
-```
-
-**Build Process**:
-
-1. Run type generation: `bun run generate-types`
-2. Compile TypeScript: `tsc`
-3. Generated types are available for import and use
-
-**Benefits**:
-
-- ✅ **No More `any` Types**: Full type safety throughout
-- ✅ **IntelliSense Support**: IDEs provide proper autocomplete
-- ✅ **Compile-Time Validation**: TypeScript catches errors at build time
-- ✅ **No Runtime Overhead**: Types are generated at build time
-- ✅ **Maintainable**: Generated types are automatically updated
-
-### 18.5 Deterministic Label Grouping and Ordering
-
-- Collect labels from field metadata; compute priority per label (system=0, user=1, other=2); sort by (priority, label lex).
-- For each label, create ordered, deduplicated field list (by declaration order) and generate a `{Type}{Label}Fields` instance during encryption handling in the registry.
-- Fields may appear in multiple label groups and are encrypted separately per label.
-
-### 18.6 Serializer Integration Points (Decorators ↔ Serializer)
-
-- Encryptor handler (registry) responsibilities:
-  - Construct per-label TLFields using metadata and the source instance of `T`.
-  - Call `encryptLabelGroupSync(label, TLFields, keystore, resolver)`; insert results into corresponding `${label}_encrypted` fields on `EncryptedT`.
-  - Serialize `EncryptedT` to CBOR and return bytes to AnyValue for wire framing.
-- Decryptor handler (registry) responsibilities:
-  - Deserialize `EncryptedT` from CBOR, iterate groups present, call `decryptLabelGroupSync` per group, and reconstruct `T`.
-
-### 18.7 Synchronous Semantics and Lazy Flows (Reiterated)
-
-- All public decorator methods are synchronous and return `Result`.
-- AnyValue serialize/deserialize paths remain synchronous; complex types leverage lazy holders and decrypt on access using keystore.
-
-### 18.8 Testing (Decorators)
-
-- Unit: metadata capture, label grouping/ordering, codegen naming, idempotent registration, sync methods' structural correctness.
-- Integration: AnyValue serialize triggers registry encryptor; deserialize triggers decryptor; multiple labels and duplication validated.
-- E2E: Envelope encryption with keystore, missing-label error behavior, performance baselines.
-
-#### 18.8.1 Access Control Testing Scenarios (DETAILED RUST PARITY)
-
-**Keystore Setup Requirements (MUST match Rust exactly):**
-
-- **Mobile Network Master**: Generates network keys, has both public and private network keys
-- **User Mobile Keystore**: Has user profile keys + network public key (NO network private key) - can encrypt for network but cannot decrypt network-encrypted data
-- **Node Keystore**: Has network private keys (NO user profile keys) - can decrypt network-encrypted data but cannot decrypt user-encrypted data
-
-**Label Configuration Requirements (MUST match Rust exactly):**
-
-- **"user" label**: `profilePublicKeys: [profilePk], networkPublicKey: undefined` - only profile keys, no network keys
-- **"system" label**: `profilePublicKeys: [profilePk], networkPublicKey: networkPublicKey` - both profile and network keys
-- **"system_only" label**: `profilePublicKeys: [], networkPublicKey: networkPublicKey` - only network keys, no profile keys
-- **"search" label**: `profilePublicKeys: [profilePk], networkPublicKey: networkPublicKey` - both profile and network keys
-
-**Test Struct Requirements:**
-
-- Plain field (no decorator): always accessible
-- `@runar("system")` field: accessible by both mobile (via profile keys) and node (via network keys)
-- `@runar("user")` field: accessible only by mobile (requires profile keys)
-- `@runar("search")` field: accessible by both mobile (via profile keys) and node (via network keys)
-- `@runar("system_only")` field: accessible only by node (requires network keys)
-
-**Expected Access Control Results (MUST match Rust exactly):**
-
-- **Mobile keystore decryption**: Can decrypt plain, system, user, and search fields; cannot decrypt system_only fields (remain empty)
-- **Node keystore decryption**: Can decrypt plain, system, search, and system_only fields; cannot decrypt user fields (remain empty)
-
-**Critical Implementation Requirements:**
-
-1. **Decryption Logic**: `decryptLabelGroupSync` MUST return `Result<T, Error>` - success if keystore has required keys, error if not
-2. **Field Assignment**: Only assign fields if `decryptLabelGroupSync` succeeds; otherwise fields remain at default values
-3. **Keystore Capabilities**: Mobile has profile keys + network public key (NO private); Node has network private keys (NO profile keys)
-4. **Multi-Key Labels**: Labels with both profile and network keys can be decrypted by EITHER keystore type
-5. **Single-Key Labels**: Labels with only profile keys require mobile keystore; labels with only network keys require node keystore
-
-This merged section supersedes standalone decorator design docs and is aligned with sections 16–17 and the overall transport/node integration in sections 10 and 15.
-
-## 19. Implementation Mapping to Existing TS Code (Exists vs New)
+## 17. Implementation Mapping to Existing TS Code (Exists vs New)
 
 This section maps each design element to current TS code to avoid duplication and to specify precise update scopes.
 

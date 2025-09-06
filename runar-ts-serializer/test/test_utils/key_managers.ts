@@ -33,7 +33,7 @@ import { Result, isErr } from 'runar-ts-common/src/error/Result';
  *    - No user profile keys (cannot decrypt user-encrypted data)
  *    - Can decrypt network-encrypted data
  */
-export class AnyValueTestEnvironment {
+export class TestEnvironment {
   private masterMobileKeys: Keys; // Master mobile - used only for setup/admin
   private userMobileKeys: Keys; // User mobile - end user device with profile keys + network public key
   private nodeKeys: Keys; // Node - backend with network private keys
@@ -155,6 +155,13 @@ export class AnyValueTestEnvironment {
           'search',
           {
             networkPublicKey: this.networkPublicKey,
+            userKeySpec: LabelKeyword.CurrentUser,
+          },
+        ],
+        [
+          'custom',
+          {
+            networkPublicKey: undefined,
             userKeySpec: LabelKeyword.CurrentUser,
           },
         ],
