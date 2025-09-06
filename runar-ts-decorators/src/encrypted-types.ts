@@ -6,6 +6,7 @@ import { type RunarEncryptable } from './index';
 import { TestProfile } from '../test_fixtures/dist/test_fixtures/test_fixtures';
 import { AdvancedTestProfile } from '../test_fixtures/dist/test_fixtures/test_fixtures';
 import { NestedEncryptedProfile } from '../test_fixtures/dist/test_fixtures/test_fixtures';
+import { SystemMetadata } from '../test_fixtures/dist/test_fixtures/test_fixtures';
 import { ComplexPriorityProfile } from '../test_fixtures/dist/test_fixtures/test_fixtures';
 
 export interface EncryptedTestProfile extends RunarEncryptable<TestProfile, EncryptedTestProfile> {
@@ -25,6 +26,14 @@ export interface EncryptedAdvancedTestProfile extends RunarEncryptable<AdvancedT
 }
 
 export interface EncryptedNestedEncryptedProfile extends RunarEncryptable<NestedEncryptedProfile, EncryptedNestedEncryptedProfile> {
+  user_encrypted: EncryptedLabelGroup;
+  profile: EncryptedTestProfile | null;
+  metadata: EncryptedSystemMetadata | null;
+  nestedData: EncryptedTestProfile | null;
+  id: string;
+}
+
+export interface EncryptedSystemMetadata extends RunarEncryptable<SystemMetadata, EncryptedSystemMetadata> {
   user_encrypted: EncryptedLabelGroup;
   system_encrypted: EncryptedLabelGroup;
   id: string;

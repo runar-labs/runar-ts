@@ -156,6 +156,8 @@ export function EncryptField(options: EncryptFieldOptions) {
 
 // Design Section 18.4: @Encrypt decorator with runtime code generation (TS 5 standard)
 export function Encrypt<T extends Constructor>(value: T, context: ClassDecoratorContext): void {
+    console.log(`=== @Encrypt DECORATOR CALLED for ${String(context.name)} ===`);
+    
     const className = context.name || 'AnonymousClass';
     const typeName = String(className);
     const encryptedClassName = `Encrypted${String(className)}`;
@@ -175,10 +177,12 @@ export function Encrypt<T extends Constructor>(value: T, context: ClassDecorator
       }
 
       decryptWithKeystore(keystore: CommonKeysInterface, logger?: Logger): Result<InstanceType<typeof value>> {
+        console.log('=== DECRYPTION FUNCTION CALLED ===');
+        
         const log = logger ? logger.withComponent(Component.Decorators) : Logger.newRoot(Component.Decorators);
         const className = (value as Function).name || 'UnknownClass';
         
-        log.trace(`Starting decryptWithKeystore for ${className}`);
+        console.log(`=== DECRYPTION START for ${className} ===`);
 
         // Handle null keystore gracefully
         if (!keystore) {
@@ -189,12 +193,12 @@ export function Encrypt<T extends Constructor>(value: T, context: ClassDecorator
         const fieldEncryptions = (value as Function & { fieldEncryptions?: FieldEncryption[] }).fieldEncryptions || [];
         const labels = [...new Set(fieldEncryptions.map((e: FieldEncryption) => e.label))];
         
-        log.debug(`Found ${labels.length} unique labels: [${labels.join(', ')}]`);
-        log.debug(`Found ${fieldEncryptions.length} field encryptions`);
+        log.trace(`Found ${fieldEncryptions.length} field encryptions: [${fieldEncryptions.map(f => `${f.propertyKey.toString()}:${f.label}`).join(', ')}]`);
+        log.trace(`Unique labels: [${labels.join(', ')}]`);
         
         // Get keystore capabilities for debugging
         const caps = keystore.getKeystoreCaps();
-        log.debug(`Keystore capabilities: hasProfileKeys=${caps.hasProfileKeys}, hasNetworkKeys=${caps.hasNetworkKeys}`);
+        log.trace(`Keystore capabilities: hasProfileKeys=${caps.hasProfileKeys}, hasNetworkKeys=${caps.hasNetworkKeys}`);
         
         // Initialize with default values (empty strings for all fields)
         const plainInstance = new (value as Constructor)('', '', '', '', '');
@@ -211,55 +215,106 @@ export function Encrypt<T extends Constructor>(value: T, context: ClassDecorator
           const encryptedFieldName = `${label}_encrypted`;
           const encryptedGroup = this[encryptedFieldName];
 
-          log.trace(`Processing label group: ${label} (field: ${encryptedFieldName})`);
+          console.log(`\n--- Processing label group: ${label} (field: ${encryptedFieldName}) ---`);
 
           if (encryptedGroup) {
-            log.trace(`Found encrypted group for label ${label}, attempting decryption`);
+            console.log(`Found encrypted group for label ${label}, attempting decryption`);
+            console.log(`Encrypted group type: ${typeof encryptedGroup}`);
+            console.log(`Encrypted group has decryptWithKeystore: ${'decryptWithKeystore' in encryptedGroup}`);
             
             // Attempt decryption - if it fails, skip this label group but continue
             const decryptedResult = decryptLabelGroupSync(encryptedGroup, keystore, log);
             if (decryptedResult.ok) {
               const decryptedFields = decryptedResult.value as Record<string, unknown>;
               if (decryptedFields && typeof decryptedFields === 'object') {
-                log.trace(`Decryption successful for label ${label}, assigning ${Object.keys(decryptedFields).length} fields`);
+                console.log(`Decryption successful for label ${label}, assigning ${Object.keys(decryptedFields).length} fields`);
+                console.log(`Decrypted fields: [${Object.keys(decryptedFields).join(', ')}]`);
                 // Only assign fields if decryption succeeded
                 for (const fieldName in decryptedFields) {
                   const fieldValue = decryptedFields[fieldName];
-                  
-                  // Handle nested encrypted objects
-                  if (fieldValue && typeof fieldValue === 'object' && 
-                      'decryptWithKeystore' in fieldValue && 
-                      typeof fieldValue.decryptWithKeystore === 'function') {
-                    // This is a nested encrypted object - decrypt it
-                    const nestedDecryptResult = (fieldValue as RunarEncryptable<unknown, unknown>).decryptWithKeystore(keystore, log);
-                    if (nestedDecryptResult.ok) {
-                      plainInstance[fieldName] = nestedDecryptResult.value;
-                      log.trace(`Decrypted nested object for field ${fieldName}`);
-                    } else {
-                      log.debug(`Failed to decrypt nested object for field ${fieldName}: ${nestedDecryptResult.error.message}`);
-                      // Set to default value if nested decryption fails
-                      plainInstance[fieldName] = '';
-                    }
-                  } else {
-                    plainInstance[fieldName] = fieldValue;
-                  }
+                  console.log(`  Before assignment: plainInstance[${fieldName}] = ${fieldValue}`);
+                  plainInstance[fieldName] = fieldValue;
+                  console.log(`  After assignment: plainInstance[${fieldName}] = ${plainInstance[fieldName]}`);
                   
                   // Log field assignment but not the actual value for security
                   const valueType = typeof plainInstance[fieldName];
                   const valueLength = typeof plainInstance[fieldName] === 'string' ? 
                     (plainInstance[fieldName] as string).length : 'N/A';
-                  log.trace(`Assigned field ${fieldName} (${valueType}, length: ${valueLength})`);
+                  console.log(`  Assigned field ${fieldName} (${valueType}, length: ${valueLength})`);
                 }
               } else {
-                log.warn(`Decryption succeeded for label ${label} but result is not an object`);
+                console.log(`Decryption succeeded for label ${label} but result is not an object`);
               }
             } else if (isErr(decryptedResult)) {
-              log.debug(`Decryption failed for label ${label}: ${decryptedResult.error.message} (access control - continuing with other labels)`);
+              console.log(`Decryption failed for label ${label}: ${decryptedResult.error.message} (access control - continuing with other labels)`);
             }
             // If decryption fails, fields remain at their default values (access control)
             // Do NOT return error - continue processing other label groups
           } else {
-            log.trace(`No encrypted group found for label ${label}`);
+            console.log(`No encrypted group found for label ${label}`);
+          }
+        }
+
+        // Process nested encrypted objects that are stored directly on the encrypted instance
+        // Only process fields that are actually nested encrypted objects (not primitive fields)
+        console.log(`\n--- Processing nested encrypted objects ---`);
+        for (const field of fieldEncryptions) {
+          const fieldName = field.propertyKey.toString();
+          const fieldValue = this[fieldName];
+          const fieldLabel = field.label;
+          
+          console.log(`Processing field ${fieldName} with label: ${fieldLabel}`);
+          console.log(`Field value type: ${typeof fieldValue}`);
+          console.log(`Field value is null/undefined: ${fieldValue === null || fieldValue === undefined}`);
+          console.log(`Field value has decryptWithKeystore: ${fieldValue && typeof fieldValue === 'object' && 'decryptWithKeystore' in fieldValue}`);
+          
+          // Only process fields that are actually nested encrypted objects
+          // Skip primitive fields as they are handled by label groups
+          if (fieldValue && typeof fieldValue === 'object' && 
+              'decryptWithKeystore' in fieldValue && 
+              typeof fieldValue.decryptWithKeystore === 'function') {
+            log.trace(`  -> NESTED ENCRYPTED OBJECT detected for field ${fieldName}`);
+            log.trace(`  -> Attempting decryption with keystore capabilities: hasProfileKeys=${caps.hasProfileKeys}, hasNetworkKeys=${caps.hasNetworkKeys}`);
+            
+            // This is a nested encrypted object - decrypt it
+            const nestedDecryptResult = (fieldValue as RunarEncryptable<unknown, unknown>).decryptWithKeystore(keystore, log);
+            if (nestedDecryptResult.ok) {
+              log.trace(`  -> Nested decryption successful for field ${fieldName}`);
+              // Check if the decrypted object has any fields that couldn't be decrypted due to access control
+              const decryptedValue = nestedDecryptResult.value;
+              if (decryptedValue && typeof decryptedValue === 'object') {
+                log.trace(`  -> Decrypted value is object with keys: [${Object.keys(decryptedValue).join(', ')}]`);
+                // Check if any fields are empty strings (indicating access control failure)
+                const hasAccessControlFailures = Object.values(decryptedValue).some(val => 
+                  typeof val === 'string' && val === ''
+                );
+                
+                if (hasAccessControlFailures) {
+                  log.debug(`  -> Nested object for field ${fieldName} has access control failures, setting to null`);
+                  plainInstance[fieldName] = null;
+                } else {
+                  plainInstance[fieldName] = decryptedValue;
+                  log.trace(`  -> Successfully assigned decrypted nested object for field ${fieldName}`);
+                }
+              } else {
+                plainInstance[fieldName] = decryptedValue;
+                log.trace(`  -> Successfully assigned decrypted value for field ${fieldName}`);
+              }
+            } else {
+              log.debug(`  -> Failed to decrypt nested object for field ${fieldName}: ${nestedDecryptResult.error.message}`);
+              // For nested encrypted objects with labels, set to null if decryption fails
+              plainInstance[fieldName] = null;
+              log.trace(`  -> Set field ${fieldName} to null due to decryption failure`);
+            }
+          } else if (fieldValue === null || fieldValue === undefined) {
+            // Only set to null if this is actually a nested encrypted object field
+            // Primitive fields that are undefined should be skipped (handled by label groups)
+            console.log(`  -> Field ${fieldName} is null/undefined - checking if it's a nested encrypted object`);
+            // For now, skip primitive fields that are undefined
+            console.log(`  -> Skipping field ${fieldName} (primitive field handled by label groups)`);
+          } else {
+            // Skip primitive fields - they are handled by label groups
+            console.log(`  -> Field ${fieldName} is not a nested encrypted object, skipping`);
           }
         }
 
@@ -281,7 +336,19 @@ export function Encrypt<T extends Constructor>(value: T, context: ClassDecorator
           }
         }
 
-        log.trace(`Completed decryptWithKeystore for ${className}`);
+        console.log(`\n=== DECRYPTION COMPLETE for ${className} ===`);
+        console.log(`Final plain instance fields: [${Object.keys(plainInstance).join(', ')}]`);
+        console.log(`Final plain instance values: [${Object.entries(plainInstance).map(([key, value]) => 
+          `${key}: ${typeof value}${typeof value === 'string' ? `(${value.length})` : ''}${value === null ? '(null)' : ''}`
+        ).join(', ')}]`);
+        
+        // Special logging for userPrivateData field
+        if ('userPrivateData' in plainInstance) {
+          console.log(`SPECIAL: userPrivateData = "${plainInstance.userPrivateData}"`);
+        } else {
+          console.log(`SPECIAL: userPrivateData field not found in plainInstance`);
+        }
+        
         return ok(plainInstance);
       }
     };
@@ -301,20 +368,35 @@ export function Encrypt<T extends Constructor>(value: T, context: ClassDecorator
     // Add encryptWithKeystore method to the original class prototype
     const prototype = (value as Function).prototype as Record<string, unknown>;
     prototype.encryptWithKeystore = function(keystore: CommonKeysInterface, resolver: LabelResolver): Result<InstanceType<typeof EncryptedClass>> {
+      console.log('=== ENCRYPTION FUNCTION CALLED ===');
+      
       // Ensure runtime metadata and helpers are registered
       ensureClassRegistered((this as { constructor: Constructor }).constructor);
 
       const encryptedInstance = new EncryptedClass();
+      const className = (this as { constructor: Constructor }).constructor.name;
+      const log = Logger.newRoot(Component.Decorators);
+
+      console.log(`=== ENCRYPTION START for ${className} ===`);
+      console.log(`Keystore capabilities: hasProfileKeys=${keystore.getKeystoreCaps().hasProfileKeys}, hasNetworkKeys=${keystore.getKeystoreCaps().hasNetworkKeys}`);
 
       const fieldEncryptions = ((this as { constructor: Function & { fieldEncryptions?: FieldEncryption[] } }).constructor).fieldEncryptions || [];
+      
+      log.trace(`Found ${fieldEncryptions.length} field encryptions: [${fieldEncryptions.map(f => `${f.propertyKey.toString()}:${f.label}`).join(', ')}]`);
       
       // Group fields by label for processing
       const fieldGroups = groupFieldsByLabel(fieldEncryptions);
       const uniqueLabels = getUniqueLabels(fieldEncryptions);
+      
+      log.trace(`Unique labels: [${uniqueLabels.join(', ')}]`);
+      log.trace(`Field groups: [${Array.from(fieldGroups.entries()).map(([label, fields]) => `${label}: [${fields.map(f => f.propertyKey.toString()).join(', ')}]`).join(', ')}]`);
 
       // Process each label group
       for (const label of uniqueLabels) {
         const fieldsForLabel = fieldGroups.get(label) || [];
+        
+        log.trace(`\n--- Processing label group: ${label} ---`);
+        log.trace(`Fields for label ${label}: [${fieldsForLabel.map(f => f.propertyKey.toString()).join(', ')}]`);
         
         // Sort fields within the group by their original order
         const sortedFields = fieldsForLabel.sort(
@@ -327,32 +409,48 @@ export function Encrypt<T extends Constructor>(value: T, context: ClassDecorator
           const fieldName = field.propertyKey.toString();
           const fieldValue = (this as Record<string, unknown>)[fieldName];
           
-          // Handle nested encrypted objects
-          if (fieldValue && typeof fieldValue === 'object' && 
-              'encryptWithKeystore' in fieldValue && 
-              typeof fieldValue.encryptWithKeystore === 'function') {
-            // This is a nested encrypted object - encrypt it separately
-            const nestedEncryptResult = (fieldValue as RunarEncryptable<unknown, unknown>).encryptWithKeystore(keystore, resolver);
-            if (nestedEncryptResult.ok) {
-              // Store the encrypted companion object directly
-              // The encrypted companion should have the decryptWithKeystore method
-              labelFieldsInstance[fieldName] = nestedEncryptResult.value;
+          log.trace(`  Processing field: ${fieldName} (label: ${label})`);
+          log.trace(`  Field value type: ${typeof fieldValue}`);
+          log.trace(`  Field value: ${typeof fieldValue === 'object' ? '[object]' : String(fieldValue)}`);
+          
+            // Handle nested encrypted objects
+            if (fieldValue && typeof fieldValue === 'object' &&
+                'encryptWithKeystore' in fieldValue &&
+                typeof fieldValue.encryptWithKeystore === 'function') {
+              log.trace(`  -> NESTED ENCRYPTED OBJECT detected for field ${fieldName}`);
+              // This is a nested encrypted object - encrypt it separately
+              const nestedEncryptResult = (fieldValue as RunarEncryptable<unknown, unknown>).encryptWithKeystore(keystore, resolver);
+              if (nestedEncryptResult.ok) {
+                log.trace(`  -> Successfully encrypted nested object for field ${fieldName}`);
+                // Store the encrypted companion object directly on the encrypted instance
+                // NOT in the label group
+                (encryptedInstance as Record<string, unknown>)[fieldName] = nestedEncryptResult.value;
+              } else {
+                log.error(`  -> Failed to encrypt nested object for field ${fieldName}: ${nestedEncryptResult.error.message}`);
+                return err(new Error(`Failed to encrypt nested object for field '${fieldName}': ${nestedEncryptResult.error.message}`));
+              }
             } else {
-              return err(new Error(`Failed to encrypt nested object for field '${fieldName}': ${nestedEncryptResult.error.message}`));
+              log.trace(`  -> PRIMITIVE FIELD for field ${fieldName}, adding to label group`);
+              labelFieldsInstance[fieldName] = fieldValue;
             }
-          } else {
-            labelFieldsInstance[fieldName] = fieldValue;
-          }
         }
 
-        const encRes = encryptLabelGroupSync(label, labelFieldsInstance, keystore, resolver);
-        if (!encRes.ok) {
-          return err(
-            new Error(`Failed to encrypt label group '${label}': ${(encRes as Err<Error>).error.message}`)
-          );
+        // Only create label group if there are primitive fields
+        if (Object.keys(labelFieldsInstance).length > 0) {
+          log.trace(`  -> Creating label group for ${label} with fields: [${Object.keys(labelFieldsInstance).join(', ')}]`);
+          const encRes = encryptLabelGroupSync(label, labelFieldsInstance, keystore, resolver);
+          if (!encRes.ok) {
+            log.error(`  -> Failed to encrypt label group '${label}': ${(encRes as Err<Error>).error.message}`);
+            return err(
+              new Error(`Failed to encrypt label group '${label}': ${(encRes as Err<Error>).error.message}`)
+            );
+          }
+          const encryptedFieldName = `${label}_encrypted`;
+          (encryptedInstance as Record<string, unknown>)[encryptedFieldName] = encRes.value;
+          log.trace(`  -> Successfully created ${encryptedFieldName} for label ${label}`);
+        } else {
+          log.trace(`  -> No primitive fields for label ${label}, skipping label group creation`);
         }
-        const encryptedFieldName = `${label}_encrypted`;
-        (encryptedInstance as Record<string, unknown>)[encryptedFieldName] = encRes.value;
       }
 
       // Copy plaintext (non-encrypted) fields
@@ -366,6 +464,11 @@ export function Encrypt<T extends Constructor>(value: T, context: ClassDecorator
         }
       }
 
+      log.trace(`\n=== ENCRYPTION COMPLETE for ${className} ===`);
+      log.trace(`Final encrypted instance fields: [${Object.keys(encryptedInstance).join(', ')}]`);
+      log.trace(`Final encrypted instance values: [${Object.entries(encryptedInstance).map(([key, value]) => 
+        `${key}: ${typeof value}${typeof value === 'string' ? `(${value.length})` : ''}${value === null ? '(null)' : ''}`
+      ).join(', ')}]`);
       return ok(encryptedInstance);
     };
 

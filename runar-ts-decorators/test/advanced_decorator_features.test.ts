@@ -1,16 +1,19 @@
+console.log('=== TEST FILE LOADED ===');
+
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { type RunarEncryptable } from '../src/index';
-import { 
-  TestProfile, 
-  AdvancedTestProfile, 
-  NestedEncryptedProfile, 
-  ComplexPriorityProfile 
+import {
+  TestProfile,
+  AdvancedTestProfile,
+  NestedEncryptedProfile,
+  ComplexPriorityProfile,
+  SystemMetadata,
 } from '../test_fixtures/dist/test_fixtures/test_fixtures';
-import type { 
-  EncryptedTestProfile, 
-  EncryptedAdvancedTestProfile, 
-  EncryptedNestedEncryptedProfile, 
-  EncryptedComplexPriorityProfile 
+import type {
+  EncryptedTestProfile,
+  EncryptedAdvancedTestProfile,
+  EncryptedNestedEncryptedProfile,
+  EncryptedComplexPriorityProfile,
 } from '../src/encrypted-types';
 import { TestEnvironment } from '../../runar-ts-serializer/test/test_utils/key_managers';
 import { EncryptedLabelGroup } from '../../runar-ts-serializer/src/encryption';
@@ -73,7 +76,7 @@ describe('Advanced Decorator Features Tests', () => {
         testEnv.getUserMobileWrapper(),
         testEnv.getResolver()
       );
-      
+
       if (isErr(encryptResult)) {
         console.log(`Encryption failed: ${encryptResult.error.message}`);
         console.log(`Error details:`, encryptResult.error);
@@ -84,7 +87,7 @@ describe('Advanced Decorator Features Tests', () => {
       }
 
       const encrypted = encryptResult.value;
-      
+
       // Verify encrypted struct has the expected fields
       expect(encrypted.id).toBe('multi-123');
       expect(encrypted.system_encrypted).toBeDefined();
@@ -139,7 +142,7 @@ describe('Advanced Decorator Features Tests', () => {
       }
 
       const encrypted = encryptResult.value;
-      
+
       // Verify encrypted struct has the expected fields
       expect(encrypted.id).toBe('priority-123');
       expect(encrypted.system_only_encrypted).toBeDefined();
@@ -175,6 +178,8 @@ describe('Advanced Decorator Features Tests', () => {
 
   describe('Nested Encrypted Objects', () => {
     it('should handle nested encrypted objects correctly', async () => {
+      console.log('=== TEST START: Nested Encrypted Objects ===');
+      
       const nestedProfile = new TestProfile(
         'nested-123',
         'nested name',
@@ -182,11 +187,27 @@ describe('Advanced Decorator Features Tests', () => {
         'nested@example.com',
         'nested metadata'
       );
-      
+
+      const systemMetadata = new SystemMetadata(
+        'metadata-123',
+        'metadata@example.com',
+        'metadata data'
+      );
+
+      const nestedData = new TestProfile(
+        'nested-data-123',
+        'nested data name',
+        'nested data private',
+        'nesteddata@example.com',
+        'nested data metadata'
+      );
+
       const original = new NestedEncryptedProfile(
         'parent-123',
         nestedProfile,
-        'parent metadata'
+        systemMetadata,
+        'user private data',
+        nestedData
       );
 
       // Test encryption
@@ -202,11 +223,11 @@ describe('Advanced Decorator Features Tests', () => {
       }
 
       const encrypted = encryptResult.value;
-      
+
       // Verify encrypted struct has the expected fields
       expect(encrypted.id).toBe('parent-123');
       expect(encrypted.user_encrypted).toBeDefined();
-      expect(encrypted.system_encrypted).toBeDefined();
+      // Note: system_encrypted is not present because metadata is stored as EncryptedSystemMetadata directly
 
       // Test decryption with mobile (should have access to user fields including nested profile)
       const encryptedCompanion = encrypted as unknown as RunarEncryptable<
@@ -224,62 +245,110 @@ describe('Advanced Decorator Features Tests', () => {
 
       const mobileProfile = decryptedMobile.value;
       expect(mobileProfile.id).toBe(original.id);
-      expect(mobileProfile.metadata).toBe(''); // Should be empty (no access to system field)
-      
-      // Verify nested profile is decrypted correctly
-      console.log('mobileProfile.profile:', mobileProfile.profile);
+      expect(mobileProfile.userPrivateData).toBe(original.userPrivateData); // Should have access to user field
+
+      // Verify nested profile is decrypted correctly (mobile has access to user fields)
       expect(mobileProfile.profile).toBeDefined();
       if (mobileProfile.profile) {
-        // The nested profile should be an encrypted companion object
+        // The nested profile should be decrypted as a plain TestProfile object
         expect(mobileProfile.profile.id).toBe(nestedProfile.id);
-        
-        // Access encrypted fields using proper type
-        const encryptedNestedProfile = mobileProfile.profile as unknown as EncryptedTestProfile;
-        expect(encryptedNestedProfile.user_encrypted).toBeDefined();
-        expect(encryptedNestedProfile.search_encrypted).toBeDefined();
-        expect(encryptedNestedProfile.system_encrypted).toBeDefined();
-        expect(encryptedNestedProfile.system_only_encrypted).toBeDefined();
-        
-        // The nested profile is stored as a plain object with encrypted fields
-        // We need to manually decrypt it using the label group decryption
-        
-        // Since the nested object is stored as a plain object with encrypted fields,
-        // we need to manually decrypt each field group
-        const decryptedNestedProfile = new TestProfile('', '', '', '', '');
-        decryptedNestedProfile.id = encryptedNestedProfile.id;
-        
-        // Decrypt user fields using decryptLabelGroupSync
-        if (encryptedNestedProfile.user_encrypted) {
-          const userDecryptResult = require('runar-ts-serializer/src/encryption').decryptLabelGroupSync(
-            encryptedNestedProfile.user_encrypted,
-            testEnv.getUserMobileWrapper(),
-            logger
-          );
-          if (userDecryptResult.ok) {
-            const userFields = userDecryptResult.value as Record<string, unknown>;
-            decryptedNestedProfile.privateData = userFields.privateData as string || '';
-          }
-        }
-        
-        // Decrypt search fields using decryptLabelGroupSync
-        if (encryptedNestedProfile.search_encrypted) {
-          const searchDecryptResult = require('runar-ts-serializer/src/encryption').decryptLabelGroupSync(
-            encryptedNestedProfile.search_encrypted,
-            testEnv.getUserMobileWrapper(),
-            logger
-          );
-          if (searchDecryptResult.ok) {
-            const searchFields = searchDecryptResult.value as Record<string, unknown>;
-            decryptedNestedProfile.email = searchFields.email as string || '';
-          }
-        }
-        
-        // Verify the decrypted nested profile
-        expect(decryptedNestedProfile.id).toBe(nestedProfile.id);
-        expect(decryptedNestedProfile.name).toBe(''); // Should be empty (no access to system field)
-        expect(decryptedNestedProfile.privateData).toBe(nestedProfile.privateData);
-        expect(decryptedNestedProfile.email).toBe(nestedProfile.email);
-        expect(decryptedNestedProfile.systemMetadata).toBe(''); // Should be empty (no access)
+        expect(mobileProfile.profile.name).toBe(''); // Should be empty (no access to system field)
+        expect(mobileProfile.profile.privateData).toBe(nestedProfile.privateData); // Should have access to user field
+        expect(mobileProfile.profile.email).toBe(nestedProfile.email); // Should have access to search field
+        expect(mobileProfile.profile.systemMetadata).toBe(''); // Should be empty (no access to system_only field)
+      }
+
+      // Verify nested data is decrypted correctly (mobile has access to user fields)
+      expect(mobileProfile.nestedData).toBeDefined();
+      if (mobileProfile.nestedData) {
+        // The nested data should be decrypted as a plain TestProfile object
+        expect(mobileProfile.nestedData.id).toBe(nestedData.id);
+        expect(mobileProfile.nestedData.name).toBe(''); // Should be empty (no access to system field)
+        expect(mobileProfile.nestedData.privateData).toBe(nestedData.privateData); // Should have access to user field
+        expect(mobileProfile.nestedData.email).toBe(nestedData.email); // Should have access to search field
+        expect(mobileProfile.nestedData.systemMetadata).toBe(''); // Should be empty (no access to system_only field)
+      }
+
+      // Verify metadata is null (mobile has no access to system fields)
+      expect(mobileProfile.metadata).toBeNull(); // Should be null (no access to system field)
+    });
+
+    it('should handle nested encrypted objects with node keystore (reverse access control)', async () => {
+      const nestedProfile = new TestProfile(
+        'nested-node-123',
+        'nested node name',
+        'nested node private',
+        'nestednode@example.com',
+        'nested node metadata'
+      );
+
+      const systemMetadata = new SystemMetadata(
+        'metadata-node-123',
+        'metadatanode@example.com',
+        'metadata node data'
+      );
+
+      const nestedData = new TestProfile(
+        'nested-data-node-123',
+        'nested data node name',
+        'nested data node private',
+        'nesteddatanode@example.com',
+        'nested data node metadata'
+      );
+
+      const original = new NestedEncryptedProfile(
+        'parent-node-123',
+        nestedProfile,
+        systemMetadata,
+        'user private data',
+        nestedData
+      );
+
+      // Test encryption with mobile keystore
+      const encryptableOriginal = original as NestedEncryptedProfile &
+        RunarEncryptable<NestedEncryptedProfile, EncryptedNestedEncryptedProfile>;
+      const encryptResult = encryptableOriginal.encryptWithKeystore(
+        testEnv.getUserMobileWrapper(),
+        testEnv.getResolver()
+      );
+      expect(isOk(encryptResult)).toBe(true);
+      if (isErr(encryptResult)) {
+        throw new Error(`Encryption failed: ${encryptResult.error.message}`);
+      }
+
+      const encrypted = encryptResult.value;
+
+      // Test decryption with node keystore (should have access to system fields)
+      const encryptedCompanion = encrypted as unknown as RunarEncryptable<
+        NestedEncryptedProfile,
+        EncryptedNestedEncryptedProfile
+      >;
+      const decryptedNode = encryptedCompanion.decryptWithKeystore(
+        testEnv.getNodeWrapper(),
+        logger
+      );
+      expect(isOk(decryptedNode)).toBe(true);
+      if (isErr(decryptedNode)) {
+        throw new Error(`Node decryption failed: ${decryptedNode.error.message}`);
+      }
+
+      const nodeProfile = decryptedNode.value;
+      expect(nodeProfile.id).toBe(original.id);
+      expect(nodeProfile.userPrivateData).toBe(''); // Should be empty (no access to user field)
+
+      // Verify nested profile is decrypted correctly (node has access to system fields)
+      expect(nodeProfile.profile).toBeNull(); // Should be null (no access to user field)
+
+      // Verify nested data is decrypted correctly (node has access to system fields)
+      expect(nodeProfile.nestedData).toBeNull(); // Should be null (no access to user field)
+
+      // Verify metadata is decrypted correctly (node has access to system fields)
+      expect(nodeProfile.metadata).toBeDefined();
+      if (nodeProfile.metadata) {
+        // The metadata should be decrypted as a plain SystemMetadata object
+        expect(nodeProfile.metadata.id).toBe(systemMetadata.id);
+        expect(nodeProfile.metadata.email).toBe(''); // Should be empty (no access to user field)
+        expect(nodeProfile.metadata.metadata).toBe(systemMetadata.metadata); // Should have access to system field
       }
     });
   });
@@ -308,15 +377,12 @@ describe('Advanced Decorator Features Tests', () => {
 
       const encrypted = encryptResult.value;
 
-      // Test decryption with null keystore (should handle gracefully)
+      // Test decryption with null keystore (should handle gracefAully)
       const encryptedCompanion = encrypted as unknown as RunarEncryptable<
         TestProfile,
         EncryptedTestProfile
       >;
-      const decryptedResult = encryptedCompanion.decryptWithKeystore(
-        null as any,
-        logger
-      );
+      const decryptedResult = encryptedCompanion.decryptWithKeystore(null as any, logger);
       expect(isErr(decryptedResult)).toBe(true);
       if (isErr(decryptedResult)) {
         expect(decryptedResult.error.message).toBe('Keystore is required for decryption');
@@ -347,7 +413,8 @@ describe('Advanced Decorator Features Tests', () => {
       const encrypted = encryptResult.value;
 
       // Corrupt one of the encrypted fields
-      (encrypted as EncryptedTestProfile).user_encrypted = 'corrupted data' as unknown as EncryptedLabelGroup;
+      (encrypted as EncryptedTestProfile).user_encrypted =
+        'corrupted data' as unknown as EncryptedLabelGroup;
 
       // Test decryption (should handle corruption gracefully)
       const encryptedCompanion = encrypted as unknown as RunarEncryptable<
@@ -423,13 +490,7 @@ describe('Advanced Decorator Features Tests', () => {
   describe('Performance and Large Data', () => {
     it('should handle large data efficiently', async () => {
       const largeData = 'x'.repeat(10000); // 10KB of data
-      const original = new TestProfile(
-        'large-123',
-        largeData,
-        largeData,
-        largeData,
-        largeData
-      );
+      const original = new TestProfile('large-123', largeData, largeData, largeData, largeData);
 
       const startTime = Date.now();
 

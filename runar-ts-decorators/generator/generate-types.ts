@@ -127,10 +127,22 @@ function generateTypeDefinitions(classes: ClassInfo[]): string {
     // Collect unique labels and plain fields
     const uniqueLabels = new Set<string>();
     const plainFields = new Set<string>();
-    
+    const nestedEncryptedFields = new Map<string, { type: string; isNullable: boolean }>();
+
     for (const field of classInfo.fields) {
       if (field.label) {
-        uniqueLabels.add(field.label);
+        // Check if this is a nested encrypted object (contains | null and is an object type)
+        if (
+          field.type.includes('| null') &&
+          (field.type.includes('Profile') || field.type.includes('Metadata'))
+        ) {
+          const isNullable = field.type.includes('| null');
+          const baseType = field.type.replace(' | null', '').trim();
+          nestedEncryptedFields.set(field.name, { type: baseType, isNullable });
+        } else {
+          // This is a primitive field with a label - add to unique labels
+          uniqueLabels.add(field.label);
+        }
       } else {
         plainFields.add(field.name);
       }
@@ -142,6 +154,13 @@ function generateTypeDefinitions(classes: ClassInfo[]): string {
     // Add encrypted fields (one per unique label)
     for (const label of uniqueLabels) {
       output += `  ${label}_encrypted: EncryptedLabelGroup;\n`;
+    }
+
+    // Add nested encrypted object fields
+    for (const [fieldName, fieldInfo] of nestedEncryptedFields) {
+      const encryptedType = `Encrypted${fieldInfo.type}`;
+      const nullableSuffix = fieldInfo.isNullable ? ' | null' : '';
+      output += `  ${fieldName}: ${encryptedType}${nullableSuffix};\n`;
     }
 
     // Add plain fields

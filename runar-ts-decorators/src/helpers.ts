@@ -4,7 +4,8 @@ import { FieldEncryption } from './index';
  * Group fields by encryption label (mimics Rust's label_groups logic)
  */
 export function getFieldsByLabel(constructor: Function): Map<string, string[]> {
-  const fieldEncryptions: FieldEncryption[] = (constructor as Function & { fieldEncryptions?: FieldEncryption[] }).fieldEncryptions || [];
+  const fieldEncryptions: FieldEncryption[] =
+    (constructor as Function & { fieldEncryptions?: FieldEncryption[] }).fieldEncryptions || [];
   const grouped = new Map<string, string[]>();
 
   for (const encryption of fieldEncryptions) {
@@ -20,7 +21,8 @@ export function getFieldsByLabel(constructor: Function): Map<string, string[]> {
  * Get unique labels in natural order (as they appear)
  */
 export function getOrderedLabels(constructor: Function): string[] {
-  const fieldEncryptions: FieldEncryption[] = (constructor as Function & { fieldEncryptions?: FieldEncryption[] }).fieldEncryptions || [];
+  const fieldEncryptions: FieldEncryption[] =
+    (constructor as Function & { fieldEncryptions?: FieldEncryption[] }).fieldEncryptions || [];
 
   // Extract unique labels in natural order
   const uniqueLabels = [...new Set(fieldEncryptions.map(e => e.label))];

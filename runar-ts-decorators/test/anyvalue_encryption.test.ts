@@ -129,7 +129,8 @@ describe('AnyValue Encryption Tests', () => {
       expect(mobileProfile.systemMetadata).toBe(''); // Mobile should NOT have access to system_metadata
 
       // Test direct encryptWithKeystore/decryptWithKeystore (matches Rust: profile.encrypt_with_keystore(&context))
-      const encryptableProfile = profile as TestProfile & RunarEncryptable<TestProfile, EncryptedTestProfile>;
+      const encryptableProfile = profile as TestProfile &
+        RunarEncryptable<TestProfile, EncryptedTestProfile>;
       const encryptedProfileResult = encryptableProfile.encryptWithKeystore(
         testEnv.getNodeWrapper(),
         testEnv.getResolver()
@@ -147,7 +148,10 @@ describe('AnyValue Encryption Tests', () => {
       expect(encryptedProfile.user_encrypted).toBeDefined();
 
       // Test decryptWithKeystore on the encrypted companion (matches Rust: encrypted.decrypt_with_keystore(&node_ks))
-      const encryptedCompanion = encryptedProfile as RunarEncryptable<TestProfile, EncryptedTestProfile>;
+      const encryptedCompanion = encryptedProfile as RunarEncryptable<
+        TestProfile,
+        EncryptedTestProfile
+      >;
       const finalNodeProfile = encryptedCompanion.decryptWithKeystore(
         testEnv.getNodeWrapper(),
         logger

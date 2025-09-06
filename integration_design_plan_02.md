@@ -115,6 +115,7 @@ This section consolidates all encryption-related functionality into one comprehe
 #### 2.3.1 Core Encryption Architecture
 
 **Envelope Encryption (Raw CBOR Bytes Only)**:
+
 - ✅ **IMPLEMENTED**: TS stores only raw CBOR bytes from native keys layer (no intermediate object representation)
 - ✅ **IMPLEMENTED**: `encryptLabelGroupSync(label, fieldsStruct, keystore, resolver)`:
   - Serialize fields with CBOR; look up `LabelKeyInfo` via `resolver.resolveLabelInfo`
@@ -125,6 +126,7 @@ This section consolidates all encryption-related functionality into one comprehe
   - Then CBOR-decode to fields struct
 
 **SerializationContext**:
+
 - ✅ **IMPLEMENTED**: TS `SerializationContext` finalized as:
   - `{ keystore: CommonKeysInterface; resolver: LabelResolver; networkPublicKey: Uint8Array; profilePublicKeys: Uint8Array[] }`
   - All properties required (not optional) when encrypting
@@ -134,16 +136,19 @@ This section consolidates all encryption-related functionality into one comprehe
 #### 2.3.2 Access Control and Keystore Capabilities
 
 **Keystore Role Separation**:
+
 - **Mobile Keystore**: Has user profile keys + network public key (NO network private key)
 - **Node Keystore**: Has network private keys (NO user profile keys)
 - **Decryption Priority**: Mobile keystore tries profile keys first, then network keys; Node keystore only tries network keys
 
 **Label Resolution and Access Control**:
+
 - ✅ **IMPLEMENTED**: Ensure labels map to keys exactly as Rust (error when label missing)
 - **Multi-Key Labels**: Labels with both profile and network keys can be decrypted by EITHER keystore type
 - **Single-Key Labels**: Labels with only profile keys can only be decrypted by mobile keystore; labels with only network keys can only be decrypted by node keystore
 
 **Access Control Logic (CRITICAL)**:
+
 - **Decryption Strategy**: When `decryptLabelGroupSync` is called, it MUST attempt decryption using the provided keystore
 - **Success Path**: If decryption succeeds, return the decrypted fields struct
 - **Failure Path**: If decryption fails due to missing keys, return `Result<T, Error>` with appropriate error
@@ -153,12 +158,14 @@ This section consolidates all encryption-related functionality into one comprehe
 #### 2.3.3 Decorator System Design
 
 **@Encrypt Decorator**:
+
 - Generate companion encrypted class (e.g., `EncryptedTestProfile`) and auto-register:
   - decryptor: `register_decrypt<Plain, Enc>()` equivalent in TS registry
   - encryptor: `register_encrypt<Plain, Enc>()` using a function that accepts `Plain`, context keys, label resolver
   - JSON converters and `registerTypeName` for both plain and encrypted representations with proper wire names
 
 **@runar Field Decorator**:
+
 - **Syntax**: `@runar("<LABEL>")` where `<LABEL>` is a user-defined string label
 - **Flexibility**: Labels are completely user-defined and can be any string (e.g., `"user"`, `"system"`, `"search"`, `"customLabel"`, `"admin"`, etc.)
 - **Label Resolution**: The label resolver maps these user-defined labels to actual public keys via `LabelResolverConfig`
@@ -172,11 +179,13 @@ This section consolidates all encryption-related functionality into one comprehe
 - **Rust Parity**: Aligned with Rust macro semantics where labels are user-defined strings
 
 **Type Registration**:
+
 - On module import or decorator evaluation, register both the plain and encrypted types in wire-name registry and JSON converters
 
 #### 2.3.4 Nested Encrypted Objects Design
 
 **Key Understanding**:
+
 1. **Labels apply to fields, not to the entire nested object**
 2. **Nested objects are encrypted/decrypted using the same rules as top-level objects**
 3. **Access control is enforced at every level**
@@ -187,27 +196,28 @@ This section consolidates all encryption-related functionality into one comprehe
 8. **Nested objects can only be accessed when decrypting the top level**
 
 **Type Declaration Rules**:
+
 ```typescript
 @Encrypt
 export class NestedEncryptedProfile {
   public id: string; // plain field
-  
+
   @runar('user')
   public profile: TestProfile | null; // Nested encrypted object with label - must be nullable
-  
+
   @runar('system')
   public metadata: SystemMetadata | null; // Nested encrypted object with label - must be nullable
-  
+
   @runar('user')
   public userPrivateData: string; // Primitive with label - uses default value when not accessible
-  
+
   @runar('user')
   public nestedData: TestProfile | null; // Nested encrypted object with label - must be nullable
-  
+
   constructor(
-    id: string, 
-    profile: TestProfile | null, 
-    metadata: SystemMetadata | null, 
+    id: string,
+    profile: TestProfile | null,
+    metadata: SystemMetadata | null,
     userPrivateData: string,
     nestedData: TestProfile | null
   ) {
@@ -221,6 +231,7 @@ export class NestedEncryptedProfile {
 ```
 
 **Field Classification**:
+
 - **Nested Encrypted Objects with Labels**: Must be declared as `Type | null`
 - **Primitive Fields with Labels**: Use default values when not accessible (`''`, `0`, `false`, etc.)
 - **Plain Fields (no labels)**: Always accessible, still encrypted IF the object has @Encrypt decorator
@@ -229,6 +240,7 @@ export class NestedEncryptedProfile {
 **Access Control Examples**:
 
 **Backend (Node) - Only System Keys**:
+
 ```typescript
 // Decrypting NestedEncryptedProfile
 const decrypted = encryptedProfile.decryptWithKeystore(nodeKeystore);
@@ -252,6 +264,7 @@ const decrypted = encryptedProfile.decryptWithKeystore(nodeKeystore);
 ```
 
 **Frontend (Mobile) - Only User Keys**:
+
 ```typescript
 // Decrypting NestedEncryptedProfile
 const decrypted = encryptedProfile.decryptWithKeystore(mobileKeystore);
@@ -275,10 +288,10 @@ const decrypted = encryptedProfile.decryptWithKeystore(mobileKeystore);
 ```
 
 **Encryption Flow**:
+
 ```typescript
 // For each field in the label group:
-if (fieldValue && typeof fieldValue === 'object' && 
-    'encryptWithKeystore' in fieldValue) {
+if (fieldValue && typeof fieldValue === 'object' && 'encryptWithKeystore' in fieldValue) {
   // This is a nested encrypted object
   const nestedEncryptResult = fieldValue.encryptWithKeystore(keystore, resolver);
   if (nestedEncryptResult.ok) {
@@ -292,17 +305,17 @@ if (fieldValue && typeof fieldValue === 'object' &&
 ```
 
 **Decryption Flow**:
+
 ```typescript
 // For each field in the decrypted label group:
-if (fieldValue && typeof fieldValue === 'object' && 
-    'decryptWithKeystore' in fieldValue) {
+if (fieldValue && typeof fieldValue === 'object' && 'decryptWithKeystore' in fieldValue) {
   // This is a nested encrypted object
   const nestedDecryptResult = fieldValue.decryptWithKeystore(keystore, logger);
   if (nestedDecryptResult.ok) {
     plainInstance[fieldName] = nestedDecryptResult.value; // Store decrypted object
   } else {
     // Set to null for nested objects with labels, empty object for plain fields
-    plainInstance[fieldName] = fieldHasLabel ? null : new (fieldType.constructor)();
+    plainInstance[fieldName] = fieldHasLabel ? null : new fieldType.constructor();
   }
 } else {
   plainInstance[fieldName] = fieldValue; // Store plain value
@@ -310,22 +323,22 @@ if (fieldValue && typeof fieldValue === 'object' &&
 ```
 
 **Decorator Validation Rules**:
+
 ```typescript
 // In the @Encrypt decorator, validate field types
 for (const field of fieldEncryptions) {
   const fieldName = field.propertyKey.toString();
   const fieldValue = instance[fieldName];
-  
-  if (fieldValue && typeof fieldValue === 'object' && 
-      'encryptWithKeystore' in fieldValue) {
+
+  if (fieldValue && typeof fieldValue === 'object' && 'encryptWithKeystore' in fieldValue) {
     // This is a nested encrypted object
     const fieldType = getFieldType(constructor, fieldName);
     const hasLabel = fieldEncryptions.some(f => f.propertyKey === field.propertyKey);
-    
+
     if (hasLabel && !fieldType.includes('null') && !fieldType.includes('undefined')) {
       throw new Error(
         `Field '${fieldName}' contains a nested encrypted object with a label but is not declared as nullable. ` +
-        `Labeled nested encrypted objects must be declared as 'Type | null' to handle access control.`
+          `Labeled nested encrypted objects must be declared as 'Type | null' to handle access control.`
       );
     }
   }
@@ -333,13 +346,14 @@ for (const field of fieldEncryptions) {
 ```
 
 **Type Generation Rules (Corrected)**:
+
 ```typescript
 // Generated types should reflect the nullable requirements
 export interface EncryptedNestedEncryptedProfile {
   id: string;
-  profile: EncryptedTestProfile | null;  // Labeled nested object - nullable
+  profile: EncryptedTestProfile | null; // Labeled nested object - nullable
   metadata: EncryptedSystemMetadata | null; // Labeled nested object - nullable
-  userPrivateData: string;               // Labeled primitive - non-nullable
+  userPrivateData: string; // Labeled primitive - non-nullable
   nestedData: EncryptedTestProfile | null; // Labeled nested object - nullable
 }
 
@@ -348,6 +362,7 @@ export interface EncryptedNestedEncryptedProfile {
 ```
 
 **AnyValue Integration Rules**:
+
 - **AnyValue is never used inside objects as nested values**
 - **Nested objects can only be accessed when decrypting the top level**
 - **No intermediate AnyValue operations on nested fields**
@@ -363,11 +378,13 @@ export interface EncryptedNestedEncryptedProfile {
 **Solution**: Build script that analyzes TypeScript AST and generates proper type definitions.
 
 **Implementation**:
+
 1. **AST Analysis**: Parse source files to find `@Encrypt` decorators and `@runar` field decorators
 2. **Type Generation**: Generate TypeScript interfaces for encrypted companion types
 3. **Build Integration**: Run type generation before TypeScript compilation
 
 **Generated Output Example**:
+
 ```typescript
 // Generated types - do not edit manually
 // This file is automatically generated by the build script
@@ -384,9 +401,9 @@ export interface EncryptedTestProfile {
 
 export interface EncryptedNestedEncryptedProfile {
   id: string;
-  profile: EncryptedTestProfile | null;  // Labeled nested object - nullable
+  profile: EncryptedTestProfile | null; // Labeled nested object - nullable
   metadata: EncryptedSystemMetadata | null; // Labeled nested object - nullable
-  userPrivateData: string;               // Labeled primitive - non-nullable
+  userPrivateData: string; // Labeled primitive - non-nullable
   nestedData: EncryptedTestProfile | null; // Labeled nested object - nullable
 }
 
@@ -395,6 +412,7 @@ export interface EncryptedNestedEncryptedProfile {
 ```
 
 **Build Integration**:
+
 ```json
 {
   "scripts": {
@@ -405,6 +423,7 @@ export interface EncryptedNestedEncryptedProfile {
 ```
 
 **Benefits**:
+
 - ✅ **No More `any` Types**: Full type safety throughout
 - ✅ **IntelliSense Support**: IDEs provide proper autocomplete
 - ✅ **Compile-Time Validation**: TypeScript catches errors at build time
@@ -414,15 +433,18 @@ export interface EncryptedNestedEncryptedProfile {
 #### 2.3.6 Synchronous Semantics and Error Handling
 
 **All public decorator methods are synchronous and return `Result`**:
+
 - `encryptWithKeystore(keystore: CommonKeysInterface, resolver: LabelResolver): Result<EncryptedT>`
 - `decryptWithKeystore(keystore: CommonKeysInterface): Result<T>`
 
 **Error Handling (never throw; no empty catch)**:
+
 - Public APIs return `Result<T, Error>`; do not throw for expected error paths
 - When calling external/native APIs that may throw, wrap in `try/catch`; either resolve the condition or return a meaningful `Error` in `Result`
 - Never use empty catch blocks; never swallow errors
 
 **No fallbacks without explicit approval**:
+
 - Code must be predictable. Do not introduce implicit fallbacks or hidden heuristics
 - Any fallback behavior must be explicitly documented, validated, and pre‑approved. Otherwise, fail fast with a precise `Result` error
 

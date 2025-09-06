@@ -70,20 +70,52 @@ export class AdvancedTestProfile {
   }
 }
 
-// Nested encrypted object test
+// Nested encrypted object test - follows design document requirements
 @Encrypt
 export class NestedEncryptedProfile {
   public id: string; // plain field
 
   @runar('user')
-  public profile: TestProfile; // Nested encrypted object
+  public profile: TestProfile | null; // Nested encrypted object with label - must be nullable
+
+  @runar('system')
+  public metadata: SystemMetadata | null; // Nested encrypted object with label - must be nullable
+
+  @runar('user')
+  public userPrivateData: string; // Primitive with label - uses default value when not accessible
+
+  @runar('user')
+  public nestedData: TestProfile | null; // Nested encrypted object with label - must be nullable
+
+  constructor(
+    id: string,
+    profile: TestProfile | null,
+    metadata: SystemMetadata | null,
+    userPrivateData: string,
+    nestedData: TestProfile | null
+  ) {
+    this.id = id;
+    this.profile = profile;
+    this.metadata = metadata;
+    this.userPrivateData = userPrivateData;
+    this.nestedData = nestedData;
+  }
+}
+
+// Nested encrypted object test
+@Encrypt
+export class SystemMetadata {
+  public id: string; // plain field
+
+  @runar('user')
+  public email: string;
 
   @runar('system')
   public metadata: string;
 
-  constructor(id: string, profile: TestProfile, metadata: string) {
+  constructor(id: string, email: string, metadata: string) {
     this.id = id;
-    this.profile = profile;
+    this.email = email;
     this.metadata = metadata;
   }
 }
