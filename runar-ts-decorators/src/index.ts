@@ -156,8 +156,6 @@ export function EncryptField(options: EncryptFieldOptions) {
 
 // Design Section 18.4: @Encrypt decorator with runtime code generation (TS 5 standard)
 export function Encrypt<T extends Constructor>(value: T, context: ClassDecoratorContext): void {
-    console.log(`=== @Encrypt DECORATOR CALLED for ${String(context.name)} ===`);
-    
     const className = context.name || 'AnonymousClass';
     const typeName = String(className);
     const encryptedClassName = `Encrypted${String(className)}`;
@@ -177,12 +175,8 @@ export function Encrypt<T extends Constructor>(value: T, context: ClassDecorator
       }
 
       decryptWithKeystore(keystore: CommonKeysInterface, logger?: Logger): Result<InstanceType<typeof value>> {
-        console.log('=== DECRYPTION FUNCTION CALLED ===');
-        
         const log = logger ? logger.withComponent(Component.Decorators) : Logger.newRoot(Component.Decorators);
         const className = (value as Function).name || 'UnknownClass';
-        
-        console.log(`=== DECRYPTION START for ${className} ===`);
 
         // Handle null keystore gracefully
         if (!keystore) {
@@ -215,58 +209,38 @@ export function Encrypt<T extends Constructor>(value: T, context: ClassDecorator
           const encryptedFieldName = `${label}_encrypted`;
           const encryptedGroup = this[encryptedFieldName];
 
-          console.log(`\n--- Processing label group: ${label} (field: ${encryptedFieldName}) ---`);
-
           if (encryptedGroup) {
-            console.log(`Found encrypted group for label ${label}, attempting decryption`);
-            console.log(`Encrypted group type: ${typeof encryptedGroup}`);
-            console.log(`Encrypted group has decryptWithKeystore: ${'decryptWithKeystore' in encryptedGroup}`);
-            
             // Attempt decryption - if it fails, skip this label group but continue
             const decryptedResult = decryptLabelGroupSync(encryptedGroup, keystore, log);
             if (decryptedResult.ok) {
               const decryptedFields = decryptedResult.value as Record<string, unknown>;
               if (decryptedFields && typeof decryptedFields === 'object') {
-                console.log(`Decryption successful for label ${label}, assigning ${Object.keys(decryptedFields).length} fields`);
-                console.log(`Decrypted fields: [${Object.keys(decryptedFields).join(', ')}]`);
                 // Only assign fields if decryption succeeded
                 for (const fieldName in decryptedFields) {
                   const fieldValue = decryptedFields[fieldName];
-                  console.log(`  Before assignment: plainInstance[${fieldName}] = ${fieldValue}`);
                   plainInstance[fieldName] = fieldValue;
-                  console.log(`  After assignment: plainInstance[${fieldName}] = ${plainInstance[fieldName]}`);
                   
                   // Log field assignment but not the actual value for security
                   const valueType = typeof plainInstance[fieldName];
                   const valueLength = typeof plainInstance[fieldName] === 'string' ? 
                     (plainInstance[fieldName] as string).length : 'N/A';
-                  console.log(`  Assigned field ${fieldName} (${valueType}, length: ${valueLength})`);
+                  log.trace(`Assigned field ${fieldName} (${valueType}, length: ${valueLength})`);
                 }
-              } else {
-                console.log(`Decryption succeeded for label ${label} but result is not an object`);
               }
             } else if (isErr(decryptedResult)) {
-              console.log(`Decryption failed for label ${label}: ${decryptedResult.error.message} (access control - continuing with other labels)`);
+              log.debug(`Decryption failed for label ${label}: ${decryptedResult.error.message} (access control - continuing with other labels)`);
             }
             // If decryption fails, fields remain at their default values (access control)
             // Do NOT return error - continue processing other label groups
-          } else {
-            console.log(`No encrypted group found for label ${label}`);
           }
         }
 
         // Process nested encrypted objects that are stored directly on the encrypted instance
         // Only process fields that are actually nested encrypted objects (not primitive fields)
-        console.log(`\n--- Processing nested encrypted objects ---`);
         for (const field of fieldEncryptions) {
           const fieldName = field.propertyKey.toString();
           const fieldValue = this[fieldName];
           const fieldLabel = field.label;
-          
-          console.log(`Processing field ${fieldName} with label: ${fieldLabel}`);
-          console.log(`Field value type: ${typeof fieldValue}`);
-          console.log(`Field value is null/undefined: ${fieldValue === null || fieldValue === undefined}`);
-          console.log(`Field value has decryptWithKeystore: ${fieldValue && typeof fieldValue === 'object' && 'decryptWithKeystore' in fieldValue}`);
           
           // Only process fields that are actually nested encrypted objects
           // Skip primitive fields as they are handled by label groups
@@ -309,12 +283,9 @@ export function Encrypt<T extends Constructor>(value: T, context: ClassDecorator
           } else if (fieldValue === null || fieldValue === undefined) {
             // Only set to null if this is actually a nested encrypted object field
             // Primitive fields that are undefined should be skipped (handled by label groups)
-            console.log(`  -> Field ${fieldName} is null/undefined - checking if it's a nested encrypted object`);
             // For now, skip primitive fields that are undefined
-            console.log(`  -> Skipping field ${fieldName} (primitive field handled by label groups)`);
           } else {
             // Skip primitive fields - they are handled by label groups
-            console.log(`  -> Field ${fieldName} is not a nested encrypted object, skipping`);
           }
         }
 
@@ -336,19 +307,6 @@ export function Encrypt<T extends Constructor>(value: T, context: ClassDecorator
           }
         }
 
-        console.log(`\n=== DECRYPTION COMPLETE for ${className} ===`);
-        console.log(`Final plain instance fields: [${Object.keys(plainInstance).join(', ')}]`);
-        console.log(`Final plain instance values: [${Object.entries(plainInstance).map(([key, value]) => 
-          `${key}: ${typeof value}${typeof value === 'string' ? `(${value.length})` : ''}${value === null ? '(null)' : ''}`
-        ).join(', ')}]`);
-        
-        // Special logging for userPrivateData field
-        if ('userPrivateData' in plainInstance) {
-          console.log(`SPECIAL: userPrivateData = "${plainInstance.userPrivateData}"`);
-        } else {
-          console.log(`SPECIAL: userPrivateData field not found in plainInstance`);
-        }
-        
         return ok(plainInstance);
       }
     };
@@ -368,17 +326,12 @@ export function Encrypt<T extends Constructor>(value: T, context: ClassDecorator
     // Add encryptWithKeystore method to the original class prototype
     const prototype = (value as Function).prototype as Record<string, unknown>;
     prototype.encryptWithKeystore = function(keystore: CommonKeysInterface, resolver: LabelResolver): Result<InstanceType<typeof EncryptedClass>> {
-      console.log('=== ENCRYPTION FUNCTION CALLED ===');
-      
       // Ensure runtime metadata and helpers are registered
       ensureClassRegistered((this as { constructor: Constructor }).constructor);
 
       const encryptedInstance = new EncryptedClass();
       const className = (this as { constructor: Constructor }).constructor.name;
       const log = Logger.newRoot(Component.Decorators);
-
-      console.log(`=== ENCRYPTION START for ${className} ===`);
-      console.log(`Keystore capabilities: hasProfileKeys=${keystore.getKeystoreCaps().hasProfileKeys}, hasNetworkKeys=${keystore.getKeystoreCaps().hasNetworkKeys}`);
 
       const fieldEncryptions = ((this as { constructor: Function & { fieldEncryptions?: FieldEncryption[] } }).constructor).fieldEncryptions || [];
       
@@ -464,11 +417,6 @@ export function Encrypt<T extends Constructor>(value: T, context: ClassDecorator
         }
       }
 
-      log.trace(`\n=== ENCRYPTION COMPLETE for ${className} ===`);
-      log.trace(`Final encrypted instance fields: [${Object.keys(encryptedInstance).join(', ')}]`);
-      log.trace(`Final encrypted instance values: [${Object.entries(encryptedInstance).map(([key, value]) => 
-        `${key}: ${typeof value}${typeof value === 'string' ? `(${value.length})` : ''}${value === null ? '(null)' : ''}`
-      ).join(', ')}]`);
       return ok(encryptedInstance);
     };
 

@@ -1,5 +1,3 @@
-console.log('=== TEST FILE LOADED ===');
-
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { type RunarEncryptable } from '../src/index';
 import {
@@ -78,8 +76,7 @@ describe('Advanced Decorator Features Tests', () => {
       );
 
       if (isErr(encryptResult)) {
-        console.log(`Encryption failed: ${encryptResult.error.message}`);
-        console.log(`Error details:`, encryptResult.error);
+        // Encryption failed - error details are in the result
       }
       expect(isOk(encryptResult)).toBe(true);
       if (isErr(encryptResult)) {
@@ -178,8 +175,6 @@ describe('Advanced Decorator Features Tests', () => {
 
   describe('Nested Encrypted Objects', () => {
     it('should handle nested encrypted objects correctly', async () => {
-      console.log('=== TEST START: Nested Encrypted Objects ===');
-
       const nestedProfile = new TestProfile(
         'nested-123',
         'nested name',
@@ -525,7 +520,6 @@ describe('Advanced Decorator Features Tests', () => {
       const endTime = Date.now();
       const duration = endTime - startTime;
 
-      console.log(`   📈 Large data encryption/decryption completed in ${duration}ms`);
       expect(duration).toBeLessThan(1000); // Should complete within 1 second
 
       const mobileProfile = decryptedResult.value;

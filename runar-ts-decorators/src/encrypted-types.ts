@@ -17,8 +17,7 @@ export interface EncryptedTestProfile extends RunarEncryptable<TestProfile, Encr
   id: string;
 }
 
-export interface EncryptedAdvancedTestProfile
-  extends RunarEncryptable<AdvancedTestProfile, EncryptedAdvancedTestProfile> {
+export interface EncryptedAdvancedTestProfile extends RunarEncryptable<AdvancedTestProfile, EncryptedAdvancedTestProfile> {
   system_encrypted: EncryptedLabelGroup;
   user_encrypted: EncryptedLabelGroup;
   search_encrypted: EncryptedLabelGroup;
@@ -26,8 +25,7 @@ export interface EncryptedAdvancedTestProfile
   id: string;
 }
 
-export interface EncryptedNestedEncryptedProfile
-  extends RunarEncryptable<NestedEncryptedProfile, EncryptedNestedEncryptedProfile> {
+export interface EncryptedNestedEncryptedProfile extends RunarEncryptable<NestedEncryptedProfile, EncryptedNestedEncryptedProfile> {
   user_encrypted: EncryptedLabelGroup;
   profile: EncryptedTestProfile | null;
   metadata: EncryptedSystemMetadata | null;
@@ -35,15 +33,13 @@ export interface EncryptedNestedEncryptedProfile
   id: string;
 }
 
-export interface EncryptedSystemMetadata
-  extends RunarEncryptable<SystemMetadata, EncryptedSystemMetadata> {
+export interface EncryptedSystemMetadata extends RunarEncryptable<SystemMetadata, EncryptedSystemMetadata> {
   user_encrypted: EncryptedLabelGroup;
   system_encrypted: EncryptedLabelGroup;
   id: string;
 }
 
-export interface EncryptedComplexPriorityProfile
-  extends RunarEncryptable<ComplexPriorityProfile, EncryptedComplexPriorityProfile> {
+export interface EncryptedComplexPriorityProfile extends RunarEncryptable<ComplexPriorityProfile, EncryptedComplexPriorityProfile> {
   system_only_encrypted: EncryptedLabelGroup;
   system_encrypted: EncryptedLabelGroup;
   user_encrypted: EncryptedLabelGroup;
@@ -51,3 +47,4 @@ export interface EncryptedComplexPriorityProfile
   custom_encrypted: EncryptedLabelGroup;
   id: string;
 }
+
