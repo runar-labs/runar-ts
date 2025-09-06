@@ -179,7 +179,7 @@ describe('Advanced Decorator Features Tests', () => {
   describe('Nested Encrypted Objects', () => {
     it('should handle nested encrypted objects correctly', async () => {
       console.log('=== TEST START: Nested Encrypted Objects ===');
-      
+
       const nestedProfile = new TestProfile(
         'nested-123',
         'nested name',
